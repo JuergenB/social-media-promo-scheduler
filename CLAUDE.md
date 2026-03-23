@@ -18,7 +18,13 @@ Next.js 16 app (forked from LateWiz) for automated social media campaign generat
 CLI tools are pre-approved: `git`, `gh`, `npm`, `npx`, `node`, `python3`, `curl`, `vercel`, `lsof`, `kill`, `jq`, `open`, `tree`.
 Airtable schema changes: use the Meta API directly, never ask the user to edit Airtable manually.
 
-## Rule 4: Execute ALL user instructions in a single pass
+## Rule 4: Use Perplexity for ALL research — NEVER use WebSearch or WebFetch
+
+**All research tasks must use the Perplexity MCP tools** (`search`, `reason`, or `deep_research`). Do NOT use the WebSearch or WebFetch tools — they are unreliable and the user does not trust them. This includes research launched via subagents — subagents must also use Perplexity, not WebSearch/WebFetch.
+
+When delegating research to an Agent subagent, explicitly instruct it to use Perplexity MCP tools and NOT WebSearch/WebFetch.
+
+## Rule 5: Execute ALL user instructions in a single pass
 
 When the user gives multiple instructions in one message, implement ALL of them before responding. Do not silently drop instructions.
 
@@ -90,8 +96,9 @@ social-media-promo-scheduler/
 
 ## Airtable
 
-- **Base ID:** TBD (new base for this project)
-- **API key** stored in `.env.local` as `AIRTABLE_API_KEY`
+- **Base ID:** `app5FPCG06huzh7hX`
+- **PAT:** stored in `.env.local` as `AIRTABLE_API_KEY` (prefix `patO7R...`)
+- **Base URL:** https://airtable.com/app5FPCG06huzh7hX/
 - **Meta API:** `GET/PATCH https://api.airtable.com/v0/meta/bases/{baseId}/tables` — for schema changes
 - **Never ask the user to manually create/modify fields in the Airtable UI.** Use the REST API or write a script.
 
