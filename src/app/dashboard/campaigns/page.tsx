@@ -125,11 +125,11 @@ export default function CampaignsPage() {
             return (
               <Card
                 key={campaign.id}
-                className="overflow-hidden hover:shadow-md transition-shadow"
+                className="overflow-hidden !py-0 !gap-0 hover:shadow-md transition-shadow"
               >
-                {/* Image header */}
+                {/* Image header — flush with card top */}
                 {campaign.imageUrl ? (
-                  <div className="h-40 overflow-hidden bg-muted">
+                  <div className="h-28 overflow-hidden bg-muted">
                     <img
                       src={campaign.imageUrl}
                       alt=""
@@ -137,15 +137,15 @@ export default function CampaignsPage() {
                     />
                   </div>
                 ) : (
-                  <div className="h-28 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-                    <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
+                  <div className="h-20 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                    <TypeIcon className="h-8 w-8 text-muted-foreground/30" />
                   </div>
                 )}
 
-                <CardContent className="pt-4 pb-5 space-y-3">
+                <div className="px-4 pt-2.5 pb-3 space-y-1.5">
                   {/* Title + status */}
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-tight line-clamp-2">
+                    <h3 className="font-semibold text-sm leading-tight line-clamp-1">
                       {displayName}
                     </h3>
                     <Badge
@@ -157,11 +157,11 @@ export default function CampaignsPage() {
                   </div>
 
                   {/* Meta row */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <TypeIcon className="h-3.5 w-3.5" />
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <TypeIcon className="h-3 w-3" />
                     <span>{campaign.type}</span>
                     <span className="text-border">|</span>
-                    <span>{campaign.durationDays} days</span>
+                    <span>{campaign.durationDays}d</span>
                     {campaign.distributionBias && (
                       <>
                         <span className="text-border">|</span>
@@ -172,22 +172,22 @@ export default function CampaignsPage() {
 
                   {/* Editorial direction preview */}
                   {campaign.editorialDirection && (
-                    <p className="text-xs text-muted-foreground line-clamp-2 italic">
+                    <p className="text-[11px] text-muted-foreground line-clamp-1 italic">
                       &ldquo;{campaign.editorialDirection}&rdquo;
                     </p>
                   )}
 
-                  {/* URL */}
+                  {/* Source URL — subtle reference link */}
                   <a
                     href={campaign.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-muted-foreground/60 hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
+                    className="text-[10px] text-muted-foreground/50 hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
                   >
                     {campaign.url.replace(/^https?:\/\//, "").slice(0, 50)}
-                    <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                    <ExternalLink className="h-2 w-2 shrink-0" />
                   </a>
-                </CardContent>
+                </div>
               </Card>
             );
           })}
