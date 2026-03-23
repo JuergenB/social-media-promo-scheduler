@@ -1,0 +1,25 @@
+graph LR
+    subgraph App[Next.js App]
+        UI[Campaign UI]
+        API[API Routes]
+        Auth[Auth.js v5]
+    end
+
+    subgraph Services[External Services]
+        Zernio[Zernio API<br/>Social scheduling]
+        FC[Firecrawl<br/>Web scraping]
+        PX[Perplexity<br/>Research]
+        OAI[OpenAI<br/>Content drafting]
+    end
+
+    subgraph Data[Data Layer]
+        AT[(Airtable<br/>Campaigns, Posts,<br/>Brands, Settings)]
+    end
+
+    UI --> API
+    API --> Auth
+    API --> AT
+    API --> Zernio
+    API --> FC
+    API --> PX
+    API --> OAI

@@ -1,0 +1,11 @@
+graph TD
+    User[Team Member] --> Switch{Brand Selector}
+    Switch -->|The Intersect| K1[Zernio Key A<br/>7 social accounts]
+    Switch -->|Not Real Art| K2[Zernio Key B<br/>NRA accounts]
+    Switch -->|Artsville USA| K3[Zernio Key C<br/>Artsville accounts]
+    Switch -->|Arterial| K4[Zernio Key D<br/>Arterial accounts]
+
+    K1 --> AT[(Shared Airtable Base<br/>filtered by Brand)]
+    K2 --> AT
+    K3 --> AT
+    K4 --> AT

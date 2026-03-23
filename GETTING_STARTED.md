@@ -29,68 +29,17 @@ Password for all: `REDACTED_PASSWORD` (development only)
 
 ### Campaign Pipeline
 
-```mermaid
-graph TD
-    URL[URL Input] --> Scrape[Content Extraction<br/>Firecrawl]
-    URL --> Research[Context Research<br/>Perplexity]
-    Scrape --> Editorial[Editorial Direction<br/>Team sets focus & tone]
-    Research --> Editorial
-    Editorial --> Generate[Post Drafting<br/>OpenAI + Brand Voice]
-    Generate --> Queue[Approval Queue<br/>Review / Edit / Dismiss]
-    Queue --> Schedule[Scheduling Engine<br/>Per-platform cadence]
-    Schedule --> Publish[Zernio API<br/>14 platforms]
-
-    style Editorial fill:#f9f,stroke:#333,stroke-width:2px
-    style Queue fill:#f9f,stroke:#333,stroke-width:2px
-```
+![Campaign Pipeline](docs/diagrams/campaign-pipeline.png)
 
 > The pink nodes are human-in-the-loop steps — the team controls direction and approves everything.
 
 ### Data Architecture
 
-```mermaid
-graph LR
-    subgraph "Next.js App"
-        UI[Campaign UI]
-        API[API Routes]
-        Auth[Auth.js v5]
-    end
-
-    subgraph "External Services"
-        Zernio[Zernio API<br/>Social scheduling]
-        FC[Firecrawl<br/>Web scraping]
-        PX[Perplexity<br/>Research]
-        OAI[OpenAI<br/>Content drafting]
-    end
-
-    subgraph "Data Layer"
-        AT[(Airtable<br/>Campaigns, Posts,<br/>Brands, Settings)]
-    end
-
-    UI --> API
-    API --> Auth
-    API --> AT
-    API --> Zernio
-    API --> FC
-    API --> PX
-    API --> OAI
-```
+![Data Architecture](docs/diagrams/data-architecture.png)
 
 ### Multi-Brand Switching
 
-```mermaid
-graph TD
-    User[Team Member] --> Switch{Brand Selector}
-    Switch -->|The Intersect| K1[Zernio Key A<br/>7 social accounts]
-    Switch -->|Not Real Art| K2[Zernio Key B<br/>NRA accounts]
-    Switch -->|Artsville USA| K3[Zernio Key C<br/>Artsville accounts]
-    Switch -->|Arterial| K4[Zernio Key D<br/>Arterial accounts]
-
-    K1 --> AT[(Shared Airtable Base<br/>filtered by Brand)]
-    K2 --> AT
-    K3 --> AT
-    K4 --> AT
-```
+![Multi-Brand Switching](docs/diagrams/multi-brand.png)
 
 ---
 

@@ -1,0 +1,12 @@
+graph TD
+    URL[URL Input] --> Scrape[Content Extraction<br/>Firecrawl]
+    URL --> Research[Context Research<br/>Perplexity]
+    Scrape --> Editorial[Editorial Direction<br/>Team sets focus & tone]
+    Research --> Editorial
+    Editorial --> Generate[Post Drafting<br/>OpenAI + Brand Voice]
+    Generate --> Queue[Approval Queue<br/>Review / Edit / Dismiss]
+    Queue --> Schedule[Scheduling Engine<br/>Per-platform cadence]
+    Schedule --> Publish[Zernio API<br/>14 platforms]
+
+    style Editorial fill:#f9f,stroke:#333,stroke-width:2px
+    style Queue fill:#f9f,stroke:#333,stroke-width:2px
