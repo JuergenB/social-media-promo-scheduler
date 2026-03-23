@@ -24,21 +24,28 @@ import {
   Calendar,
   Users,
   ListOrdered,
+  Megaphone,
   Settings,
+  Layers,
+  Palette,
   Moon,
   Sun,
   LogOut,
   ChevronDown,
+  ChevronRight,
   Check,
   ExternalLink,
 } from "lucide-react";
 
-const navItems = [
+const campaignNav = [
   {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
+    label: "Campaigns",
+    href: "/dashboard/campaigns",
+    icon: Megaphone,
   },
+];
+
+const schedulingNav = [
   {
     label: "Compose",
     href: "/dashboard/compose",
@@ -50,16 +57,86 @@ const navItems = [
     icon: Calendar,
   },
   {
-    label: "Accounts",
-    href: "/dashboard/accounts",
-    icon: Users,
-  },
-  {
     label: "Queue",
     href: "/dashboard/queue",
     icon: ListOrdered,
   },
+  {
+    label: "Accounts",
+    href: "/dashboard/accounts",
+    icon: Users,
+  },
 ];
+
+const settingsSubNav = [
+  {
+    label: "General",
+    href: "/dashboard/settings",
+    icon: Settings,
+  },
+  {
+    label: "Brands",
+    href: "/dashboard/settings/brands",
+    icon: Palette,
+  },
+  {
+    label: "Platforms",
+    href: "/dashboard/settings/platforms",
+    icon: Layers,
+  },
+];
+
+// Flat list for mobile bottom bar (limited space)
+const mobileNav = [
+  { label: "Home", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
+  { label: "Compose", href: "/dashboard/compose", icon: PenSquare },
+  { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+  { label: "Queue", href: "/dashboard/queue", icon: ListOrdered },
+];
+
+function NavLink({
+  href,
+  icon: Icon,
+  label,
+  pathname,
+  indent = false,
+}: {
+  href: string;
+  icon: React.ElementType;
+  label: string;
+  pathname: string;
+  indent?: boolean;
+}) {
+  const isActive =
+    href === "/dashboard"
+      ? pathname === href
+      : pathname === href || pathname.startsWith(href + "/");
+
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        indent && "pl-6",
+        isActive
+          ? "bg-primary text-primary-foreground"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0" />
+      <span>{label}</span>
+    </Link>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+      {children}
+    </p>
+  );
+}
 
 export default function DashboardLayout({
   children,
@@ -71,6 +148,7 @@ export default function DashboardLayout({
   const { defaultProfileId, setDefaultProfileId } = useAppStore();
   const { theme, setTheme } = useTheme();
   const { data: profilesData } = useProfiles();
+  const settingsOpen = pathname.startsWith("/dashboard/settings");
 
   const profiles = profilesData?.profiles || [];
   const currentProfile = profiles.find((p: any) => p._id === defaultProfileId) || profiles[0];
@@ -90,45 +168,64 @@ export default function DashboardLayout({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-2">
-          <div className="space-y-1">
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
+          {/* Dashboard */}
+          <NavLink
+            href="/dashboard"
+            icon={LayoutDashboard}
+            label="Dashboard"
+            pathname={pathname}
+          />
 
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+          {/* Campaigns section */}
+          <SectionLabel>Campaigns</SectionLabel>
+          <div className="space-y-0.5">
+            {campaignNav.map((item) => (
+              <NavLink key={item.href} {...item} pathname={pathname} />
+            ))}
           </div>
 
-          <Separator className="my-3" />
+          {/* Scheduling section (from LateWiz) */}
+          <SectionLabel>Scheduling</SectionLabel>
+          <div className="space-y-0.5">
+            {schedulingNav.map((item) => (
+              <NavLink key={item.href} {...item} pathname={pathname} />
+            ))}
+          </div>
 
-          {/* Settings */}
-          <Link
-            href="/dashboard/settings"
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              pathname === "/dashboard/settings"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+          {/* Settings section — expandable */}
+          <SectionLabel>Settings</SectionLabel>
+          <div className="space-y-0.5">
+            <Link
+              href="/dashboard/settings"
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                settingsOpen
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              <span className="flex-1">Settings</span>
+              <ChevronRight
+                className={cn(
+                  "h-3 w-3 transition-transform",
+                  settingsOpen && "rotate-90"
+                )}
+              />
+            </Link>
+            {settingsOpen && (
+              <div className="space-y-0.5">
+                {settingsSubNav.map((item) => (
+                  <NavLink
+                    key={item.href}
+                    {...item}
+                    pathname={pathname}
+                    indent
+                  />
+                ))}
+              </div>
             )}
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            <span>Settings</span>
-          </Link>
+          </div>
         </nav>
       </aside>
 
@@ -244,10 +341,11 @@ export default function DashboardLayout({
       {/* Mobile Bottom Tab Bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card pb-safe lg:hidden">
         <div className="flex h-16 items-center justify-around px-2">
-          {navItems.map((item) => {
+          {mobileNav.map((item) => {
             const isActive =
-              pathname === item.href ||
-              (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              item.href === "/dashboard"
+                ? pathname === item.href
+                : pathname.startsWith(item.href);
 
             return (
               <Link
