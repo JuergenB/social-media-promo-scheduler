@@ -1,0 +1,122 @@
+import { NextRequest, NextResponse } from "next/server";
+import { listRecords } from "@/lib/airtable/client";
+import type { Brand } from "@/lib/airtable/types";
+
+interface AirtableAttachment {
+  id: string;
+  url: string;
+  filename: string;
+  type: string;
+  width?: number;
+  height?: number;
+  thumbnails?: {
+    small?: { url: string };
+    large?: { url: string };
+    full?: { url: string };
+  };
+}
+
+interface BrandFields {
+  Name: string;
+  "Website URL": string;
+  "Zernio API Key Label": string;
+  "Zernio Profile ID": string;
+  "Voice Guidelines": string;
+  "Newsletter URL": string;
+  Logo: AirtableAttachment[];
+  Status: "Active" | "Inactive";
+}
+
+function mapBrand(r: { id: string; fields: BrandFields }): Brand {
+  const logo = r.fields.Logo?.[0];
+  return {
+    id: r.id,
+    name: r.fields.Name || "",
+    websiteUrl: r.fields["Website URL"] || "",
+    zernioApiKeyLabel: r.fields["Zernio API Key Label"] || "",
+    zernioProfileId: r.fields["Zernio Profile ID"] || "",
+    voiceGuidelines: r.fields["Voice Guidelines"] || "",
+    newsletterUrl: r.fields["Newsletter URL"] || "",
+    logoUrl: logo?.thumbnails?.large?.url || logo?.url || null,
+    status: r.fields.Status || "Active",
+  };
+}
+
+export async function GET() {
+  try {
+    const records = await listRecords<BrandFields>("Brands", {
+      filterByFormula: '{Status} = "Active"',
+      sort: [{ field: "Name", direction: "asc" }],
+    });
+
+    const brands: Brand[] = records.map((r) =>
+      mapBrand(r as { id: string; fields: BrandFields })
+    );
+
+    return NextResponse.json({ brands });
+  } catch (error) {
+    console.error("Failed to fetch brands:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch brands" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json({ error: "Brand ID required" }, { status: 400 });
+    }
+
+    // Map camelCase fields to Airtable field names
+    const fieldMap: Record<string, string> = {
+      name: "Name",
+      websiteUrl: "Website URL",
+      newsletterUrl: "Newsletter URL",
+      voiceGuidelines: "Voice Guidelines",
+      zernioProfileId: "Zernio Profile ID",
+      zernioApiKeyLabel: "Zernio API Key Label",
+      status: "Status",
+    };
+
+    const fields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(updates)) {
+      const airtableField = fieldMap[key];
+      if (airtableField) {
+        fields[airtableField] = value;
+      }
+    }
+
+    const res = await fetch(
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Brands/${id}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${process.env.AIRTABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ fields }),
+      }
+    );
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(JSON.stringify(error));
+    }
+
+    const record = await res.json();
+    return NextResponse.json({
+      brand: mapBrand(record as { id: string; fields: BrandFields }),
+    });
+  } catch (error) {
+    console.error("Failed to update brand:", error);
+    return NextResponse.json(
+      { error: "Failed to update brand" },
+      { status: 500 }
+    );
+  }
+}

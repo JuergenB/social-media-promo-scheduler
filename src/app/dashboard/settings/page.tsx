@@ -27,7 +27,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Key, Moon, Sun, Globe, LogOut, ExternalLink } from "lucide-react";
+import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette } from "lucide-react";
+import Link from "next/link";
+import { Separator } from "@/components/ui/separator";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -58,8 +60,66 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground">
-          Manage your account and preferences.
+          Manage your campaign system, scheduling, and account preferences.
         </p>
+      </div>
+
+      {/* ── Campaign System ──────────────────────────── */}
+      <div className="space-y-1">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Campaign System
+        </h2>
+        <Separator />
+      </div>
+
+      {/* Brands */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Palette className="h-4 w-4" />
+            Brands
+          </CardTitle>
+          <CardDescription>
+            Brand voice guidelines, logos, and connected social profiles.
+            Each brand has its own tone and editorial direction for content generation.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/settings/brands">
+              Manage Brands
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Platform Settings */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Layers className="h-4 w-4" />
+            Platform Settings
+          </CardTitle>
+          <CardDescription>
+            Character limits, URL handling, tone guidelines, and best practices
+            for each social platform.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/settings/platforms">
+              View Platform Settings
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ── Scheduling & Account ──────────────────────── */}
+      <div className="space-y-1 pt-2">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Scheduling & Account
+        </h2>
+        <Separator />
       </div>
 
       {/* API Key */}
