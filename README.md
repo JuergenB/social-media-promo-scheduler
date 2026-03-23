@@ -116,13 +116,20 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] 14-platform publishing via Zernio API
 - [x] Team login with role-based access
 - [x] Background research: brand profiles, platform rules, scheduling patterns
-- [ ] **Phase I:** Campaign creation from URL
-- [ ] **Phase I:** Content drafting with brand voice
+- [x] **Phase I:** Airtable schema (Brands, Campaigns, Posts, Platform Settings, Image Sizes)
+- [x] **Phase I:** Brand context provider with 4 brands + voice guidelines
+- [x] **Phase I:** Campaign creation UI (brand selector, URL, type, duration, distribution, editorial direction)
+- [x] **Phase I:** Frequency preview with tapering curve visualization
+- [x] **Phase I:** Brand settings page with inline editing
+- [x] **Phase I:** Platform settings browser (13 platforms)
+- [x] **Phase I:** og:image scraping on campaign creation (Firecrawl)
+- [ ] **Phase I:** Campaign detail page and scrape-to-generate pipeline (#17)
+- [ ] **Phase I:** Content drafting with brand voice (OpenAI)
 - [ ] **Phase I:** Approval queue UI
-- [ ] **Phase I:** Push approved posts to scheduler
+- [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase II:** Per-platform cadence controls
-- [ ] **Phase II:** Distribution slider and presets
-- [ ] **Phase II:** Brand switching
+- [ ] **Phase II:** Distribution slider (interactive, per-platform)
+- [ ] **Phase II:** Brand switching at dashboard level
 
 ## Technical Details
 
