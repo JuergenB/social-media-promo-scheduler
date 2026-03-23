@@ -57,23 +57,37 @@ When the user gives multiple instructions in one message, implement ALL of them 
 social-media-promo-scheduler/
 ├── src/
 │   ├── app/                    # Next.js App Router
-│   │   ├── dashboard/          # Scheduling UI (from LateWiz)
-│   │   │   ├── compose/        # Post composer
-│   │   │   ├── calendar/       # Calendar view
-│   │   │   ├── accounts/       # Connected social accounts
-│   │   │   ├── queue/          # Queue management
-│   │   │   └── settings/       # Settings
-│   │   ├── campaigns/          # NEW: Campaign generator & approval queue
+│   │   ├── api/
+│   │   │   ├── brands/         # GET active brands, PATCH update brand
+│   │   │   ├── campaigns/      # GET list, POST create (scrapes og:image via Firecrawl)
+│   │   │   ├── platform-settings/ # GET platform best practices from Airtable
+│   │   │   ├── auth/           # NextAuth endpoints
+│   │   │   ├── auto-auth/      # Server-side API key provider
+│   │   │   └── validate-key/   # Zernio key validation
+│   │   ├── dashboard/
+│   │   │   ├── campaigns/      # Campaign list + /new creation form
+│   │   │   ├── compose/        # Post composer (from LateWiz)
+│   │   │   ├── calendar/       # Calendar view (from LateWiz)
+│   │   │   ├── accounts/       # Connected social accounts (from LateWiz)
+│   │   │   ├── queue/          # Queue management (from LateWiz)
+│   │   │   └── settings/       # General settings + /brands + /platforms
 │   │   ├── callback/           # OAuth callbacks
-│   │   └── api/                # API routes
-│   ├── components/             # UI components
-│   ├── hooks/                  # React hooks
+│   │   └── login/              # Auth login page
+│   ├── components/
+│   │   ├── campaigns/          # FrequencyPreview bar chart
+│   │   ├── ui/                 # shadcn/ui components
+│   │   ├── shared/             # Logo, ErrorBoundary, PlatformIcon
+│   │   ├── accounts/           # Account cards
+│   │   └── posts/              # Post cards
+│   ├── hooks/                  # React hooks (useAccounts, usePosts, etc.)
 │   ├── lib/
-│   │   ├── late-api/           # Zernio API utilities
-│   │   ├── airtable/           # NEW: Airtable client & campaign data
-│   │   └── campaign/           # NEW: Campaign generation logic
-│   └── stores/                 # Zustand stores
-├── docs/                       # Documentation & Zernio API reference
+│   │   ├── late-api/           # Zernio API client & platform types
+│   │   ├── airtable/           # Airtable REST client & TypeScript types
+│   │   └── brand-context.tsx   # BrandProvider + useBrand() hook
+│   └── stores/                 # Zustand stores (app, auth)
+├── scripts/                    # seed-airtable.js (one-time table seeding)
+├── public/brands/              # Downloaded brand logos (local copies)
+├── docs/                       # Documentation, API reference, background research
 ├── .env.local                  # Secrets (never commit)
 └── CLAUDE.md                   # This file
 ```
@@ -102,6 +116,20 @@ social-media-promo-scheduler/
 - **Meta API:** `GET/PATCH https://api.airtable.com/v0/meta/bases/{baseId}/tables` — for schema changes
 - **Never ask the user to manually create/modify fields in the Airtable UI.** Use the REST API or write a script.
 
+### Tables
+
+| Table | ID | Purpose |
+|-------|-----|---------|
+| Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
+| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image) |
+| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status, scheduling |
+| Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
+| Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
+
+### Source base (read-only reference)
+- `appDFU2JdAw2Ckax4` — Artwork Archive campaigns base (brand logos in Campaigns table)
+- `appa1MQoMsfZ0WCPu` — Platform Settings + Image Sizes source (cloned from here)
+
 ## Existing n8n Workflows (reference only, not extending)
 
 - `ptljiEPKOXED850E` — "First Fridays Exhibition Importer & Enhancer V2" — scrapes exhibitions, classifies artworks, profiles artists
@@ -120,5 +148,35 @@ social-media-promo-scheduler/
 1. **Read code before answering.** Do not answer from memory.
 2. **Execute ALL user instructions.** Do not silently drop any.
 3. **Convert timestamps to ET.** Zernio API timestamps are UTC. User is in America/New_York.
-4. **Close issues immediately** when implementing code is committed.
-5. **Save important discoveries to memory immediately.** Do not wait until end of session.
+4. **Save important discoveries to memory immediately.** Do not wait until end of session.
+
+## Post-Commit Checklist (MANDATORY after every commit)
+
+After every `git commit`, run through this checklist before responding to the user. This is not optional.
+
+### 1. GitHub Issues
+- **Scan ALL open issues** (`gh issue list --state open`). For each one, ask: does this commit fully or partially resolve it?
+- **Fully resolved:** Close with a comment listing what was built and which files changed.
+- **Partially resolved:** Add a comment describing what was done and what remains. Do NOT close.
+- **New work discussed but untracked:** Create an issue immediately. Design discussions, feature ideas, and bugs mentioned in conversation must not live only in chat history.
+- **Follow-up work from partial closures:** Create a new issue referencing the original.
+- **Never close an issue just because it was discussed.** Only close when the described implementation exists in the codebase.
+
+### 2. README.md
+- Does the README's "Project Status" checklist reflect what was just built?
+- Do the architecture descriptions still match reality? (e.g., new routes, new tables, new components)
+- Are any new third-party integrations mentioned? (e.g., Firecrawl scraping on campaign creation)
+
+### 3. CLAUDE.md
+- Does the Project Structure tree reflect new directories/files?
+- Are new Airtable tables/fields documented in the Airtable section?
+- Are new API routes or conventions captured?
+
+### 4. GETTING_STARTED.md
+- Are phase status indicators current? (e.g., Phase I tasks marked as done)
+- Do the task tables reflect completed work?
+
+### 5. Only commit and push when explicitly asked
+- Do NOT commit or push proactively.
+- When the user says "push", "commit", or "document and push": commit, push, AND run this full checklist.
+- If the user asks "are we up to date?" — report status but do not push until told to.
