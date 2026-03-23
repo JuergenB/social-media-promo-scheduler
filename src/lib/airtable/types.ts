@@ -56,6 +56,7 @@ export interface Campaign {
   durationDays: number;
   distributionBias: DistributionBias;
   editorialDirection: string;
+  imageUrl: string;
   status: CampaignStatus;
   createdAt: string;
   createdBy: string;

@@ -10,9 +10,43 @@ interface CampaignFields {
   "Duration Days": number;
   "Distribution Bias": string;
   "Editorial Direction": string;
+  "Image URL": string;
   Status: string;
   "Created At": string;
   "Created By": string;
+}
+
+/**
+ * Fetch the og:image from a URL using Firecrawl scrape.
+ * Returns the image URL or null on failure.
+ */
+async function fetchOgImage(url: string): Promise<string | null> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: false,
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    const ogImage =
+      data?.data?.metadata?.ogImage || data?.data?.metadata?.["og:image"];
+    return ogImage || null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET() {
@@ -30,6 +64,7 @@ export async function GET() {
       durationDays: r.fields["Duration Days"] || 0,
       distributionBias: r.fields["Distribution Bias"] as Campaign["distributionBias"],
       editorialDirection: r.fields["Editorial Direction"] || "",
+      imageUrl: r.fields["Image URL"] || "",
       status: r.fields.Status as Campaign["status"],
       createdAt: r.fields["Created At"] || "",
       createdBy: r.fields["Created By"] || "",
@@ -48,7 +83,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log("Campaign creation request:", body);
+
+    // Fetch og:image in the background — don't block creation
+    const imageUrl = await fetchOgImage(body.url);
 
     const record = await createRecord("Campaigns", {
       Name: body.name || "",
@@ -58,6 +95,7 @@ export async function POST(request: NextRequest) {
       "Duration Days": body.durationDays,
       "Distribution Bias": body.distributionBias || "Front-loaded",
       "Editorial Direction": body.editorialDirection || "",
+      "Image URL": imageUrl || "",
       Status: "Draft",
       "Created At": new Date().toISOString(),
       "Created By": body.createdBy || "",

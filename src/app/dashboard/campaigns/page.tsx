@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useBrand } from "@/lib/brand-context";
 import {
@@ -19,6 +19,7 @@ import {
   Film,
   Building2,
   Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import type { Campaign, CampaignType } from "@/lib/airtable/types";
 
@@ -35,14 +36,15 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Custom: Sparkles,
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  Draft: "bg-gray-100 text-gray-700",
-  Scraping: "bg-yellow-100 text-yellow-700",
-  Generating: "bg-orange-100 text-orange-700",
-  Review: "bg-blue-100 text-blue-700",
-  Active: "bg-green-100 text-green-700",
-  Completed: "bg-teal-100 text-teal-700",
-  Archived: "bg-purple-100 text-purple-700",
+const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  Draft: "secondary",
+  Scraping: "outline",
+  Generating: "outline",
+  Review: "default",
+  Active: "default",
+  Completed: "secondary",
+  Archived: "secondary",
+  Failed: "destructive",
 };
 
 export default function CampaignsPage() {
@@ -79,15 +81,13 @@ export default function CampaignsPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader className="space-y-2">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+          {[1, 2].map((i) => (
+            <Card key={i} className="animate-pulse overflow-hidden">
+              <div className="h-40 bg-muted" />
+              <CardContent className="pt-4 space-y-2">
                 <div className="h-4 bg-muted rounded w-3/4" />
                 <div className="h-3 bg-muted rounded w-1/2" />
-              </CardHeader>
-              <CardContent>
-                <div className="h-3 bg-muted rounded w-full" />
               </CardContent>
             </Card>
           ))}
@@ -113,40 +113,80 @@ export default function CampaignsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           {campaigns.map((campaign) => {
-            const TypeIcon =
-              CAMPAIGN_TYPE_ICONS[campaign.type] || Sparkles;
+            const TypeIcon = CAMPAIGN_TYPE_ICONS[campaign.type] || Sparkles;
+            const displayName =
+              campaign.name ||
+              campaign.url
+                .replace(/^https?:\/\//, "")
+                .replace(/\/$/, "");
+
             return (
-              <Card key={campaign.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <TypeIcon className="h-4 w-4 text-muted-foreground" />
-                      <CardTitle className="text-base">
-                        {campaign.name || campaign.url}
-                      </CardTitle>
-                    </div>
+              <Card
+                key={campaign.id}
+                className="overflow-hidden hover:shadow-md transition-shadow"
+              >
+                {/* Image header */}
+                {campaign.imageUrl ? (
+                  <div className="h-40 overflow-hidden bg-muted">
+                    <img
+                      src={campaign.imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-28 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                    <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
+                  </div>
+                )}
+
+                <CardContent className="pt-4 pb-5 space-y-3">
+                  {/* Title + status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-sm leading-tight line-clamp-2">
+                      {displayName}
+                    </h3>
                     <Badge
-                      variant="secondary"
-                      className={STATUS_COLORS[campaign.status] || ""}
+                      variant={STATUS_VARIANTS[campaign.status] || "secondary"}
+                      className="shrink-0 text-[11px]"
                     >
                       {campaign.status}
                     </Badge>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Badge variant="outline" className="text-xs">
-                      {campaign.type}
-                    </Badge>
+
+                  {/* Meta row */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <TypeIcon className="h-3.5 w-3.5" />
+                    <span>{campaign.type}</span>
+                    <span className="text-border">|</span>
                     <span>{campaign.durationDays} days</span>
+                    {campaign.distributionBias && (
+                      <>
+                        <span className="text-border">|</span>
+                        <span>{campaign.distributionBias}</span>
+                      </>
+                    )}
                   </div>
+
+                  {/* Editorial direction preview */}
                   {campaign.editorialDirection && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {campaign.editorialDirection}
+                    <p className="text-xs text-muted-foreground line-clamp-2 italic">
+                      &ldquo;{campaign.editorialDirection}&rdquo;
                     </p>
                   )}
+
+                  {/* URL */}
+                  <a
+                    href={campaign.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-muted-foreground/60 hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
+                  >
+                    {campaign.url.replace(/^https?:\/\//, "").slice(0, 50)}
+                    <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                  </a>
                 </CardContent>
               </Card>
             );
