@@ -1,26 +1,10 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SessionProvider } from "next-auth/react";
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "@/components/ui/sonner";
-import { useState, useEffect } from "react";
-import { useAuthStore } from "@/stores";
-
-function HydrationGate({ children }: { children: React.ReactNode }) {
-  const hasHydrated = useAuthStore((state) => state.hasHydrated);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // Wait for both mount and hydration to prevent flash
-  if (!mounted || !hasHydrated) {
-    return null;
-  }
-
-  return <>{children}</>;
-}
+import { useState } from "react";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -36,16 +20,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="light"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <HydrationGate>{children}</HydrationGate>
-        <Toaster position="top-right" richColors closeButton />
-      </ThemeProvider>
-    </QueryClientProvider>
+    <SessionProvider>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster position="top-right" richColors closeButton />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </SessionProvider>
   );
 }

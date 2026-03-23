@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { useAuthStore, useAppStore } from "@/stores";
+import { useAppStore } from "@/stores";
 import { useProfiles } from "@/hooks";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -17,7 +17,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { getAvatarUrl } from "@/lib/avatar";
 import { Logo, ErrorBoundary } from "@/components/shared";
 import {
   LayoutDashboard,
@@ -67,9 +66,8 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const pathname = usePathname();
-  const { apiKey, usageStats, logout, hasHydrated } = useAuthStore();
+  const { data: session } = useSession();
   const { defaultProfileId, setDefaultProfileId } = useAppStore();
   const { theme, setTheme } = useTheme();
   const { data: profilesData } = useProfiles();
@@ -77,22 +75,9 @@ export default function DashboardLayout({
   const profiles = profilesData?.profiles || [];
   const currentProfile = profiles.find((p: any) => p._id === defaultProfileId) || profiles[0];
 
-  // Redirect to home if not authenticated (only after hydration)
-  useEffect(() => {
-    if (hasHydrated && !apiKey) {
-      router.push("/");
-    }
-  }, [apiKey, hasHydrated, router]);
-
   const handleLogout = () => {
-    logout();
-    router.push("/");
+    signOut({ callbackUrl: "/login" });
   };
-
-  // Don't render until hydrated to avoid flash
-  if (!hasHydrated || !apiKey) {
-    return null;
-  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -145,51 +130,6 @@ export default function DashboardLayout({
             <span>Settings</span>
           </Link>
         </nav>
-
-        {/* Plan info */}
-        {usageStats && (
-          <div className="border-t border-border p-3">
-            <div className="rounded-md bg-muted p-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium">{usageStats.planName}</span>
-                <a
-                  href="https://zernio.com/dashboard"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground"
-                  aria-label="Open Zernio dashboard"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
-              <div className="mt-2 space-y-1">
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>Uploads</span>
-                  <span>
-                    {usageStats.limits.uploads < 0 ? (
-                      <>{usageStats.usage.uploads.toLocaleString()} / ∞</>
-                    ) : (
-                      <>{usageStats.usage.uploads.toLocaleString()} / {usageStats.limits.uploads.toLocaleString()}</>
-                    )}
-                  </span>
-                </div>
-                {usageStats.limits.uploads >= 0 && (
-                  <div className="h-1 overflow-hidden rounded-full bg-background">
-                    <div
-                      className="h-full rounded-full bg-primary transition-all"
-                      style={{
-                        width: `${Math.min(
-                          (usageStats.usage.uploads / usageStats.limits.uploads) * 100,
-                          100
-                        )}%`,
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </aside>
 
       {/* Main content */}
@@ -260,17 +200,13 @@ export default function DashboardLayout({
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                  <img
-                    src={getAvatarUrl(apiKey || "user", "bottts")}
-                    alt="User avatar"
-                    className="h-7 w-7 rounded-full"
-                  />
+                <Button variant="ghost" size="sm" className="gap-2">
+                  <span className="text-sm">{session?.user?.name || "User"}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel className="text-xs">
-                  {usageStats?.planName || 'Account'}
+                  {session?.user?.email}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild className="text-sm">
