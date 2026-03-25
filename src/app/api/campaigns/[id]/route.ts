@@ -4,6 +4,7 @@ import type { Campaign, Post } from "@/lib/airtable/types";
 
 interface CampaignFields {
   Name: string;
+  Description: string;
   URL: string;
   Type: string;
   Brand: string[];
@@ -44,6 +45,7 @@ export async function GET(
     const campaign: Campaign = {
       id: record.id,
       name: record.fields.Name || "",
+      description: record.fields.Description || "",
       url: record.fields.URL || "",
       type: record.fields.Type as Campaign["type"],
       brandIds: record.fields.Brand || [],

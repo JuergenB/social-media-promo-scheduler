@@ -177,7 +177,7 @@ export default function CampaignsPage() {
                   <div className="px-4 pt-2.5 pb-3 space-y-1.5">
                     {/* Title + status */}
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-sm leading-tight line-clamp-1">
+                      <h3 className="font-semibold text-sm leading-tight line-clamp-2">
                         {displayName}
                       </h3>
                       <Badge
@@ -201,6 +201,13 @@ export default function CampaignsPage() {
                         </>
                       )}
                     </div>
+
+                    {/* Description / excerpt */}
+                    {campaign.description && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2">
+                        {campaign.description}
+                      </p>
+                    )}
 
                     {/* Editorial direction preview */}
                     {campaign.editorialDirection && (

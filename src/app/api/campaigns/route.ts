@@ -4,6 +4,7 @@ import type { Campaign } from "@/lib/airtable/types";
 
 interface CampaignFields {
   Name: string;
+  Description: string;
   URL: string;
   Type: string;
   Brand: string[];
@@ -20,9 +21,9 @@ interface CampaignFields {
  * Fetch metadata from a URL using Firecrawl scrape.
  * Returns the page title and og:image URL.
  */
-async function fetchPageMetadata(url: string): Promise<{ title: string | null; imageUrl: string | null }> {
+async function fetchPageMetadata(url: string): Promise<{ title: string | null; description: string | null; imageUrl: string | null }> {
   const apiKey = process.env.FIRECRAWL_API_KEY;
-  if (!apiKey) return { title: null, imageUrl: null };
+  if (!apiKey) return { title: null, description: null, imageUrl: null };
 
   try {
     const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -38,15 +39,16 @@ async function fetchPageMetadata(url: string): Promise<{ title: string | null; i
       }),
     });
 
-    if (!res.ok) return { title: null, imageUrl: null };
+    if (!res.ok) return { title: null, description: null, imageUrl: null };
 
     const data = await res.json();
     const metadata = data?.data?.metadata;
     const title = metadata?.title || metadata?.ogTitle || metadata?.["og:title"] || null;
+    const description = metadata?.description || metadata?.ogDescription || metadata?.["og:description"] || null;
     const imageUrl = metadata?.ogImage || metadata?.["og:image"] || null;
-    return { title, imageUrl };
+    return { title, description, imageUrl };
   } catch {
-    return { title: null, imageUrl: null };
+    return { title: null, description: null, imageUrl: null };
   }
 }
 
@@ -59,6 +61,7 @@ export async function GET() {
     const campaigns: Campaign[] = records.map((r) => ({
       id: r.id,
       name: r.fields.Name || "",
+      description: r.fields.Description || "",
       url: r.fields.URL || "",
       type: r.fields.Type as Campaign["type"],
       brandIds: r.fields.Brand || [],
@@ -90,6 +93,7 @@ export async function POST(request: NextRequest) {
 
     const record = await createRecord("Campaigns", {
       Name: body.name || metadata.title || body.url,
+      Description: metadata.description || "",
       URL: body.url,
       Type: body.type,
       Brand: body.brandId ? [body.brandId] : [],

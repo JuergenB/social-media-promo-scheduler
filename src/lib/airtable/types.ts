@@ -54,6 +54,8 @@ export type DistributionBias = (typeof DISTRIBUTION_BIASES)[number];
 export interface Campaign {
   id: string;
   name: string;
+  /** Page excerpt / og:description extracted during creation */
+  description: string;
   url: string;
   type: CampaignType;
   brandIds: string[];
