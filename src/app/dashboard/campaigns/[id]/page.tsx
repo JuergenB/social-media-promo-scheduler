@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { PlatformIcon, PlatformBadge } from "@/components/shared/platform-icon";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
@@ -609,7 +610,8 @@ export default function CampaignDetailPage() {
         open={!!selectedPost}
         onOpenChange={(open) => !open && setSelectedPost(null)}
       >
-        <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[90vh] flex flex-col" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Post Detail</DialogTitle>
           {selectedPost && (
             <PostDetailView
               post={selectedPost}
@@ -703,9 +705,12 @@ function CampaignPostRow({
   const platformLower = toPlatformId(post.platform);
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="w-full text-left hover:bg-accent/50 transition-colors"
+      onKeyDown={(e) => e.key === "Enter" && onClick()}
+      className="w-full text-left hover:bg-accent/50 transition-colors cursor-pointer"
     >
       <div className="px-4 py-3 flex items-start gap-3">
         {/* Image thumbnail */}
@@ -747,16 +752,16 @@ function CampaignPostRow({
         {/* Review actions */}
         {campaignStatus === "Review" && post.status === "Pending" && (
           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-            <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
+            <span className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
               Approve
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" disabled>
+            </span>
+            <span className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50">
               Dismiss
-            </Button>
+            </span>
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -781,9 +786,9 @@ function PostDetailView({
   const nextPost = currentIndex < posts.length - 1 ? posts[currentIndex + 1] : null;
 
   return (
-    <div>
-      {/* Navigation header */}
-      <div className="flex items-center justify-between border-b border-border px-6 py-3">
+    <div className="flex flex-col max-h-[90vh]">
+      {/* Navigation header — pinned, with right padding to avoid close button */}
+      <div className="flex items-center justify-between border-b border-border pl-6 pr-14 py-3 shrink-0">
         <Button
           variant="ghost"
           size="sm"
@@ -809,74 +814,77 @@ function PostDetailView({
         </Button>
       </div>
 
-      {/* Platform header */}
-      <div className="flex items-center gap-3 px-6 pt-4 pb-3">
-        <PlatformBadge platform={platformLower} className="h-10 w-10" />
-        <div className="flex-1">
-          <h3 className="font-semibold text-base">{post.platform} Post</h3>
-          {post.scheduledDate && (
-            <p className="text-sm text-muted-foreground">
-              {format(parseISO(post.scheduledDate), "MMM d, yyyy 'at' h:mm a")}
-            </p>
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Platform header */}
+        <div className="flex items-center gap-3 px-6 pt-4 pb-3">
+          <PlatformBadge platform={platformLower} className="h-10 w-10" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-base">{post.platform} Post</h3>
+            {post.scheduledDate && (
+              <p className="text-sm text-muted-foreground">
+                {format(parseISO(post.scheduledDate), "MMM d, yyyy 'at' h:mm a")}
+              </p>
+            )}
+          </div>
+          <Badge
+            variant={statusConfig.variant}
+            className={cn("text-xs", statusConfig.className)}
+          >
+            {post.status}
+          </Badge>
+        </div>
+
+        {/* Image */}
+        {post.imageUrl && (
+          <div className="px-6 pb-3">
+            <div className="rounded-lg overflow-hidden bg-muted">
+              <img
+                src={post.imageUrl}
+                alt=""
+                className="w-full max-h-64 object-cover"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Full content */}
+        <div className="px-6 pb-3">
+          <p className="text-sm whitespace-pre-wrap">
+            {post.content || "(No content)"}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {charCount} characters
+          </p>
+        </div>
+
+        {/* Short link */}
+        {post.shortUrl && (
+          <div className="px-6 pb-3">
+            <a
+              href={post.shortUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              {post.shortUrl}
+            </a>
+          </div>
+        )}
+
+        {/* Metadata */}
+        <div className="px-6 pb-4 space-y-1 text-xs text-muted-foreground">
+          {post.contentVariant && (
+            <div><span className="font-medium">Variant:</span> {post.contentVariant}</div>
+          )}
+          {post.notes && (
+            <div><span className="font-medium">Notes:</span> {post.notes}</div>
           )}
         </div>
-        <Badge
-          variant={statusConfig.variant}
-          className={cn("text-xs", statusConfig.className)}
-        >
-          {post.status}
-        </Badge>
       </div>
 
-      {/* Image */}
-      {post.imageUrl && (
-        <div className="px-6 pb-3">
-          <div className="rounded-lg overflow-hidden bg-muted">
-            <img
-              src={post.imageUrl}
-              alt=""
-              className="w-full max-h-64 object-cover"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Full content — always expanded */}
-      <div className="px-6 pb-3">
-        <p className="text-sm whitespace-pre-wrap">
-          {post.content || "(No content)"}
-        </p>
-        <p className="text-xs text-muted-foreground mt-2">
-          {charCount} characters
-        </p>
-      </div>
-
-      {/* Short link */}
-      {post.shortUrl && (
-        <div className="px-6 pb-3">
-          <a
-            href={post.shortUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline"
-          >
-            {post.shortUrl}
-          </a>
-        </div>
-      )}
-
-      {/* Metadata */}
-      <div className="px-6 pb-4 space-y-1 text-xs text-muted-foreground">
-        {post.contentVariant && (
-          <div><span className="font-medium">Variant:</span> {post.contentVariant}</div>
-        )}
-        {post.notes && (
-          <div><span className="font-medium">Notes:</span> {post.notes}</div>
-        )}
-      </div>
-
-      {/* Footer actions */}
-      <div className="flex items-center justify-between border-t border-border px-6 py-4">
+      {/* Footer actions — pinned */}
+      <div className="flex items-center justify-between border-t border-border px-6 py-4 shrink-0">
         <div className="flex gap-2">
           {post.status === "Pending" && (
             <>

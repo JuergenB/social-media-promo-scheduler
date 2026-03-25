@@ -201,33 +201,75 @@ export async function POST(
 
         await sleep(DELAY_MS);
 
-        // ── Step 5: Generate posts with Claude ────────────────────
-        const postsPerPlatform = getPostsPerPlatform(fields["Duration Days"] || 90);
-        const totalPosts = TARGET_PLATFORMS.length * postsPerPlatform;
+        // ── Step 5: Generate posts per platform with Claude ──────
+        // Use content-driven count: one variant per distinct image/section,
+        // with duration-based count as a minimum floor
+        const durationBasedCount = getPostsPerPlatform(fields["Duration Days"] || 90);
+        const config = resolveAnthropicConfig(brandForAnthropic);
+        const allGeneratedPosts: import("@/lib/anthropic").GeneratedPost[] = [];
+
+        // Pre-assign images: each variant gets a different image (cycling)
+        const contentImages = blogData.images.filter((_img, idx) => {
+          // Skip duplicate hero images (index 0 and 1 are often the same)
+          if (idx === 0) return true;
+          return !blogData.images.slice(0, idx).some(
+            (prev) => prev.url.split("?")[0] === blogData.images[idx].url.split("?")[0]
+          );
+        });
+
+        // Content-driven: use number of unique images as variant count
+        // (each image typically represents a distinct section/artist)
+        const postsPerPlatform = contentImages.length > 1
+          ? Math.max(contentImages.length, durationBasedCount)
+          : durationBasedCount;
 
         sendEvent(controller, encoder, {
           step: 5, totalSteps, status: "running",
-          message: `Generating ${totalPosts} posts across ${TARGET_PLATFORMS.length} platforms (${postsPerPlatform} per platform)...`,
+          message: `Detected ${contentImages.length} content sections — generating ${postsPerPlatform} variants per platform`,
         });
 
-        const config = resolveAnthropicConfig(brandForAnthropic);
-        const userPrompt = buildUserPrompt({
-          blogData,
-          brandVoice,
-          editorialDirection: fields["Editorial Direction"] || "",
-          platformSettings: formattedSettings,
-          platforms: TARGET_PLATFORMS,
-          postsPerPlatform,
-          imageCount: blogData.images.length,
-        });
+        await sleep(1000);
 
-        const result = await generatePosts(SYSTEM_PROMPT, userPrompt, config);
+        for (let i = 0; i < TARGET_PLATFORMS.length; i++) {
+          const platform = TARGET_PLATFORMS[i];
+          const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+
+          sendEvent(controller, encoder, {
+            step: 5, totalSteps, status: "running",
+            message: `Generating ${postsPerPlatform} ${platformName} post${postsPerPlatform > 1 ? "s" : ""} (${i + 1}/${TARGET_PLATFORMS.length})...`,
+            detail: `${allGeneratedPosts.length} posts generated so far`,
+          });
+
+          const userPrompt = buildUserPrompt({
+            blogData,
+            brandVoice,
+            editorialDirection: fields["Editorial Direction"] || "",
+            platformSettings: formattedSettings,
+            platforms: [platform],
+            postsPerPlatform,
+            imageCount: contentImages.length,
+          });
+
+          const result = await generatePosts(SYSTEM_PROMPT, userPrompt, config);
+
+          // Force-assign the correct image for each variant (don't trust Claude's choice)
+          for (let v = 0; v < result.posts.length; v++) {
+            const imgIdx = (i * postsPerPlatform + v) % contentImages.length;
+            result.posts[v].imageUrl = contentImages[imgIdx]?.url || "";
+          }
+
+          allGeneratedPosts.push(...result.posts);
+
+          await sleep(DELAY_MS);
+        }
 
         sendEvent(controller, encoder, {
           step: 5, totalSteps, status: "success",
-          message: `Generated ${result.posts.length} posts`,
-          detail: `Platforms: ${[...new Set(result.posts.map((p) => p.platform))].join(", ")}`,
+          message: `Generated ${allGeneratedPosts.length} posts across ${TARGET_PLATFORMS.length} platforms`,
         });
+
+        // Use allGeneratedPosts as the result from here
+        const result = { posts: allGeneratedPosts };
 
         await sleep(DELAY_MS);
 
