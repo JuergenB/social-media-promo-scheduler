@@ -22,12 +22,21 @@ import {
   Image as ImageIcon,
   Video,
   ExternalLink,
+  FileText,
 } from "lucide-react";
+
+/** Detect if a media URL points to a document (PDF) rather than a renderable image */
+function getEffectiveMediaType(item: { type: string; url: string }): "image" | "video" | "document" {
+  if (item.type === "video") return "video";
+  // PDFs are sometimes tagged as "image" by Zernio (LinkedIn carousels)
+  if (item.url && /\.pdf(\?|$)/i.test(item.url)) return "document";
+  return item.type === "video" ? "video" : "image";
+}
 
 interface Post {
   _id: string;
   content: string;
-  mediaItems?: Array<{ type: "image" | "video"; url: string }>;
+  mediaItems?: Array<{ type: "image" | "video" | "document"; url: string }>;
   platforms: Array<{
     platform: string;
     accountId: string;
@@ -55,25 +64,61 @@ export function PostCard({
   compact = false,
 }: PostCardProps) {
   const hasMedia = post.mediaItems && post.mediaItems.length > 0;
-  const imageCount = post.mediaItems?.filter((m) => m.type === "image").length || 0;
-  const videoCount = post.mediaItems?.filter((m) => m.type === "video").length || 0;
+  const mediaTypes = post.mediaItems?.map((m) => getEffectiveMediaType(m)) || [];
+  const imageCount = mediaTypes.filter((t) => t === "image").length;
+  const videoCount = mediaTypes.filter((t) => t === "video").length;
+  const docCount = mediaTypes.filter((t) => t === "document").length;
+  const firstMediaType = post.mediaItems?.[0] ? getEffectiveMediaType(post.mediaItems[0]) : null;
 
   return (
     <div className="rounded-lg bg-muted">
       {/* Media preview for non-compact */}
       {!compact && hasMedia && post.mediaItems?.[0] && (
         <div className="relative aspect-video overflow-hidden rounded-t-lg bg-background">
-          {post.mediaItems[0].type === "video" ? (
+          {firstMediaType === "video" ? (
             <video
               src={post.mediaItems[0].url}
               className="h-full w-full object-cover"
             />
+          ) : firstMediaType === "document" ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-muted/50">
+              <FileText className="h-10 w-10 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">
+                PDF Carousel
+              </span>
+              <a
+                href={post.mediaItems[0].url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-xs text-primary hover:underline"
+              >
+                Open PDF
+              </a>
+            </div>
           ) : (
             <img
               src={post.mediaItems[0].url}
               alt=""
               className="h-full w-full object-cover"
+              onError={(e) => {
+                // Fallback for URLs that fail to load as images (e.g., undected PDFs)
+                const target = e.currentTarget;
+                target.style.display = "none";
+                const fallback = target.parentElement?.querySelector("[data-media-fallback]");
+                if (fallback) (fallback as HTMLElement).style.display = "flex";
+              }}
             />
+          )}
+          {/* Hidden fallback for image load failures */}
+          {firstMediaType === "image" && (
+            <div
+              data-media-fallback
+              className="hidden h-full w-full flex-col items-center justify-center gap-2 bg-muted/50 absolute inset-0"
+            >
+              <FileText className="h-10 w-10 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Media preview unavailable</span>
+            </div>
           )}
           {post.mediaItems.length > 1 && (
             <div className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-1 text-xs text-white">
@@ -102,6 +147,12 @@ export function PostCard({
               <span className="flex items-center gap-1">
                 <Video className="h-3 w-3" />
                 {videoCount}
+              </span>
+            )}
+            {docCount > 0 && (
+              <span className="flex items-center gap-1">
+                <FileText className="h-3 w-3" />
+                {docCount} PDF
               </span>
             )}
           </div>

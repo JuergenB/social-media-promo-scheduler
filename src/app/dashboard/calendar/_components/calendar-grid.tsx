@@ -10,7 +10,12 @@ import { eachDayOfInterval } from "date-fns/eachDayOfInterval";
 import { isSameMonth } from "date-fns/isSameMonth";
 import { parseISO } from "date-fns/parseISO";
 import { isToday } from "date-fns/isToday";
+import { FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function isPdfUrl(url: string) {
+  return /\.pdf(\?|$)/i.test(url);
+}
 
 interface Post {
   _id: string;
@@ -43,6 +48,7 @@ interface CalendarGridProps {
   posts: Post[];
   onPostClick: (postId: string) => void;
   onDayClick: (date: Date) => void;
+  weekStartsOn?: 0 | 1;
 }
 
 export function CalendarGrid({
@@ -50,15 +56,16 @@ export function CalendarGrid({
   posts,
   onPostClick,
   onDayClick,
+  weekStartsOn = 0,
 }: CalendarGridProps) {
   const days = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(currentDate);
-    const calendarStart = startOfWeek(monthStart);
-    const calendarEnd = endOfWeek(monthEnd);
+    const calendarStart = startOfWeek(monthStart, { weekStartsOn });
+    const calendarEnd = endOfWeek(monthEnd, { weekStartsOn });
 
     return eachDayOfInterval({ start: calendarStart, end: calendarEnd });
-  }, [currentDate]);
+  }, [currentDate, weekStartsOn]);
 
   const postsByDate = useMemo(() => {
     const map = new Map<string, Post[]>();
@@ -72,8 +79,14 @@ export function CalendarGrid({
     return map;
   }, [posts]);
 
-  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const weekDaysShort = ["S", "M", "T", "W", "T", "F", "S"];
+  const allWeekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const allWeekDaysShort = ["S", "M", "T", "W", "T", "F", "S"];
+  const weekDays = weekStartsOn === 1
+    ? [...allWeekDays.slice(1), allWeekDays[0]]
+    : allWeekDays;
+  const weekDaysShort = weekStartsOn === 1
+    ? [...allWeekDaysShort.slice(1), allWeekDaysShort[0]]
+    : allWeekDaysShort;
 
   return (
     <div className="rounded-lg border border-border bg-card overflow-x-auto">
@@ -143,19 +156,29 @@ export function CalendarGrid({
                       )}
                     >
                       {post.mediaItems?.[0] && (
-                        <img
-                          src={post.mediaItems[0].url}
-                          alt=""
-                          className="h-3 w-3 rounded object-cover flex-shrink-0 sm:h-4 sm:w-4"
-                        />
+                        isPdfUrl(post.mediaItems[0].url) ? (
+                          <FileText className="h-3 w-3 flex-shrink-0 text-muted-foreground sm:h-4 sm:w-4" />
+                        ) : (
+                          <img
+                            src={post.mediaItems[0].url}
+                            alt=""
+                            className="h-3 w-3 rounded object-cover flex-shrink-0 sm:h-4 sm:w-4"
+                          />
+                        )
                       )}
                       <span className="flex-1 truncate">{post.content || "(No content)"}</span>
                     </button>
                   ))}
                   {dayPosts.length > 2 && (
-                    <p className="px-1 text-[10px] text-muted-foreground sm:text-xs">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDayClick(day);
+                      }}
+                      className="w-full px-1 text-left text-[10px] font-medium text-primary hover:underline sm:text-xs"
+                    >
                       +{dayPosts.length - 2} more
-                    </p>
+                    </button>
                   )}
                 </div>
               </div>
