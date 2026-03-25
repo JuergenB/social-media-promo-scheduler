@@ -106,4 +106,6 @@ export interface GeneratedPost {
   imageUrl: string;
   hashtags?: string[];
   linkUrl: string;
+  /** Newsletter story anchor fragment (e.g., "VSObpak") */
+  anchor?: string;
 }

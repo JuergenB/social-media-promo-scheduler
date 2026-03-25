@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
-import { scrapeBlogPost } from "@/lib/firecrawl";
+import { scrapeBlogPost, scrapeNewsletter } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
   SYSTEM_PROMPT,
@@ -181,10 +181,13 @@ export async function POST(
         // ── Step 4: Scrape blog post ──────────────────────────────
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "running",
-          message: "Scraping blog post content...",
+          message: `Scraping ${fields.Type === "Newsletter" ? "newsletter" : "blog post"} content...`,
         });
 
-        const blogData = await scrapeBlogPost(fields.URL);
+        const isNewsletter = fields.Type === "Newsletter";
+        const blogData = isNewsletter
+          ? await scrapeNewsletter(fields.URL)
+          : await scrapeBlogPost(fields.URL);
 
         // Store scraped data on campaign record
         await updateRecord("Campaigns", campaignId, {
@@ -252,10 +255,12 @@ export async function POST(
 
           const result = await generatePosts(SYSTEM_PROMPT, userPrompt, config);
 
-          // Force-assign the correct image for each variant (don't trust Claude's choice)
+          // Force-assign the correct image + anchor for each variant
           for (let v = 0; v < result.posts.length; v++) {
             const imgIdx = (i * postsPerPlatform + v) % contentImages.length;
-            result.posts[v].imageUrl = contentImages[imgIdx]?.url || "";
+            const img = contentImages[imgIdx];
+            result.posts[v].imageUrl = img?.url || "";
+            result.posts[v].anchor = img?.anchor; // Newsletter story anchor
           }
 
           allGeneratedPosts.push(...result.posts);
@@ -290,8 +295,13 @@ export async function POST(
         for (const post of result.posts) {
           let shortUrl = "";
           try {
+            // For newsletters with story anchors, use story-specific URL
+            const linkTarget = post.anchor
+              ? `${blogData.url}#${post.anchor}`
+              : blogData.url;
+
             const link = await createPlatformShortLink(
-              blogData.url,
+              linkTarget,
               post.platform,
               campaignSlug,
               brandForShortIo

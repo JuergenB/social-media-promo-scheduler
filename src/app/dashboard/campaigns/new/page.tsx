@@ -12,6 +12,7 @@ import { useBrand } from "@/lib/brand-context";
 import { cn } from "@/lib/utils";
 import {
   CAMPAIGN_TYPES,
+  ENABLED_CAMPAIGN_TYPES,
   DISTRIBUTION_BIASES,
   DURATION_PRESETS,
   type CampaignType,
@@ -306,17 +307,22 @@ export default function NewCampaignPage() {
             {CAMPAIGN_TYPES.map((t) => {
               const Icon = CAMPAIGN_TYPE_ICONS[t];
               const isSelected = type === t;
+              const isEnabled = ENABLED_CAMPAIGN_TYPES.includes(t);
               return (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setType(t)}
+                  onClick={() => isEnabled && setType(t)}
+                  disabled={!isEnabled}
                   className={cn(
                     "flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors",
                     isSelected
                       ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                      : isEnabled
+                        ? "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        : "border-border/50 text-muted-foreground/30 cursor-not-allowed opacity-40"
                   )}
+                  title={!isEnabled ? "Coming soon" : undefined}
                 >
                   <Icon className="h-5 w-5" />
                   <span className="text-center leading-tight">{t}</span>
