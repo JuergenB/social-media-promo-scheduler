@@ -58,6 +58,39 @@ import {
   Save,
 } from "lucide-react";
 
+// ── Types ──────────────────────────────────────────────────────────────
+
+interface ProgressEvent {
+  step: number;
+  totalSteps: number;
+  status: "running" | "success" | "error";
+  message: string;
+  detail?: string;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+/** Map Airtable platform select values to Zernio platform IDs used by PlatformIcon */
+const AIRTABLE_TO_PLATFORM: Record<string, Platform> = {
+  Instagram: "instagram",
+  "X/Twitter": "twitter",
+  LinkedIn: "linkedin",
+  Facebook: "facebook",
+  Threads: "threads",
+  Bluesky: "bluesky",
+  Pinterest: "pinterest",
+  TikTok: "tiktok",
+  YouTube: "youtube",
+  Reddit: "reddit",
+  Telegram: "telegram",
+  Snapchat: "snapchat",
+  "Google Business": "googlebusiness",
+};
+
+function toPlatformId(airtableValue: string): Platform {
+  return AIRTABLE_TO_PLATFORM[airtableValue] || airtableValue.toLowerCase() as Platform;
+}
+
 // ── Constants ──────────────────────────────────────────────────────────
 
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
@@ -117,6 +150,9 @@ export default function CampaignDetailPage() {
 
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
+  const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery<{ campaign: Campaign; posts: Post[] }>({
     queryKey: ["campaign", campaignId],
@@ -172,6 +208,68 @@ export default function CampaignDetailPage() {
   const approvedCount = posts.filter(
     (p) => p.status === "Approved" || p.status === "Modified"
   ).length;
+
+  // ── Generate posts handler (SSE) ─────────────────────────────────────
+  const handleGenerate = async () => {
+    setIsGenerating(true);
+    setProgressLog([]);
+
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/generate`, {
+        method: "POST",
+      });
+
+      if (!res.body) throw new Error("No response body");
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const event = JSON.parse(line.slice(6)) as ProgressEvent;
+              setProgressLog((prev) => {
+                // Replace same step or append
+                const existing = prev.findIndex((e) => e.step === event.step);
+                if (existing >= 0) {
+                  const updated = [...prev];
+                  updated[existing] = event;
+                  return updated;
+                }
+                return [...prev, event];
+              });
+            } catch {
+              // Skip malformed events
+            }
+          }
+        }
+      }
+    } catch (err) {
+      setProgressLog((prev) => [
+        ...prev,
+        {
+          step: 0,
+          totalSteps: 7,
+          status: "error" as const,
+          message: "Connection failed",
+          detail: err instanceof Error ? err.message : "Unknown error",
+        },
+      ]);
+    }
+
+    setIsGenerating(false);
+    // Refresh campaign data to show generated posts
+    queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+  };
 
   const togglePlatformFilter = (platform: string) => {
     setPlatformFilter((prev) => {
@@ -326,13 +424,55 @@ export default function CampaignDetailPage() {
           {/* Action button */}
           <div className="pt-1">
             <CampaignActionButton
-              status={campaign.status}
+              status={isGenerating ? "Generating" : campaign.status}
               campaignId={campaign.id}
               reviewCount={reviewCount}
+              onGenerate={handleGenerate}
+              isGenerating={isGenerating}
             />
           </div>
         </div>
       </Card>
+
+      {/* Progress log during generation */}
+      {progressLog.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              {progressLog.map((event, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-start gap-2 text-sm",
+                    event.status === "error" && "text-destructive"
+                  )}
+                >
+                  {event.status === "running" ? (
+                    <Loader2 className="h-4 w-4 mt-0.5 animate-spin text-primary shrink-0" />
+                  ) : event.status === "success" ? (
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-500 shrink-0" />
+                  ) : (
+                    <span className="h-4 w-4 mt-0.5 text-destructive shrink-0">✗</span>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground mr-1.5">
+                      [{event.step}/{event.totalSteps}]
+                    </span>
+                    <span className={event.status === "success" ? "text-foreground" : ""}>
+                      {event.message}
+                    </span>
+                    {event.detail && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {event.detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs: Posts / Settings */}
       <Tabs defaultValue="posts">
@@ -402,11 +542,11 @@ export default function CampaignDetailPage() {
                       )}
                     >
                       <PlatformIcon
-                        platform={platform as Platform}
+                        platform={toPlatformId(platform)}
                         size="xs"
                         showColor
                       />
-                      <span className="capitalize">{platform}</span>
+                      <span>{platform}</span>
                     </button>
                   ))}
                   {platformFilter.size > 0 && (
@@ -473,7 +613,9 @@ export default function CampaignDetailPage() {
           {selectedPost && (
             <PostDetailView
               post={selectedPost}
+              posts={filteredPosts}
               onClose={() => setSelectedPost(null)}
+              onNavigate={(p) => setSelectedPost(p)}
             />
           )}
         </DialogContent>
@@ -488,15 +630,19 @@ function CampaignActionButton({
   status,
   campaignId,
   reviewCount,
+  onGenerate,
+  isGenerating,
 }: {
   status: CampaignStatus;
   campaignId: string;
   reviewCount: number;
+  onGenerate?: () => void;
+  isGenerating?: boolean;
 }) {
   switch (status) {
     case "Draft":
       return (
-        <Button size="sm" disabled>
+        <Button size="sm" onClick={onGenerate} disabled={isGenerating}>
           <Sparkles className="mr-1.5 h-3.5 w-3.5" />
           Generate Posts
         </Button>
@@ -554,7 +700,7 @@ function CampaignPostRow({
   onClick: () => void;
 }) {
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
-  const platformLower = post.platform.toLowerCase() as Platform;
+  const platformLower = toPlatformId(post.platform);
 
   return (
     <button
@@ -562,12 +708,26 @@ function CampaignPostRow({
       className="w-full text-left hover:bg-accent/50 transition-colors"
     >
       <div className="px-4 py-3 flex items-start gap-3">
-        {/* Platform badge */}
-        <PlatformBadge platform={platformLower} className="h-9 w-9 shrink-0 mt-0.5" />
+        {/* Image thumbnail */}
+        {post.imageUrl ? (
+          <div className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-muted">
+            <img
+              src={post.imageUrl}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </div>
+        ) : (
+          <div className="h-14 w-14 shrink-0 rounded-lg bg-muted flex items-center justify-center">
+            <PlatformIcon platform={platformLower} size="md" showColor />
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
+            <PlatformIcon platform={platformLower} size="xs" showColor />
+            <span className="text-xs font-medium">{post.platform}</span>
             {post.scheduledDate && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3 w-3" />
@@ -582,11 +742,6 @@ function CampaignPostRow({
             </Badge>
           </div>
           <p className="text-sm line-clamp-2">{post.content || "(No content)"}</p>
-          {post.mediaUrls && (
-            <span className="text-[10px] text-muted-foreground mt-1 inline-block">
-              Has media
-            </span>
-          )}
         </div>
 
         {/* Review actions */}
@@ -607,22 +762,58 @@ function CampaignPostRow({
 
 function PostDetailView({
   post,
+  posts,
   onClose,
+  onNavigate,
 }: {
   post: Post;
+  posts: Post[];
   onClose: () => void;
+  onNavigate: (post: Post) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const platformLower = post.platform.toLowerCase() as Platform;
+  const platformLower = toPlatformId(post.platform);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
+  const charCount = post.content?.length || 0;
+
+  // Navigation
+  const currentIndex = posts.findIndex((p) => p.id === post.id);
+  const prevPost = currentIndex > 0 ? posts[currentIndex - 1] : null;
+  const nextPost = currentIndex < posts.length - 1 ? posts[currentIndex + 1] : null;
 
   return (
     <div>
+      {/* Navigation header */}
+      <div className="flex items-center justify-between border-b border-border px-6 py-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!prevPost}
+          onClick={() => prevPost && onNavigate(prevPost)}
+          className="h-8"
+        >
+          <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+          Prev
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          {currentIndex + 1} of {posts.length}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!nextPost}
+          onClick={() => nextPost && onNavigate(nextPost)}
+          className="h-8"
+        >
+          Next
+          <ArrowLeft className="h-3.5 w-3.5 ml-1 rotate-180" />
+        </Button>
+      </div>
+
       {/* Platform header */}
-      <div className="flex items-center gap-3 px-6 pt-6 pb-4">
+      <div className="flex items-center gap-3 px-6 pt-4 pb-3">
         <PlatformBadge platform={platformLower} className="h-10 w-10" />
         <div className="flex-1">
-          <h3 className="font-semibold text-base capitalize">{post.platform} Post</h3>
+          <h3 className="font-semibold text-base">{post.platform} Post</h3>
           {post.scheduledDate && (
             <p className="text-sm text-muted-foreground">
               {format(parseISO(post.scheduledDate), "MMM d, yyyy 'at' h:mm a")}
@@ -637,50 +828,68 @@ function PostDetailView({
         </Badge>
       </div>
 
-      {/* Content */}
-      <div className="px-6 pb-4">
-        <p
-          className={cn(
-            "text-sm whitespace-pre-wrap",
-            !expanded && "line-clamp-6"
-          )}
-        >
+      {/* Image */}
+      {post.imageUrl && (
+        <div className="px-6 pb-3">
+          <div className="rounded-lg overflow-hidden bg-muted">
+            <img
+              src={post.imageUrl}
+              alt=""
+              className="w-full max-h-64 object-cover"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Full content — always expanded */}
+      <div className="px-6 pb-3">
+        <p className="text-sm whitespace-pre-wrap">
           {post.content || "(No content)"}
         </p>
-        {post.content && post.content.length > 300 && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-primary hover:underline mt-1 flex items-center gap-1"
-          >
-            {expanded ? (
-              <>
-                Show less <ChevronUp className="h-3 w-3" />
-              </>
-            ) : (
-              <>
-                Show more <ChevronDown className="h-3 w-3" />
-              </>
-            )}
-          </button>
-        )}
+        <p className="text-xs text-muted-foreground mt-2">
+          {charCount} characters
+        </p>
       </div>
 
+      {/* Short link */}
+      {post.shortUrl && (
+        <div className="px-6 pb-3">
+          <a
+            href={post.shortUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline"
+          >
+            {post.shortUrl}
+          </a>
+        </div>
+      )}
+
       {/* Metadata */}
-      <div className="px-6 pb-4 space-y-2">
+      <div className="px-6 pb-4 space-y-1 text-xs text-muted-foreground">
         {post.contentVariant && (
-          <div className="text-xs text-muted-foreground">
-            <span className="font-medium">Variant:</span> {post.contentVariant}
-          </div>
+          <div><span className="font-medium">Variant:</span> {post.contentVariant}</div>
         )}
         {post.notes && (
-          <div className="text-xs text-muted-foreground">
-            <span className="font-medium">Notes:</span> {post.notes}
-          </div>
+          <div><span className="font-medium">Notes:</span> {post.notes}</div>
         )}
       </div>
 
       {/* Footer actions */}
-      <div className="flex items-center justify-end border-t border-border px-6 py-4">
+      <div className="flex items-center justify-between border-t border-border px-6 py-4">
+        <div className="flex gap-2">
+          {post.status === "Pending" && (
+            <>
+              <Button variant="default" size="sm" disabled>
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                Approve
+              </Button>
+              <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
+                Dismiss
+              </Button>
+            </>
+          )}
+        </div>
         <Button variant="outline" size="sm" onClick={onClose}>
           Close
         </Button>
