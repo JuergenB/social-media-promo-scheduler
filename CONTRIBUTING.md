@@ -1,6 +1,6 @@
-# Contributing to LateWiz
+# Contributing to PolyWiz
 
-Thank you for your interest in contributing to LateWiz! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to PolyWiz! This document provides guidelines and information for contributors.
 
 ## Code of Conduct
 
@@ -19,8 +19,8 @@ Be respectful, inclusive, and constructive. We're all here to build something gr
 1. Fork the repository
 2. Clone your fork:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/latewiz.git
-   cd latewiz
+   git clone https://github.com/YOUR_USERNAME/social-media-promo-scheduler.git
+   cd social-media-promo-scheduler
    ```
 
 3. Install dependencies:
@@ -140,7 +140,7 @@ Include:
 
 ## Questions?
 
-- Open a [GitHub Discussion](https://github.com/zernio-dev/latewiz/discussions)
+- Open a [GitHub Discussion](https://github.com/zernio-dev/social-media-promo-scheduler/discussions)
 - Join our [Discord](https://discord.gg/late)
 
 ## License

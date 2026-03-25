@@ -21,7 +21,7 @@ export function Logo({ size = "md", showText = true, className }: LogoProps) {
       <div className={cn("relative flex-shrink-0", container)}>
         <Image
           src="/logo.png"
-          alt="LateWiz"
+          alt="PolyWiz"
           width={image}
           height={image}
           className="object-contain"
@@ -37,7 +37,7 @@ export function Logo({ size = "md", showText = true, className }: LogoProps) {
             size === "lg" && "text-2xl"
           )}
         >
-          LateWiz
+          PolyWiz
         </span>
       )}
     </div>

@@ -3,4 +3,4 @@ User-agent: *
 Allow: /
 
 # Sitemap
-Sitemap: https://latewiz.com/sitemap.xml
+Sitemap: https://polymash.com/sitemap.xml

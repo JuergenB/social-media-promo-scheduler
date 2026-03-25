@@ -16,20 +16,20 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "LateWiz - Open Source Social Media Scheduling",
+  title: "PolyWiz — Social Media Campaign Scheduler by Polymash",
   description:
-    "Your social media scheduling wizard. Schedule posts across 13 platforms with a single tool, powered by Zernio.",
+    "AI-powered social media campaign generation and scheduling for arts organizations. Schedule posts across 13 platforms, powered by Zernio.",
   keywords: [
     "social media scheduler",
-    "open source",
+    "campaign generator",
+    "arts organization",
     "instagram scheduler",
-    "tiktok scheduler",
-    "twitter scheduler",
     "linkedin scheduler",
     "social media management",
     "content scheduling",
+    "polymash",
   ],
-  authors: [{ name: "Zernio", url: "https://zernio.com" }],
+  authors: [{ name: "Polymash Design", url: "https://polymash.com" }],
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -39,29 +39,29 @@ export const metadata: Metadata = {
   },
   manifest: "/site.webmanifest",
   openGraph: {
-    title: "LateWiz - Open Source Social Media Scheduling",
+    title: "PolyWiz — Social Media Campaign Scheduler by Polymash",
     description:
-      "Your social media scheduling wizard. Schedule posts across 13 platforms with a single tool.",
-    url: "https://latewiz.com",
-    siteName: "LateWiz",
+      "AI-powered social media campaign generation and scheduling for arts organizations.",
+    url: "https://polymash.com",
+    siteName: "PolyWiz",
     type: "website",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "LateWiz - Open Source Social Media Scheduling",
+        alt: "PolyWiz — Social Media Campaign Scheduler by Polymash",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "LateWiz - Open Source Social Media Scheduling",
+    title: "PolyWiz — Social Media Campaign Scheduler by Polymash",
     description:
-      "Your social media scheduling wizard. Schedule posts across 13 platforms with a single tool.",
+      "AI-powered social media campaign generation and scheduling for arts organizations.",
     images: ["/og-image.png"],
   },
-  metadataBase: new URL("https://latewiz.com"),
+  metadataBase: new URL("https://polymash.com"),
 };
 
 export default function RootLayout({

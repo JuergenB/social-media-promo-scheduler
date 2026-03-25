@@ -36,7 +36,7 @@ export const useAppStore = create<AppState>()(
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
     }),
     {
-      name: "latewiz-app",
+      name: "polywiz-app",
       partialize: (state) => ({
         timezone: state.timezone,
         defaultProfileId: state.defaultProfileId,
