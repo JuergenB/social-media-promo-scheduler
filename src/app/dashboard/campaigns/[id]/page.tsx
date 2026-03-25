@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns/format";
@@ -19,6 +19,17 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { PlatformIcon, PlatformBadge } from "@/components/shared/platform-icon";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
 import { cn } from "@/lib/utils";
@@ -57,6 +68,7 @@ import {
   ChevronUp,
   Archive,
   Save,
+  Trash2,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -601,6 +613,16 @@ export default function CampaignDetailPage() {
             />
           ) : (
             <CampaignSettingsReadOnly campaign={campaign} />
+          )}
+
+          {/* Delete campaign — only for non-Active campaigns */}
+          {campaign.status !== "Active" && (
+            <DeleteCampaignSection
+              campaignId={campaignId}
+              campaignName={campaign.name}
+              status={campaign.status}
+              postCount={posts.length}
+            />
           )}
         </TabsContent>
       </Tabs>
@@ -1223,6 +1245,93 @@ function CampaignSettingsReadOnly({ campaign }: { campaign: Campaign }) {
             </div>
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Delete campaign with confirmation dialog */
+function DeleteCampaignSection({
+  campaignId,
+  campaignName,
+  status,
+  postCount,
+}: {
+  campaignId: string;
+  campaignName: string;
+  status: CampaignStatus;
+  postCount: number;
+}) {
+  const router = useRouter();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to delete campaign");
+        setIsDeleting(false);
+        return;
+      }
+      toast.success("Campaign deleted");
+      router.push("/dashboard/campaigns");
+    } catch {
+      toast.error("Failed to delete campaign");
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <Card className="mt-6 border-destructive/30">
+      <CardContent className="pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-medium text-destructive">Delete Campaign</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Permanently delete this campaign
+              {postCount > 0 ? ` and its ${postCount} generated posts` : ""}.
+              This action cannot be undone.
+            </p>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={isDeleting}>
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Campaign</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete &ldquo;{campaignName}&rdquo;?
+                  {postCount > 0 && (
+                    <> This will also delete {postCount} generated posts.</>
+                  )}
+                  {" "}This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
+                  Delete Campaign
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </CardContent>
     </Card>
   );

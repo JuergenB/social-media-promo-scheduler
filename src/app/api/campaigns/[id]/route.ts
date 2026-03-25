@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getRecord, updateRecord, listRecords } from "@/lib/airtable/client";
+import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import type { Campaign, Post } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -136,6 +136,48 @@ export async function PATCH(
     console.error("Failed to update campaign:", error);
     return NextResponse.json(
       { error: "Failed to update campaign" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // Check campaign status — only allow delete if not Active/Scheduled
+    const campaign = await getRecord<CampaignFields>("Campaigns", id);
+    if (campaign.fields.Status === "Active") {
+      return NextResponse.json(
+        { error: "Cannot delete an active campaign with scheduled posts. Archive it instead." },
+        { status: 400 }
+      );
+    }
+
+    // Delete all linked posts first
+    const allPosts = await listRecords<{ Campaign: string[] }>("Posts", {});
+    const linkedPosts = allPosts.filter(
+      (r) => r.fields.Campaign && r.fields.Campaign.includes(id)
+    );
+
+    for (const post of linkedPosts) {
+      await deleteRecord("Posts", post.id);
+    }
+
+    // Delete the campaign
+    await deleteRecord("Campaigns", id);
+
+    return NextResponse.json({
+      success: true,
+      deletedPosts: linkedPosts.length,
+    });
+  } catch (error) {
+    console.error("Failed to delete campaign:", error);
+    return NextResponse.json(
+      { error: "Failed to delete campaign" },
       { status: 500 }
     );
   }

@@ -89,6 +89,16 @@ export async function createRecord<T = Record<string, unknown>>(
   return data.records[0];
 }
 
+export async function deleteRecord(
+  tableName: string,
+  recordId: string
+): Promise<{ deleted: boolean; id: string }> {
+  return airtableFetch<{ deleted: boolean; id: string }>(
+    `/${encodeURIComponent(tableName)}/${recordId}`,
+    { method: "DELETE" }
+  );
+}
+
 export async function updateRecord<T = Record<string, unknown>>(
   tableName: string,
   recordId: string,
