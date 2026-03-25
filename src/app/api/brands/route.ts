@@ -24,6 +24,8 @@ interface BrandFields {
   "Voice Guidelines": string;
   "Newsletter URL": string;
   Logo: AirtableAttachment[];
+  "Short Domain": string;
+  "Short API Key Label": string;
   Status: "Active" | "Inactive";
 }
 
@@ -38,6 +40,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     voiceGuidelines: r.fields["Voice Guidelines"] || "",
     newsletterUrl: r.fields["Newsletter URL"] || "",
     logoUrl: logo?.thumbnails?.large?.url || logo?.url || null,
+    shortDomain: r.fields["Short Domain"] || null,
+    shortApiKeyLabel: r.fields["Short API Key Label"] || null,
     status: r.fields.Status || "Active",
   };
 }

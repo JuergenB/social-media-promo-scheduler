@@ -9,6 +9,10 @@ export interface Brand {
   voiceGuidelines: string;
   newsletterUrl: string;
   logoUrl: string | null;
+  /** Short.io domain for this brand (e.g., "jb9.me"). Falls back to SHORT_IO_DOMAIN env var. */
+  shortDomain: string | null;
+  /** Env var name for this brand's Short.io API key (e.g., "SHORT_IO_KEY_INTERSECT"). Falls back to SHORT_IO_API_KEY. */
+  shortApiKeyLabel: string | null;
   status: "Active" | "Inactive";
 }
 
