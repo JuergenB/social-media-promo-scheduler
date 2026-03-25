@@ -89,8 +89,7 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
   const metadata = page.metadata || {};
   const markdown = page.markdown || "";
 
-  // ── Image extraction with same-domain filtering ──────────────────
-  const blogDomain = new URL(url).hostname;
+  // ── Image extraction — filter out UI/decorative images ────────────
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
   const allImages: ScrapedImage[] = [];
   let match;
@@ -99,31 +98,40 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
     const fullUrl = match[2];
     const alt = match[1] || "";
     const lowerUrl = fullUrl.toLowerCase();
+    const lowerAlt = alt.toLowerCase();
 
-    // Parse image domain
-    let imgDomain = "";
-    try { imgDomain = new URL(fullUrl).hostname; } catch { continue; }
-    const isSameDomain = imgDomain === blogDomain
-      || imgDomain.endsWith("." + blogDomain);
-
-    // Skip external domain images (ads, popups, third-party widgets)
-    if (!isSameDomain) continue;
-
-    // Skip non-content images by URL/alt patterns
-    if (
+    // Skip known non-content image patterns
+    const isNonContent =
+      // Tiny UI elements
       lowerUrl.includes("favicon") ||
       lowerUrl.includes("pixel") ||
       lowerUrl.includes("tracking") ||
       lowerUrl.includes("1x1") ||
       lowerUrl.endsWith(".svg") ||
       lowerUrl.endsWith(".gif") ||
+      // Specific small UI images (Curated.co permalink icons, etc.)
+      lowerUrl.includes("permalink.png") ||
+      lowerUrl.includes("spacer") ||
+      lowerUrl.includes("blank.") ||
+      // Branding/navigation
       lowerUrl.includes("logo") ||
-      lowerUrl.includes("icon") ||
       lowerUrl.includes("avatar") ||
       lowerUrl.includes("gravatar") ||
+      lowerUrl.includes("profile-pic") ||
+      // Widgets and ads
       lowerUrl.includes("widget") ||
-      lowerUrl.includes("banner-ad")
-    ) continue;
+      lowerUrl.includes("banner-ad") ||
+      lowerUrl.includes("sponsor") ||
+      lowerUrl.includes("convertbox") ||
+      // Social share buttons
+      lowerUrl.includes("/share") ||
+      lowerUrl.includes("social-icon") ||
+      // Alt text signals
+      lowerAlt === "logo" ||
+      lowerAlt === "icon" ||
+      lowerAlt === "avatar";
+
+    if (isNonContent) continue;
 
     allImages.push({ url: fullUrl, alt });
   }

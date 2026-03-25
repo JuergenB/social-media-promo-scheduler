@@ -69,7 +69,28 @@ export async function generatePosts(
     jsonText = codeBlockMatch[1].trim();
   }
 
-  const parsed = JSON.parse(jsonText);
+  // Try to extract JSON object if there's surrounding text
+  const jsonObjectMatch = jsonText.match(/\{[\s\S]*\}/);
+  if (jsonObjectMatch) {
+    jsonText = jsonObjectMatch[0];
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (parseError) {
+    // Try to fix common JSON issues: trailing commas, unescaped quotes
+    const cleaned = jsonText
+      .replace(/,\s*([}\]])/g, "$1") // Remove trailing commas
+      .replace(/[\u201C\u201D]/g, '"') // Replace smart quotes
+      .replace(/[\u2018\u2019]/g, "'"); // Replace smart apostrophes
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      console.error("Failed to parse Claude response:", jsonText.slice(0, 500));
+      throw new Error(`JSON parse error: ${(parseError as Error).message}. Response started with: ${jsonText.slice(0, 100)}`);
+    }
+  }
 
   if (!parsed.posts || !Array.isArray(parsed.posts)) {
     throw new Error("Invalid response structure — expected { posts: [...] }");
