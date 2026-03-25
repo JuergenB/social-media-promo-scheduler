@@ -217,7 +217,7 @@ export default function SettingsPage() {
             Appearance
           </CardTitle>
           <CardDescription>
-            Customize how LateWiz looks on your device.
+            Customize how PolyWiz looks on your device.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -321,7 +321,7 @@ export default function SettingsPage() {
                 <AlertDialogTitle>Sign Out</AlertDialogTitle>
                 <AlertDialogDescription>
                   This will remove your API key from this device. You&apos;ll need
-                  to enter it again to use LateWiz.
+                  to enter it again to use PolyWiz.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -339,9 +339,9 @@ export default function SettingsPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="text-center text-sm text-muted-foreground">
-            <p>LateWiz - Your social media scheduling wizard</p>
+            <p>PolyWiz — AI-powered campaign scheduler by Polymash</p>
             <p className="mt-1">
-              Powered by{" "}
+              Scheduling powered by{" "}
               <a
                 href="https://zernio.com"
                 target="_blank"
@@ -353,7 +353,7 @@ export default function SettingsPage() {
             </p>
             <p className="mt-2">
               <a
-                href="https://github.com/zernio-dev/latewiz"
+                href="https://github.com/JuergenB/social-media-promo-scheduler"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-4 hover:text-foreground"
@@ -362,7 +362,7 @@ export default function SettingsPage() {
               </a>
               {" · "}
               <a
-                href="https://github.com/zernio-dev/latewiz/issues"
+                href="https://github.com/JuergenB/social-media-promo-scheduler/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-4 hover:text-foreground"

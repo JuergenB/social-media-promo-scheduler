@@ -1,11 +1,11 @@
 {
-  "name": "LateWiz",
-  "short_name": "LateWiz",
-  "description": "Your social media scheduling wizard",
+  "name": "PolyWiz",
+  "short_name": "PolyWiz",
+  "description": "AI-powered social media campaign scheduler by Polymash",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#E53935",
+  "theme_color": "#0399FE",
   "icons": [
     {
       "src": "/android-chrome-192x192.png",

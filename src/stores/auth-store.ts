@@ -48,7 +48,7 @@ export const useAuthStore = create<AuthState>()(
         }),
     }),
     {
-      name: "latewiz-auth",
+      name: "polywiz-auth",
       partialize: (state) => ({
         apiKey: state.apiKey,
         usageStats: state.usageStats,

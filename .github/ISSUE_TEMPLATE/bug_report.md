@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug to help us improve LateWiz
+about: Report a bug to help us improve PolyWiz
 title: '[Bug] '
 labels: bug
 assignees: ''
@@ -24,7 +24,7 @@ If applicable, add screenshots to help explain your problem.
 ## Environment
 - Browser: [e.g., Chrome 120, Safari 17]
 - OS: [e.g., macOS 14, Windows 11]
-- LateWiz Version: [e.g., 1.0.0 or commit hash]
+- PolyWiz Version: [e.g., 1.0.0 or commit hash]
 - Deployment: [e.g., Vercel, self-hosted, local dev]
 
 ## Additional Context

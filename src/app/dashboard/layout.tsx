@@ -184,7 +184,7 @@ export default function DashboardLayout({
             ))}
           </div>
 
-          {/* Scheduling section (from LateWiz) */}
+          {/* Scheduling section */}
           <SectionLabel>Scheduling</SectionLabel>
           <div className="space-y-0.5">
             {schedulingNav.map((item) => (

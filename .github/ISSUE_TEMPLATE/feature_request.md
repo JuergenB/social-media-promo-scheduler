@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest an idea for LateWiz
+about: Suggest an idea for PolyWiz
 title: '[Feature] '
 labels: enhancement
 assignees: ''
