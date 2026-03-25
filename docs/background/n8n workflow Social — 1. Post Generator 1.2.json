@@ -1,0 +1,1356 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "newsletterUrl",
+              "value": "={{ $('Social Post Generator Form').last().json[\"Issue URL\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "platforms",
+              "value": "[\"Instagram\", \"Twitter/X\", \"BlueSky\", \"Facebook\", \"LinkedIn\", \"Threads\", \"Pinterest\"]",
+              "type": "array"
+            },
+            {
+              "id": "id-3",
+              "name": "variantsPerStory",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "62240b5b-4048-4c1c-bd2d-378888de80a9",
+              "name": "Campaign Start Date",
+              "value": "={{ $('Social Post Generator Form').last().json[\"Campaign Start\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "eec9a03b-b207-428f-bbc0-cbad61243879",
+              "name": "Issue Number",
+              "value": "={{ $('Social Post Generator Form').last().json[\"Issue URL\"].match(/issues\\/(\\d+)/)[1] }}",
+              "type": "number"
+            },
+            {
+              "id": "a2a0ecae-c284-49a9-84dc-31b1a2c39e5a",
+              "name": "Brand Voice Guideline",
+              "value": "={{ $json[\"Brand Voice Guidelines\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "231c8316-6007-4f9c-823e-b5db3dd2127b",
+              "name": "Brand Description",
+              "value": "={{ $json[\"Brand Description\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "5afc23e4-484c-4dad-934e-d1a8e7d443d7",
+              "name": "Target Audience",
+              "value": "={{ $json['Target Audiences'] }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "4ee83d98-83ca-42c0-b9dc-72aed09701a3",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1472,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "=output.posts",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3520,
+        816
+      ],
+      "id": "cefc65a1-af37-40c4-94b2-1ca7877f5a56",
+      "name": "Split Out Posts"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "Finish Up",
+      "typeVersion": 1,
+      "position": [
+        4480,
+        720
+      ],
+      "id": "01c2b0eb-51e1-48f6-8f0b-57a56174af99"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "data.json.stories",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1904,
+        736
+      ],
+      "id": "03266b3a-7692-44e2-a4c0-e17555a86778",
+      "name": "Split Out1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2928,
+        736
+      ],
+      "id": "46a7f387-83c2-43a1-95fe-c59d16fab552",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "name": "Replace Me",
+      "typeVersion": 1,
+      "position": [
+        4480,
+        1008
+      ],
+      "id": "d74c5de3-a7d2-4da0-89ba-560808d5234b"
+    },
+    {
+      "parameters": {
+        "content": "## Scrape the Intersect Newsletter\n- Scrape each issue\n- Extract stories",
+        "height": 432,
+        "width": 416,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        512
+      ],
+      "id": "fc801a0a-f4ed-4344-983d-0041e24fa022",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "content": "## Test Data\n- use when something does not work",
+        "height": 336,
+        "width": 1392,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        976
+      ],
+      "id": "625762c9-5e89-4442-b1ed-8ffdd8beb4aa",
+      "name": "Sticky Note8"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appz9alA71QLzQDPi",
+          "mode": "list",
+          "cachedResultName": "Client Brands Reference Guidelines",
+          "cachedResultUrl": "https://airtable.com/appz9alA71QLzQDPi"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl1Tf1OuNFEjazgW",
+          "mode": "list",
+          "cachedResultName": "Brand",
+          "cachedResultUrl": "https://airtable.com/appz9alA71QLzQDPi/tbl1Tf1OuNFEjazgW"
+        },
+        "filterByFormula": "{Brand Name} = \"The Intersect\"",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1152,
+        736
+      ],
+      "id": "3a8e74f9-d70d-4c5b-9d5d-ca8e27967852",
+      "name": "Brand Voice Guidelines Tool",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "HOvSYV0GVGpkzhdA",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Match Stories with the Airtable Version\n- Query the Airtable to find related stories\n- Extract stories, original links\n- Extract Feedly Commentary",
+        "height": 816,
+        "width": 672,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1856,
+        512
+      ],
+      "id": "f35cb177-f58c-4312-9cc4-02c2bd2d43f0",
+      "name": "Sticky Note9"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appa1MQoMsfZ0WCPu",
+          "mode": "list",
+          "cachedResultName": "Social Media Reference Data",
+          "cachedResultUrl": "https://airtable.com/appa1MQoMsfZ0WCPu"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl13Ql5e8mppoMQr",
+          "mode": "list",
+          "cachedResultName": "Social Media Best Practices Lookup",
+          "cachedResultUrl": "https://airtable.com/appa1MQoMsfZ0WCPu/tbl13Ql5e8mppoMQr"
+        },
+        "options": {
+          "fields": [
+            "Platform_Post_Type",
+            "Max_Characters",
+            "Ideal_Length",
+            "Tone",
+            "Primary_Use_Case",
+            "Engagement_Notes",
+            "Hashtag_Limit",
+            "URL_Recommendation"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        608,
+        736
+      ],
+      "id": "aad76bbc-c058-4181-8fa4-d39ccb346755",
+      "name": "Get Social Media Best Practices",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "HOvSYV0GVGpkzhdA",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "scrape",
+        "url": "={{ $('Workflow Configuration').first().json.newsletterUrl }}",
+        "scrapeOptions": {
+          "options": {
+            "formats": {
+              "format": [
+                {
+                  "type": "json",
+                  "prompt": "Extract all newsletter stories with their titles, descriptions, links, and any associated images. Include internal story links — for example like https://theintersect.art/issues/56#FVePm3x. These internal links are in a DIV container <div class=\"item item--issue item--link\">, as the first element <a name=\"link\"></a>, for example <a name=\"FVePm3x\"></a>.  Return as an array of story objects.",
+                  "schema": "{\n  \"type\": \"object\",\n  \"required\": [],\n  \"properties\": {\n    \"stories\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [],\n        \"properties\": {\n          \"storyTitle\": {\n            \"type\": \"string\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"originalLink\": {\n            \"type\": \"string\"\n          },\n          \"imageUrl\": {\n            \"type\": \"string\"\n          },\n          \"internalLink\": {\n            \"type\": \"string\"\n          }\n        }\n      }\n    }\n  }\n}"
+                }
+              ]
+            },
+            "headers": {},
+            "timeout": 360000
+          }
+        },
+        "requestOptions": {}
+      },
+      "id": "3fe21d84-7e17-4439-b403-5bb073c87870",
+      "name": "Scrape Newsletter For Links",
+      "type": "@mendable/n8n-nodes-firecrawl.firecrawl",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        736
+      ],
+      "credentials": {
+        "firecrawlApi": {
+          "id": "Mv9l4N593kDPmnd0",
+          "name": "Firecrawl account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "appiJiTWZrjmU3n6C",
+          "mode": "list",
+          "cachedResultName": "The Intersect Content Scheduler",
+          "cachedResultUrl": "https://airtable.com/appiJiTWZrjmU3n6C"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblZOEh8XSZJBAmsB",
+          "mode": "list",
+          "cachedResultName": "Newsletter Entries",
+          "cachedResultUrl": "https://airtable.com/appiJiTWZrjmU3n6C/tblZOEh8XSZJBAmsB"
+        },
+        "filterByFormula": "={{\n'AND(' +\n  '{Issue Number (from Newsletter Issue (Airtable))} = ' +\n    $('Social Post Generator Form').item.json[\"Issue Number\"] + ',' +\n\n  // build \"key\" for Airtable Title: first 30 alphanumeric chars, lowercased\n  'LOWER(' +\n    'LEFT(' +\n      'REGEX_REPLACE({Title}, \"[^A-Za-z0-9]\", \"\"),' +\n    ' 30)' +\n  ') = ' +\n\n  // build same key for scraped title from Firecrawl\n  'LOWER(' +\n    'LEFT(' +\n      'REGEX_REPLACE(\"' +\n        $json[\"storyTitle\"].replace(/\"/g, '\\\\\"') +\n      '\", \"[^A-Za-z0-9]\", \"\"),' +\n    ' 30)' +\n  ')' +\n\n')'\n}}",
+        "options": {
+          "fields": [
+            "Title",
+            "Newsletter Issue (Airtable)",
+            "Newsletter Issue ID (Cur)",
+            "Entry ID",
+            "Category",
+            "My Take",
+            "Content/Summary",
+            "Issue Number (from Newsletter Issue (Airtable))",
+            "Source URL",
+            "Featured Image",
+            "Sort Order"
+          ]
+        },
+        "sort": {
+          "property": [
+            {
+              "field": "Sort Order"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        2096,
+        736
+      ],
+      "id": "132619e4-e987-44da-b0e7-f0f75dc6d4f6",
+      "name": "Find Corresponding Airtable Stories",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "HOvSYV0GVGpkzhdA",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        784,
+        736
+      ],
+      "id": "7c853417-9efd-46cb-a146-c580a699d678",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get input items (should just be one, with .json.data as the array)\nconst items = $input.all();\nconst dataArray = items[0].json.data;\n\nlet result = [];\nfunction formatTone(arr) { return arr ? arr.join(', ') : 'N/A'; }\n\nfor (const p of dataArray) {\n  result.push(\n    `Platform: ${p.Platform_Post_Type}\n- Ideal Length: ${p.Ideal_Length || p.Max_Characters || 'N/A'}\n- URL Recommendation: ${p.URL_Recommendation}\n- Tone: ${formatTone(p.Tone)}\n- Use Case: ${p.Primary_Use_Case}\n- Engagement Notes: ${p.Engagement_Notes}\n- Hashtag Limit: ${p.Hashtag_Limit}\\n`\n  );\n}\n\nreturn [{ json: { textInstructions: result.join('\\n') } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        736
+      ],
+      "id": "c91704f6-76c9-41dd-af1e-220a3eba159a",
+      "name": "Platform Instructions in Plain Text"
+    },
+    {
+      "parameters": {
+        "content": "## Load Best Practices, Brand Data, Configuration\n- Load Social Media Platform Best Practice\n- Load Brand Voice and Guidelines",
+        "height": 432,
+        "width": 944,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        432,
+        512
+      ],
+      "id": "c40b22f3-6ee2-44c1-8356-d16413831fdc",
+      "name": "Sticky Note10"
+    },
+    {
+      "parameters": {
+        "operation": "createLink",
+        "originalURL": "={{ $json.internalLink }}",
+        "additionalFields": {
+          "utmSource": "={{ $json.platform }}"
+        }
+      },
+      "type": "n8n-nodes-shortio.Shortio",
+      "typeVersion": 1,
+      "position": [
+        3744,
+        816
+      ],
+      "id": "8d194dc5-023a-4ecf-8d0d-43ea5d658e59",
+      "name": "Create link",
+      "credentials": {
+        "shortioApi": {
+          "id": "INna0rCEhM0QTcNP",
+          "name": "Short.io account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1df0dea1-aa55-4faa-ba03-2da6671156b5",
+              "name": "Replace storyText URL",
+              "value": "={{\n  $json.postText.replace(\n    /(https?:\\/\\/[^\\s]+)/g, \n    (match) => $json.shortIoResponse && $json.shortIoResponse.shortURL ? $json.shortIoResponse.shortURL : match\n  )\n}}",
+              "type": "string"
+            },
+            {
+              "id": "51295b59-4de4-48f1-89f1-a1dbfd576a2c",
+              "name": "",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3968,
+        816
+      ],
+      "id": "8ccbfe7a-c8d8-4acc-ae86-e5d2afd7382d",
+      "name": "Replace storyText with Short URL"
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "value": "appiJiTWZrjmU3n6C",
+          "mode": "list",
+          "cachedResultName": "The Intersect Content Scheduler",
+          "cachedResultUrl": "https://airtable.com/appiJiTWZrjmU3n6C"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tbl47wIlEaCE0X1I6",
+          "mode": "list",
+          "cachedResultName": "Social Media Posts",
+          "cachedResultUrl": "https://airtable.com/appiJiTWZrjmU3n6C/tbl47wIlEaCE0X1I6"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Post Content": "={{ $('Replace storyText with Short URL').item.json['Replace storyText URL'] }}",
+            "Platform": "={{ $json.platform }}",
+            "Variant": "={{ $json.variant }}",
+            "Issue Number": "={{ $('Workflow Configuration').last().json[\"Issue Number\"] }}",
+            "Story Title": "={{ $json.storyTitle }}",
+            "Status": "Draft",
+            "Story Image": "={{ $json.imageUrl ? [ { \"url\": $json.imageUrl } ] : [] }}",
+            "Original Link URL": "={{ $json.originalLink }}",
+            "Internal Link URL": "={{ $json.internalLink }}",
+            "Short URL": "={{ $json.shortIoResponse.shortURL }}",
+            "Late Post ID": "="
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Record ID",
+              "displayName": "Record ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Issue Number",
+              "displayName": "Issue Number",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Platform",
+              "displayName": "Platform",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Story Title",
+              "displayName": "Story Title",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Variant",
+              "displayName": "Variant",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Post Content",
+              "displayName": "Post Content",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Story Image",
+              "displayName": "Story Image",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Vertical Image (AI)",
+              "displayName": "Vertical Image (AI)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Original Link URL",
+              "displayName": "Original Link URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Internal Link URL",
+              "displayName": "Internal Link URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Short URL",
+              "displayName": "Short URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Character Count",
+              "displayName": "Character Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Draft",
+                  "value": "Draft"
+                },
+                {
+                  "name": "Scheduled",
+                  "value": "Scheduled"
+                },
+                {
+                  "name": "Posted",
+                  "value": "Posted"
+                },
+                {
+                  "name": "Failed",
+                  "value": "Failed"
+                }
+              ],
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Scheduled Date Time",
+              "displayName": "Scheduled Date Time",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Late Post ID",
+              "displayName": "Late Post ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Approval Status",
+              "displayName": "Approval Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "Pending",
+                  "value": "Pending"
+                },
+                {
+                  "name": "Approved",
+                  "value": "Approved"
+                },
+                {
+                  "name": "Rejected",
+                  "value": "Rejected"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Newsletter Entry (Link)",
+              "displayName": "Newsletter Entry (Link)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4192,
+        816
+      ],
+      "id": "7ea0d471-8bec-486b-b38f-130907623b4d",
+      "name": "Create Social Media Post Records",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "HOvSYV0GVGpkzhdA",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableOAuth2Api",
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appiJiTWZrjmU3n6C",
+          "mode": "list",
+          "cachedResultName": "The Intersect Content Scheduler",
+          "cachedResultUrl": "https://airtable.com/appiJiTWZrjmU3n6C"
+        },
+        "table": {
+          "__rl": true,
+          "value": "tblZOEh8XSZJBAmsB",
+          "mode": "list",
+          "cachedResultName": "Newsletter Entries",
+          "cachedResultUrl": "https://airtable.com/appiJiTWZrjmU3n6C/tblZOEh8XSZJBAmsB"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Story Internal Short Link": "={{ $json.shortIoResponse.shortURL }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Title",
+              "displayName": "Title",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Issue Number (from Newsletter Issue (Airtable))",
+              "displayName": "Issue Number (from Newsletter Issue (Airtable))",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "Newsletter Issue (Airtable)",
+              "displayName": "Newsletter Issue (Airtable)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Newsletter Issue ID (Cur)",
+              "displayName": "Newsletter Issue ID (Cur)",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Entry ID",
+              "displayName": "Entry ID",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "My Take",
+              "displayName": "My Take",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Content/Summary",
+              "displayName": "Content/Summary",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Source URL",
+              "displayName": "Source URL",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Social Posts",
+              "displayName": "Social Posts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "options",
+              "options": [
+                {
+                  "name": "New",
+                  "value": "New"
+                },
+                {
+                  "name": "Approved for Social",
+                  "value": "Approved for Social"
+                },
+                {
+                  "name": "Posted",
+                  "value": "Posted"
+                },
+                {
+                  "name": "Archived",
+                  "value": "Archived"
+                }
+              ],
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Featured Image",
+              "displayName": "Featured Image",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Story Internal Short Link",
+              "displayName": "Story Internal Short Link",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "Word Count",
+              "displayName": "Word Count",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "string",
+              "readOnly": true,
+              "removed": true
+            },
+            {
+              "id": "IG Promo 1",
+              "displayName": "IG Promo 1",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "IG Promo 2",
+              "displayName": "IG Promo 2",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "boolean",
+              "readOnly": false,
+              "removed": true
+            },
+            {
+              "id": "Social Media Posts",
+              "displayName": "Social Media Posts",
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true,
+              "display": true,
+              "type": "array",
+              "readOnly": false,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        4208,
+        576
+      ],
+      "id": "ae06d91c-85ba-48ab-be8e-e2c48f3dc8a2",
+      "name": "Update record",
+      "credentials": {
+        "airtableOAuth2Api": {
+          "id": "HOvSYV0GVGpkzhdA",
+          "name": "Airtable Personal Access Token account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "createLink",
+        "originalURL": "={{ $('Split Out1').item.json.internalLink }}",
+        "additionalFields": {
+          "utmSource": "general_social_media"
+        }
+      },
+      "type": "n8n-nodes-shortio.Shortio",
+      "typeVersion": 1,
+      "position": [
+        3248,
+        576
+      ],
+      "id": "0a9c6ef4-cfde-4ab3-ab77-1af0f61ba389",
+      "name": "Create General Short Links",
+      "credentials": {
+        "shortioApi": {
+          "id": "INna0rCEhM0QTcNP",
+          "name": "Short.io account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "formTitle": "The Intersect Social Post Generator V 1.2",
+        "formDescription": "Enter the issue preview URL, as well as the issue number, and this workflow will create a set of social media posts in our Intersect Airtable.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Issue URL",
+              "placeholder": "https://",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Issue Number",
+              "fieldType": "number",
+              "placeholder": "00",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Campaign Start",
+              "fieldType": "date",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        368,
+        736
+      ],
+      "id": "7650a192-0693-41a3-b011-9468d3ad6d2a",
+      "name": "Social Post Generator Form",
+      "webhookId": "04279444-0778-4634-bc58-3782bb6f04d1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Using the following story data and brand voice guidelines, generate social media posts for multiple platforms.\nUse the Title, Description, internalLink, Image.\n\n**Brand Voice Guidelines:**\nUse the \"Brand Voice Guidelines\" and target audience in creating social media posts. Start with an interesting \"hook\".\n\n**Instructions:**\n1. Task Definition\nFor each story provided, generate:\n- 7 platforms: Instagram, Twitter (X), BlueSky, Facebook, LinkedIn, Threads, Pinterest\n- {{ $('Workflow Configuration').item.json['Brand variantsPerStory'] || 1}} unique variants per platform\n- Each story should therefore produce exactly {{ (7 * ($('Workflow Configuration').item.json['Brand variantsPerStory'] || 1)) }} posts (7 platforms × {{ $('Workflow Configuration').item.json['Brand variantsPerStory'] || 1}} variants)\n\n2. Follow platform-specific best practices:\n{{ $('Platform Instructions in Plain Text').item.json.textInstructions }}\n\n\n3. Incorporate the brand voice guidelines in tone, style, and messaging\n\n4. Include the story internal link naturally in each post. Important: All CTAs and links should link to the newsletter issue URL at https://theintersect.art using the internalLink provided\n\n5. Ensure each variant is unique and optimized for its platform\n\n6. Focus the content on my take: {{ $json['My Take'] }}\n\nIMPORTANT RULES:\n- Output ONLY the JSON object - nothing else\n- Output ALL {{ (7 * ($('Workflow Configuration').item.json['Brand variantsPerStory'] || 1)) }} posts, {{ $('Workflow Configuration').item.json['Brand variantsPerStory'] || 1}} variants per platform\n- Do NOT add markdown code blocks or backticks\n- Do NOT add explanatory text before or after the JSON\n- Ensure the JSON is valid and parseable\n- Each post must include: storyTitle, platform, variant ({{ $('Workflow Configuration').item.json['Brand variantsPerStory'] || 1 }}), postText, imageUrl, internalLink\n\n**<Story Data>:**\nTitle: {{ $json.Title }}\nDescription: {{ $json['Content/Summary'] }}\nInternal_Link: {{ $('Split Out1').item.json.internalLink }}\nImage: {{ $json['Featured Image'][0].url }}\noriginalLink: {{ $('Split Out1').item.json.originalLink }}\nMy Take: {{ $json['My Take'] }}\n</Story Data>\n\n<Brand Voice Guidelines>\n- About the Brand: {{ $('Workflow Configuration').item.json['Brand Description'] }}\n- Brand Voice: {{ $('Workflow Configuration').item.json['Brand Voice Guidelines'] }}\n- Target Audiences: {{ $('Workflow Configuration').item.json['Target Audiences'] }}\n</Brand Voice Guidelines>\n\n=== TOKEN BUDGET AWARENESS ===\nYou have a maximum of 8000 tokens for your complete response. \nBudget approximately {{ Math.round(500 / ($('Workflow Configuration').item.json['Brand variantsPerStory'] || 1)) }}-{{ Math.round(600 / ($('Workflow Configuration').item.json['Brand variantsPerStory'] || 1)) }} tokens per platform variant (7 platforms × {{ $('Workflow Configuration').item.json['Brand variantsPerStory'] || 1 }} variants = {{ (7 * ($('Workflow Configuration').item.json['Brand variantsPerStory'] || 1)) }} total posts).\n\nTo stay within limits:\n- Keep Instagram posts under 300 characters (not the 2,200 max)\n- Twitter posts must be under 280 characters\n- LinkedIn posts should be 400-600 characters (not the 3,000 max)\n- Be punchy and concise across all platforms\n\nQuality over quantity. Every word must earn its place.\n=== END TOKEN BUDGET AWARENESS ===\n\n=== OUTPUT REQUIREMENTS ===\nImportant: Your output must be in the following JSON format:\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"posts\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"storyTitle\": { \"type\": \"string\" },\n          \"platform\": { \"type\": \"string\" },\n          \"variant\": { \"type\": \"integer\" },\n          \"postText\": { \"type\": \"string\" },\n          \"imageUrl\": { \"type\": \"string\" },\n          \"originalLink\": { \"type\": \"string\" },\n          \"internalLink\": { \"type\": \"string\" }\n        },\n        \"required\": [\n          \"storyTitle\",\n          \"platform\",\n          \"variant\",\n          \"postText\",\n          \"imageUrl\",\n          \"originalLink\",\n          \"internalLink\"\n        ]\n      }\n    }\n  },\n  \"required\": [\"posts\"]\n}\n\n=== END OUTPUT REQUIREMENTS ===\n\n\n\nGenerate ALL posts now.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an expert social media content creator for the Intersect of Art and Tech newsletter. Your task is to transform newsletter stories into engaging platform-specific posts while maintaining the brand's voice and guidelines. \n\n\n=== WRITING STYLE REQUIREMENTS ===\n\nCRITICAL: You are writing social media posts for real humans. Write naturally and avoid ALL AI-generated clichés.\n\nBANNED WORDS & PHRASES (Never use ANY of these):\n• \"delve\" / \"dive into\" / \"deep dive\"\n• \"unlock\" / \"unleash\" / \"unpack\"\n• \"elevate\" / \"enhance\" / \"empower\"\n• \"revolutionize\" / \"game-changer\" / \"disrupt\"\n• \"navigate\" / \"embark\" / \"journey\"\n• \"landscape\" / \"realm\" / \"sphere\" / \"arena\"\n• \"beacon\" / \"resonate\" / \"testament\"\n• \"ever-evolving\" / \"fast-paced\" / \"dynamic\"\n• \"cutting-edge\" / \"state-of-the-art\"\n• \"It's not just...\" / \"It's about more than...\"\n• \"In today's [X] world/landscape...\"\n• \"Let's face it...\" / \"At the end of the day...\"\n• \"turbocharge\" / \"supercharge\"\n\nBANNED CONCEPTS (Avoid these ideas entirely):\n• Don't replace \"elevate\" with \"enhance\" - both are clichés\n• Don't replace \"ever-changing landscape\" with \"fast-paced world\" - still cliché\n• Avoid transformation/journey/evolution metaphors\n• Skip vague \"empowerment\" language\n• Don't end posts with rhetorical questions\n\nWRITE LIKE A REAL PERSON:\n✓ Use simple, direct language\n✓ Mix short and long sentences naturally\n✓ Lead with specifics, not abstractions\n✓ Use concrete examples over general concepts\n✓ Sound conversational, not corporate\n✓ Be opinionated when appropriate\n✓ Use natural transitions (avoid \"moreover,\" \"furthermore,\" \"indeed\")\n\nPLATFORM TONE:\n• Instagram: Visual-first, casual, emoji-friendly\n• Twitter/X: Punchy, direct, conversation-starter\n• LinkedIn: Professional but not stiff, data-driven\n• Facebook: Casual, community-focused\n• Threads: Conversational, thread-worthy\n• BlueSky: Authentic, less corporate\n• Pinterest: Inspirational, actionable, search-optimized\n\nSELF-CHECK:\nBefore finalizing each post:\n1. Would a real person actually say this?\n2. Is this specific to the content or generic filler?\n3. Did I avoid ALL banned words and concepts?\n4. Does it sound authentic or like corporate jargon?\n\nIf you use ANY banned phrase, rewrite that post completely.\n\n=== END STYLE REQUIREMENTS ==="
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        3200,
+        816
+      ],
+      "id": "b85601c7-3a95-420d-8b8a-32090049593a",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"posts\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"storyTitle\": { \"type\": \"string\" },\n          \"platform\": { \"type\": \"string\" },\n          \"variant\": { \"type\": \"integer\" },\n          \"postText\": { \"type\": \"string\" },\n          \"imageUrl\": { \"type\": \"string\" },\n          \"originalLink\": { \"type\": \"string\" },\n          \"internalLink\": { \"type\": \"string\" }\n        },\n        \"required\": [\n          \"storyTitle\",\n          \"platform\",\n          \"variant\",\n          \"postText\",\n          \"imageUrl\",\n          \"originalLink\",\n          \"internalLink\"\n        ]\n      }\n    }\n  },\n  \"required\": [\"posts\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3360,
+        1008
+      ],
+      "id": "eea7bd05-8704-4a89-8ecc-0627feb8ccf1",
+      "name": "Structured Output Parser2"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 16000,
+          "temperature": 0.3,
+          "timeout": 90000
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        3152,
+        1008
+      ],
+      "id": "23b6947a-233d-4d10-beda-3185f5a27ce8",
+      "name": "GPT4.1-mini",
+      "credentials": {
+        "openAiApi": {
+          "id": "UFKlS8KRGWM7HW7J",
+          "name": "OpenAi account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Scrape Newsletter For Links",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Posts": {
+      "main": [
+        [
+          {
+            "node": "Create link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish Up": {
+      "main": [
+        []
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "Find Corresponding Airtable Stories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Finish Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace Me": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brand Voice Guidelines Tool": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Social Media Best Practices": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Newsletter For Links": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Corresponding Airtable Stories": {
+      "main": [
+        [
+          {
+            "node": "Create General Short Links",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Platform Instructions in Plain Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Instructions in Plain Text": {
+      "main": [
+        [
+          {
+            "node": "Brand Voice Guidelines Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create link": {
+      "main": [
+        [
+          {
+            "node": "Replace storyText with Short URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Replace storyText with Short URL": {
+      "main": [
+        [
+          {
+            "node": "Create Social Media Post Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Social Media Post Records": {
+      "main": [
+        [
+          {
+            "node": "Replace Me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update record": {
+      "main": [
+        [
+          {
+            "node": "Finish Up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create General Short Links": {
+      "main": [
+        [
+          {
+            "node": "Update record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Social Post Generator Form": {
+      "main": [
+        [
+          {
+            "node": "Get Social Media Best Practices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Split Out Posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser2": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT4.1-mini": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "420478024742107d31e1ab73ebbff4f6b8eed11829713a7a731c306e0133432a"
+  }
+}

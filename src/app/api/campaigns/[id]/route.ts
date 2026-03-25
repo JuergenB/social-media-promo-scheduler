@@ -23,6 +23,9 @@ interface PostFields {
   Platform: string;
   Content: string;
   "Media URLs": string;
+  "Image URL": string;
+  "Short URL": string;
+  "Link URL": string;
   "Scheduled Date": string;
   Status: string;
   "Content Variant": string;
@@ -59,10 +62,12 @@ export async function GET(
     };
 
     // Fetch posts linked to this campaign
-    const postRecords = await listRecords<PostFields>("Posts", {
-      filterByFormula: `FIND("${id}", ARRAYJOIN({Campaign}, ","))`,
-      sort: [{ field: "Scheduled Date", direction: "asc" }],
-    });
+    // Note: Airtable linked record fields can't be filtered by record ID in formulas,
+    // so we fetch all posts and filter in code. For large datasets, use a Lookup field.
+    const allPostRecords = await listRecords<PostFields>("Posts", {});
+    const postRecords = allPostRecords.filter(
+      (r) => r.fields.Campaign && r.fields.Campaign.includes(id)
+    );
 
     const posts: Post[] = postRecords.map((r) => ({
       id: r.id,
@@ -71,6 +76,9 @@ export async function GET(
       platform: r.fields.Platform || "",
       content: r.fields.Content || "",
       mediaUrls: r.fields["Media URLs"] || "",
+      imageUrl: r.fields["Image URL"] || "",
+      shortUrl: r.fields["Short URL"] || "",
+      linkUrl: r.fields["Link URL"] || "",
       scheduledDate: r.fields["Scheduled Date"] || "",
       status: (r.fields.Status as Post["status"]) || "Pending",
       contentVariant: r.fields["Content Variant"] || "",

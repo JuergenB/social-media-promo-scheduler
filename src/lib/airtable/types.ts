@@ -87,6 +87,9 @@ export interface Post {
   platform: string;
   content: string;
   mediaUrls: string;
+  imageUrl: string;
+  shortUrl: string;
+  linkUrl: string;
   scheduledDate: string;
   status: PostStatus;
   contentVariant: string;
