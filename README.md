@@ -1,8 +1,10 @@
-# Social Media Promo Scheduler
+# PolyWiz — Social Media Campaign Scheduler
+
+> **Live:** [social-media-promo-scheduler.vercel.app](https://social-media-promo-scheduler.vercel.app)
 
 A campaign planning tool that helps arts organizations give their artists, exhibitions, and content the sustained social media presence they deserve — across multiple platforms, over weeks and months, not just a single post on opening night.
 
-Built for [Arterial](https://arterial.org) and its family of brands: [Not Real Art](https://notrealart.com), [Artsville USA](https://artsvilleusa.com), and [The Intersect of Art and Tech](https://theintersect.art).
+Built by [Polymash](https://polymash.com) for [Arterial](https://arterial.org) and its family of brands: [Not Real Art](https://notrealart.com), [Artsville USA](https://artsvilleusa.com), [The Intersect](https://theintersect.art), and [Sugar Press Art](https://sugarpressart.com).
 
 ## Why This Exists
 
