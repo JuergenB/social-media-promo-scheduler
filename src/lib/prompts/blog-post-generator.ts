@@ -164,12 +164,11 @@ export function buildUserPrompt(params: UserPromptParams): string {
     .join(", ");
 
   const angleInstructions = postsPerPlatform > 1
-    ? `For each platform, generate ${postsPerPlatform} unique variants. Use different content angles for each variant. Suggested angles:\n${CONTENT_ANGLES.slice(0, postsPerPlatform).map((a, i) => `  Variant ${i + 1}: ${a}`).join("\n")}`
+    ? `For each platform, generate ${postsPerPlatform} unique variants. Each variant MUST focus on a DIFFERENT person, artist, topic, or section of the article. Do NOT write multiple posts about the same thing. Spread your focus across the entire article.\n\nSuggested approach:\n${CONTENT_ANGLES.slice(0, postsPerPlatform).map((a, i) => `  Variant ${i + 1}: ${a}`).join("\n")}`
     : "Generate 1 post per platform, each optimized for that platform's format and audience.";
 
-  const imageInstructions = imageCount > 0
-    ? `There are ${imageCount} images available. Cycle through them: variant 1 uses image index 0, variant 2 uses image index 1, etc. (modulo ${imageCount}). Return the imageUrl field with the URL of the assigned image.`
-    : "No images were found. Set imageUrl to an empty string.";
+  // Images are assigned externally after generation — tell Claude to focus on content variety
+  const imageInstructions = "IMPORTANT: Images will be assigned to posts automatically after generation. You do NOT need to pick images. Set imageUrl to an empty string. Focus on writing content that covers DIFFERENT parts of the article — if the article features multiple artists or topics, each variant should highlight a different one.";
 
   return `Generate ${totalPosts} social media posts (${postsPerPlatform} per platform) for the following blog post content.
 
@@ -199,13 +198,6 @@ ${blogData.author ? `Author: ${blogData.author}` : ""}
 Content:
 ${blogData.content}
 </blog_post_content>
-
-<available_images>
-${blogData.images.length > 0
-    ? blogData.images.map((img, i) => `Image ${i}: ${img.url}${img.alt ? ` (${img.alt})` : ""}`).join("\n")
-    : "No images available."
-  }
-</available_images>
 
 ${imageInstructions}
 

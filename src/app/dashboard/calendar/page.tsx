@@ -444,7 +444,8 @@ export default function CalendarPage() {
         open={!!selectedPostId}
         onOpenChange={() => setSelectedPostId(null)}
       >
-        <DialogContent className="max-w-lg p-0 overflow-hidden">
+        <DialogContent className="max-w-lg p-0 overflow-hidden" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Post Detail</DialogTitle>
           {selectedPost && (
             <PostDetailView
               post={selectedPost}
