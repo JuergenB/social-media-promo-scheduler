@@ -80,14 +80,18 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 
 **Starting point:** The Intersect newsletter (theintersect.art) — Juergen's own newsletter with connected Zernio accounts.
 
-| Task | Description |
-|------|-------------|
-| Airtable base setup | Create tables: Campaigns, Posts, Brands, Platform Settings, Image Sizes. Clone reference data from existing base. |
-| Campaign creation UI | Form: URL input, brand selector, campaign type, duration preset, editorial direction |
-| URL scraping | Firecrawl integration — extract content + images from newsletter/article URLs |
-| Post generation | OpenAI integration — generate platform-specific post variants using brand voice + platform best practices |
-| Approval queue | List view of pending posts with approve/edit/dismiss actions |
-| Basic scheduling | Push approved posts to Zernio API with hardcoded tapering schedule |
+| Task | Status | Description |
+|------|--------|-------------|
+| Airtable base setup | Done | Tables: Campaigns, Posts, Brands, Platform Settings, Image Sizes |
+| Campaign creation UI | Done | Form: URL input, brand selector, campaign type, duration preset, editorial direction |
+| URL scraping | Done | Firecrawl integration — og:image extraction on campaign creation |
+| Calendar day view | Done | Sheet panel with post timeline, day-to-day navigation, platform filter bar |
+| Post detail dialog | Done | Platform header, retry for failed posts, expandable text, clickable URLs, PDF media handling |
+| Dashboard overview | Done | Stats with configurable time range (today/7d/30d/90d), accurate per-status counts |
+| Calendar settings | Done | Week-starts-on-Monday preference in Settings |
+| Post generation | Pending | OpenAI integration — generate platform-specific post variants using brand voice + platform best practices |
+| Approval queue | Pending | List view of pending posts with approve/edit/dismiss actions |
+| Basic scheduling | Pending | Push approved posts to Zernio API with hardcoded tapering schedule |
 
 **Campaign types for Phase I:**
 - Newsletter (Curated.co) — primary development target

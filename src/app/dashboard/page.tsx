@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useAccounts, useAccountsHealth, usePosts, useQueuePreview } from "@/hooks";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { AccountAvatar } from "@/components/accounts";
 import { PlatformIcons, PostStatusBadge } from "@/components/posts";
 import { PLATFORM_NAMES, type Platform } from "@/lib/late-api";
 import { format } from "date-fns/format";
 import { parseISO } from "date-fns/parseISO";
+import { subDays } from "date-fns/subDays";
+import { startOfDay } from "date-fns/startOfDay";
 import {
   LayoutDashboard,
   Clock,
@@ -21,24 +30,64 @@ import {
   Loader2,
 } from "lucide-react";
 
+type StatsRange = "1" | "7" | "30" | "90";
+const RANGE_LABELS: Record<StatsRange, string> = {
+  "1": "Today",
+  "7": "Last 7 days",
+  "30": "Last 30 days",
+  "90": "Last 90 days",
+};
+
 export default function DashboardPage() {
+  const [statsRange, setStatsRange] = useState<StatsRange>("30");
+
   const { data: accountsData, isLoading: accountsLoading } = useAccounts();
   const { data: healthData } = useAccountsHealth();
-  const { data: postsData, isLoading: postsLoading } = usePosts({ limit: 10 });
   const { data: queueData } = useQueuePreview(5);
 
+  // Date range for stats
+  const dateFrom = useMemo(
+    () => format(startOfDay(subDays(new Date(), Number(statsRange))), "yyyy-MM-dd"),
+    [statsRange]
+  );
+  const dateTo = useMemo(
+    () => format(new Date(), "yyyy-MM-dd"),
+    []
+  );
+
+  // Fetch posts by status within the selected date range
+  const { data: scheduledData, isLoading: scheduledLoading } = usePosts({
+    status: "scheduled",
+    dateFrom,
+    dateTo,
+    limit: 100,
+  });
+  const { data: publishedData, isLoading: publishedLoading } = usePosts({
+    status: "published",
+    dateFrom,
+    dateTo,
+    limit: 100,
+  });
+  const { data: failedData, isLoading: failedLoading } = usePosts({
+    status: "failed",
+    dateFrom,
+    dateTo,
+    limit: 100,
+  });
+  // Recent posts for the activity list (no date filter, just latest)
+  const { data: recentData, isLoading: recentLoading } = usePosts({ limit: 10 });
+
   const accounts = accountsData?.accounts || [];
-  const posts = useMemo(() => postsData?.posts || [], [postsData?.posts]);
+  const recentPosts = useMemo(() => recentData?.posts || [], [recentData?.posts]);
   const accountsNeedingAttention = (healthData?.accounts || []).filter(
     (a: any) => a.status === "needs_reconnect"
   ).length;
   const upcomingSlots = queueData?.slots || [];
 
-  const { scheduledPosts, publishedPosts, failedPosts } = useMemo(() => ({
-    scheduledPosts: posts.filter((p: any) => p.status === "scheduled"),
-    publishedPosts: posts.filter((p: any) => p.status === "published"),
-    failedPosts: posts.filter((p: any) => p.status === "failed"),
-  }), [posts]);
+  const scheduledCount = (scheduledData?.posts || []).length;
+  const publishedCount = (publishedData?.posts || []).length;
+  const failedCount = (failedData?.posts || []).length;
+  const statsLoading = scheduledLoading || publishedLoading || failedLoading;
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
@@ -70,18 +119,31 @@ export default function DashboardPage() {
 
       {/* Overview Stats */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <LayoutDashboard className="h-4 w-4" />
-            Overview
-          </CardTitle>
-          <CardDescription>
-            Your account and posting statistics.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <div className="space-y-1">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <LayoutDashboard className="h-4 w-4" />
+              Overview
+            </CardTitle>
+            <CardDescription>
+              {RANGE_LABELS[statsRange]} — posting statistics.
+            </CardDescription>
+          </div>
+          <Select value={statsRange} onValueChange={(v) => setStatsRange(v as StatsRange)}>
+            <SelectTrigger className="w-36 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Today</SelectItem>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+            </SelectContent>
+          </Select>
         </CardHeader>
         <CardContent>
           <div className="rounded-lg bg-muted p-4">
-            {accountsLoading || postsLoading ? (
+            {accountsLoading || statsLoading ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
@@ -98,7 +160,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-center gap-1">
                     <Clock className="h-4 w-4 text-blue-500" />
                     <span className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
-                      {scheduledPosts.length}
+                      {scheduledCount}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground">Scheduled</p>
@@ -107,7 +169,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-center gap-1">
                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                     <span className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                      {publishedPosts.length}
+                      {publishedCount}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground">Published</p>
@@ -116,7 +178,7 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-center gap-1">
                     <AlertCircle className="h-4 w-4 text-red-500" />
                     <span className="text-2xl font-semibold text-red-600 dark:text-red-400">
-                      {failedPosts.length}
+                      {failedCount}
                     </span>
                   </div>
                   <p className="text-sm text-muted-foreground">Failed</p>
@@ -139,19 +201,19 @@ export default function DashboardPage() {
               Your latest posts and their status.
             </CardDescription>
           </div>
-          {posts.length > 0 && (
+          {recentPosts.length > 0 && (
             <Button variant="ghost" size="sm" className="text-xs" asChild>
               <Link href="/dashboard/calendar">View all</Link>
             </Button>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
-          {postsLoading ? (
+          {recentLoading ? (
             <LoadingSkeleton rows={5} />
-          ) : posts.length === 0 ? (
+          ) : recentPosts.length === 0 ? (
             <EmptyState message="No posts yet" action="Create your first post" href="/dashboard/compose" />
           ) : (
-            posts.slice(0, 5).map((post: any) => (
+            recentPosts.slice(0, 5).map((post: any) => (
               <div
                 key={post._id}
                 className="flex items-center justify-between rounded-lg bg-muted p-3"

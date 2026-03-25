@@ -123,10 +123,16 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Brand settings page with inline editing
 - [x] **Phase I:** Platform settings browser (13 platforms)
 - [x] **Phase I:** og:image scraping on campaign creation (Firecrawl)
+- [x] **Phase I:** Calendar day view sheet with post timeline, day navigation, platform filter
+- [x] **Phase I:** Post detail dialog with platform header, retry for failed posts, expandable text, clickable URLs
+- [x] **Phase I:** PDF/document media handling (LinkedIn carousels)
+- [x] **Phase I:** Dashboard overview stats with configurable time range (today/7d/30d/90d)
+- [x] **Phase I:** Week-starts-on-Monday calendar setting
 - [ ] **Phase I:** Campaign detail page and scrape-to-generate pipeline (#17)
 - [ ] **Phase I:** Content drafting with brand voice (OpenAI)
 - [ ] **Phase I:** Approval queue UI
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
+- [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
 - [ ] **Phase II:** Brand switching at dashboard level

@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette } from "lucide-react";
+import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette, Calendar } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
@@ -35,7 +35,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { apiKey, usageStats, logout } = useAuthStore();
-  const { timezone, setTimezone } = useAppStore();
+  const { timezone, setTimezone, weekStartsOn, setWeekStartsOn } = useAppStore();
 
   const [showApiKey, setShowApiKey] = useState(false);
 
@@ -266,6 +266,36 @@ export default function SettingsPage() {
             <p className="text-xs text-muted-foreground">
               Current timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Calendar */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Calendar className="h-4 w-4" />
+            Calendar
+          </CardTitle>
+          <CardDescription>
+            Configure how the calendar displays.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <Label>Week starts on</Label>
+            <Select
+              value={String(weekStartsOn)}
+              onValueChange={(v) => setWeekStartsOn(Number(v) as 0 | 1)}
+            >
+              <SelectTrigger className="w-48">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="0">Sunday</SelectItem>
+                <SelectItem value="1">Monday</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
