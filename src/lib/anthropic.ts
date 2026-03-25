@@ -51,7 +51,7 @@ export async function generatePosts(
     messages: [
       {
         role: "user",
-        content: userPrompt,
+        content: userPrompt + '\n\nIMPORTANT: Respond with ONLY valid JSON. Escape all quotes inside strings with backslash. Do not use curly quotes. Start your response with {"posts":[',
       },
     ],
   });
@@ -62,11 +62,22 @@ export async function generatePosts(
     throw new Error("No text response from Claude");
   }
 
-  // Parse JSON from response — Claude may wrap in markdown code blocks
+  // Parse JSON — response continues from the prefill '{"posts":['
   let jsonText = textBlock.text.trim();
+
+  // Remove markdown code blocks if present
   const codeBlockMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
     jsonText = codeBlockMatch[1].trim();
+  }
+
+  // Handle case where response doesn't start with {
+  if (!jsonText.startsWith("{")) {
+    // Try to find the JSON start
+    const jsonStart = jsonText.indexOf("{");
+    if (jsonStart >= 0) {
+      jsonText = jsonText.slice(jsonStart);
+    }
   }
 
   // Try to extract JSON object if there's surrounding text
