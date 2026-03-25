@@ -20,8 +20,13 @@ import {
   Building2,
   Sparkles,
   ExternalLink,
+  Loader2,
+  Eye,
+  Calendar,
+  CheckCircle2,
+  Archive,
 } from "lucide-react";
-import type { Campaign, CampaignType } from "@/lib/airtable/types";
+import type { Campaign, CampaignType, CampaignStatus } from "@/lib/airtable/types";
 
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Newsletter: Mail,
@@ -46,6 +51,26 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "des
   Archived: "secondary",
   Failed: "destructive",
 };
+
+function getActionLabel(status: CampaignStatus): { label: string; icon: React.ElementType } | null {
+  switch (status) {
+    case "Draft":
+      return { label: "Generate Posts", icon: Sparkles };
+    case "Scraping":
+    case "Generating":
+      return { label: "Generating...", icon: Loader2 };
+    case "Review":
+      return { label: "Review Posts", icon: Eye };
+    case "Active":
+      return { label: "View in Calendar", icon: Calendar };
+    case "Completed":
+      return { label: "View Results", icon: CheckCircle2 };
+    case "Archived":
+      return { label: "Archived", icon: Archive };
+    default:
+      return null;
+  }
+}
 
 export default function CampaignsPage() {
   const { currentBrand } = useBrand();
@@ -122,73 +147,86 @@ export default function CampaignsPage() {
                 .replace(/^https?:\/\//, "")
                 .replace(/\/$/, "");
 
+            const action = getActionLabel(campaign.status);
+            const ActionIcon = action?.icon;
+
             return (
-              <Card
+              <Link
                 key={campaign.id}
-                className="overflow-hidden !py-0 !gap-0 hover:shadow-md transition-shadow"
+                href={`/dashboard/campaigns/${campaign.id}`}
+                className="block"
               >
-                {/* Image header — flush with card top */}
-                {campaign.imageUrl ? (
-                  <div className="h-28 overflow-hidden bg-muted">
-                    <img
-                      src={campaign.imageUrl}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="h-20 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-                    <TypeIcon className="h-8 w-8 text-muted-foreground/30" />
-                  </div>
-                )}
-
-                <div className="px-4 pt-2.5 pb-3 space-y-1.5">
-                  {/* Title + status */}
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-sm leading-tight line-clamp-1">
-                      {displayName}
-                    </h3>
-                    <Badge
-                      variant={STATUS_VARIANTS[campaign.status] || "secondary"}
-                      className="shrink-0 text-[11px]"
-                    >
-                      {campaign.status}
-                    </Badge>
-                  </div>
-
-                  {/* Meta row */}
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <TypeIcon className="h-3 w-3" />
-                    <span>{campaign.type}</span>
-                    <span className="text-border">|</span>
-                    <span>{campaign.durationDays}d</span>
-                    {campaign.distributionBias && (
-                      <>
-                        <span className="text-border">|</span>
-                        <span>{campaign.distributionBias}</span>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Editorial direction preview */}
-                  {campaign.editorialDirection && (
-                    <p className="text-[11px] text-muted-foreground line-clamp-1 italic">
-                      &ldquo;{campaign.editorialDirection}&rdquo;
-                    </p>
+                <Card
+                  className="overflow-hidden !py-0 !gap-0 hover:shadow-md transition-shadow cursor-pointer"
+                >
+                  {/* Image header — flush with card top */}
+                  {campaign.imageUrl ? (
+                    <div className="h-28 overflow-hidden bg-muted">
+                      <img
+                        src={campaign.imageUrl}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-20 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                      <TypeIcon className="h-8 w-8 text-muted-foreground/30" />
+                    </div>
                   )}
 
-                  {/* Source URL — subtle reference link */}
-                  <a
-                    href={campaign.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[10px] text-muted-foreground/50 hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
-                  >
-                    {campaign.url.replace(/^https?:\/\//, "").slice(0, 50)}
-                    <ExternalLink className="h-2 w-2 shrink-0" />
-                  </a>
-                </div>
-              </Card>
+                  <div className="px-4 pt-2.5 pb-3 space-y-1.5">
+                    {/* Title + status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-semibold text-sm leading-tight line-clamp-1">
+                        {displayName}
+                      </h3>
+                      <Badge
+                        variant={STATUS_VARIANTS[campaign.status] || "secondary"}
+                        className="shrink-0 text-[11px]"
+                      >
+                        {campaign.status}
+                      </Badge>
+                    </div>
+
+                    {/* Meta row */}
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <TypeIcon className="h-3 w-3" />
+                      <span>{campaign.type}</span>
+                      <span className="text-border">|</span>
+                      <span>{campaign.durationDays}d</span>
+                      {campaign.distributionBias && (
+                        <>
+                          <span className="text-border">|</span>
+                          <span>{campaign.distributionBias}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Editorial direction preview */}
+                    {campaign.editorialDirection && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-1 italic">
+                        &ldquo;{campaign.editorialDirection}&rdquo;
+                      </p>
+                    )}
+
+                    {/* Action label + source URL row */}
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className="text-[10px] text-muted-foreground/50 truncate max-w-[60%] inline-flex items-center gap-1"
+                      >
+                        {campaign.url.replace(/^https?:\/\//, "").slice(0, 50)}
+                        <ExternalLink className="h-2 w-2 shrink-0" />
+                      </span>
+                      {action && ActionIcon && (
+                        <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
+                          <ActionIcon className={`h-2.5 w-2.5 ${campaign.status === "Scraping" || campaign.status === "Generating" ? "animate-spin" : ""}`} />
+                          {action.label}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              </Link>
             );
           })}
         </div>

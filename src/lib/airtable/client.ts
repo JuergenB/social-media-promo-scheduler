@@ -89,6 +89,20 @@ export async function createRecord<T = Record<string, unknown>>(
   return data.records[0];
 }
 
+export async function updateRecord<T = Record<string, unknown>>(
+  tableName: string,
+  recordId: string,
+  fields: Record<string, unknown>
+): Promise<AirtableRecord<T>> {
+  return airtableFetch<AirtableRecord<T>>(
+    `/${encodeURIComponent(tableName)}/${recordId}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ fields }),
+    }
+  );
+}
+
 export async function getRecord<T = Record<string, unknown>>(
   tableName: string,
   recordId: string
