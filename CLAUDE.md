@@ -59,13 +59,13 @@ social-media-promo-scheduler/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
-│   │   │   ├── campaigns/      # GET list, POST create (scrapes og:image via Firecrawl)
+│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH [id] detail + linked posts
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints
 │   │   │   ├── auto-auth/      # Server-side API key provider
 │   │   │   └── validate-key/   # Zernio key validation
 │   │   ├── dashboard/
-│   │   │   ├── campaigns/      # Campaign list + /new creation form
+│   │   │   ├── campaigns/      # Campaign list + /new creation + /[id] detail (posts, settings)
 │   │   │   ├── compose/        # Post composer (from LateWiz)
 │   │   │   ├── calendar/       # Calendar view (from LateWiz)
 │   │   │   ├── accounts/       # Connected social accounts (from LateWiz)

@@ -128,7 +128,9 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** PDF/document media handling (LinkedIn carousels)
 - [x] **Phase I:** Dashboard overview stats with configurable time range (today/7d/30d/90d)
 - [x] **Phase I:** Week-starts-on-Monday calendar setting
-- [ ] **Phase I:** Campaign detail page and scrape-to-generate pipeline (#17)
+- [x] **Phase I:** Rebrand to PolyWiz with Polymash Blue (#0399FE)
+- [x] **Phase I:** Campaign detail page with editable settings, post review skeleton (#17, #26)
+- [ ] **Phase I:** Scrape-to-generate pipeline (#17)
 - [ ] **Phase I:** Content drafting with brand voice (OpenAI)
 - [ ] **Phase I:** Approval queue UI
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
