@@ -17,12 +17,12 @@ interface CampaignFields {
 }
 
 /**
- * Fetch the og:image from a URL using Firecrawl scrape.
- * Returns the image URL or null on failure.
+ * Fetch metadata from a URL using Firecrawl scrape.
+ * Returns the page title and og:image URL.
  */
-async function fetchOgImage(url: string): Promise<string | null> {
+async function fetchPageMetadata(url: string): Promise<{ title: string | null; imageUrl: string | null }> {
   const apiKey = process.env.FIRECRAWL_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return { title: null, imageUrl: null };
 
   try {
     const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
@@ -38,14 +38,15 @@ async function fetchOgImage(url: string): Promise<string | null> {
       }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) return { title: null, imageUrl: null };
 
     const data = await res.json();
-    const ogImage =
-      data?.data?.metadata?.ogImage || data?.data?.metadata?.["og:image"];
-    return ogImage || null;
+    const metadata = data?.data?.metadata;
+    const title = metadata?.title || metadata?.ogTitle || metadata?.["og:title"] || null;
+    const imageUrl = metadata?.ogImage || metadata?.["og:image"] || null;
+    return { title, imageUrl };
   } catch {
-    return null;
+    return { title: null, imageUrl: null };
   }
 }
 
@@ -84,18 +85,18 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Fetch og:image in the background — don't block creation
-    const imageUrl = await fetchOgImage(body.url);
+    // Fetch page metadata (title + og:image) from the URL
+    const metadata = await fetchPageMetadata(body.url);
 
     const record = await createRecord("Campaigns", {
-      Name: body.name || "",
+      Name: body.name || metadata.title || body.url,
       URL: body.url,
       Type: body.type,
       Brand: body.brandId ? [body.brandId] : [],
       "Duration Days": body.durationDays,
       "Distribution Bias": body.distributionBias || "Front-loaded",
       "Editorial Direction": body.editorialDirection || "",
-      "Image URL": imageUrl || "",
+      "Image URL": metadata.imageUrl || "",
       Status: "Draft",
       "Created At": new Date().toISOString(),
       "Created By": body.createdBy || "",
