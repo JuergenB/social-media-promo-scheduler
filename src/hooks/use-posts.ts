@@ -1,13 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLate } from "./use-late";
 import { useCurrentProfileId } from "./use-profiles";
+import { useBrand } from "@/lib/brand-context";
 import type { Platform, PlatformSpecificData } from "@/lib/late-api";
 
 export const postKeys = {
-  all: ["posts"] as const,
-  lists: () => ["posts", "list"] as const,
-  list: (filters: PostFilters) => ["posts", "list", filters] as const,
-  detail: (postId: string) => ["posts", "detail", postId] as const,
+  all: (brandId?: string) => ["posts", brandId ?? "default"] as const,
+  lists: (brandId?: string) => ["posts", "list", brandId ?? "default"] as const,
+  list: (filters: PostFilters, brandId?: string) => ["posts", "list", brandId ?? "default", filters] as const,
+  detail: (postId: string, brandId?: string) => ["posts", "detail", brandId ?? "default", postId] as const,
 };
 
 export interface PostFilters {
@@ -57,11 +58,13 @@ export interface UpdatePostInput {
  */
 export function usePosts(filters: PostFilters = {}) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const profileId = filters.profileId || currentProfileId;
 
   return useQuery({
-    queryKey: postKeys.list({ ...filters, profileId }),
+    queryKey: postKeys.list({ ...filters, profileId }, brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.posts.listPosts({
@@ -86,9 +89,11 @@ export function usePosts(filters: PostFilters = {}) {
  */
 export function usePost(postId: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
 
   return useQuery({
-    queryKey: postKeys.detail(postId),
+    queryKey: postKeys.detail(postId, brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.posts.getPost({
@@ -119,7 +124,7 @@ export function useCreatePost() {
     },
     onSuccess: () => {
       // Invalidate all list queries but not details (they aren't affected)
-      queryClient.invalidateQueries({ queryKey: postKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["posts", "list"] });
     },
   });
 }
@@ -143,8 +148,8 @@ export function useUpdatePost() {
     },
     onSuccess: (_, { postId }) => {
       // Invalidate the specific post detail and all lists (post may appear in multiple list views)
-      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) });
-      queryClient.invalidateQueries({ queryKey: postKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["posts", "detail"] });
+      queryClient.invalidateQueries({ queryKey: ["posts", "list"] });
     },
   });
 }
@@ -167,8 +172,8 @@ export function useDeletePost() {
     },
     onSuccess: (postId) => {
       // Remove the deleted post from cache and invalidate lists
-      queryClient.removeQueries({ queryKey: postKeys.detail(postId) });
-      queryClient.invalidateQueries({ queryKey: postKeys.lists() });
+      queryClient.removeQueries({ queryKey: ["posts", "detail"] });
+      queryClient.invalidateQueries({ queryKey: ["posts", "list"] });
     },
   });
 }
@@ -191,8 +196,8 @@ export function useRetryPost() {
     },
     onSuccess: (_, postId) => {
       // Invalidate the specific post and all lists (status changes)
-      queryClient.invalidateQueries({ queryKey: postKeys.detail(postId) });
-      queryClient.invalidateQueries({ queryKey: postKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["posts", "detail"] });
+      queryClient.invalidateQueries({ queryKey: ["posts", "list"] });
     },
   });
 }

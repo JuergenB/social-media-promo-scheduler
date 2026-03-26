@@ -76,7 +76,7 @@ export default function CampaignsPage() {
   const { currentBrand } = useBrand();
 
   const { data, isLoading } = useQuery<{ campaigns: Campaign[] }>({
-    queryKey: ["campaigns"],
+    queryKey: ["campaigns", currentBrand?.id],
     queryFn: async () => {
       const res = await fetch("/api/campaigns");
       if (!res.ok) throw new Error("Failed to fetch campaigns");
@@ -84,7 +84,11 @@ export default function CampaignsPage() {
     },
   });
 
-  const campaigns = data?.campaigns ?? [];
+  // Filter campaigns by current brand
+  const allCampaigns = data?.campaigns ?? [];
+  const campaigns = currentBrand
+    ? allCampaigns.filter((c) => c.brandIds?.includes(currentBrand.id))
+    : allCampaigns;
 
   return (
     <div className="space-y-6">

@@ -1,12 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLate } from "./use-late";
 import { useCurrentProfileId } from "./use-profiles";
+import { useBrand } from "@/lib/brand-context";
 import type { Platform } from "@/lib/late-api";
 
 export const accountKeys = {
-  all: ["accounts"] as const,
-  list: (profileId: string) => ["accounts", "list", profileId] as const,
-  health: (profileId: string) => ["accounts", "health", profileId] as const,
+  all: (brandId?: string) => ["accounts", brandId ?? "default"] as const,
+  list: (profileId: string, brandId?: string) => ["accounts", "list", profileId, brandId ?? "default"] as const,
+  health: (profileId: string, brandId?: string) => ["accounts", "health", profileId, brandId ?? "default"] as const,
   detail: (accountId: string) => ["accounts", "detail", accountId] as const,
 };
 
@@ -33,11 +34,13 @@ export interface AccountHealth {
  */
 export function useAccounts(profileId?: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const targetProfileId = profileId || currentProfileId;
 
   return useQuery({
-    queryKey: accountKeys.list(targetProfileId || ""),
+    queryKey: accountKeys.list(targetProfileId || "", brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.accounts.listAccounts({
@@ -55,11 +58,13 @@ export function useAccounts(profileId?: string) {
  */
 export function useAccountsHealth(profileId?: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const targetProfileId = profileId || currentProfileId;
 
   return useQuery({
-    queryKey: accountKeys.health(targetProfileId || ""),
+    queryKey: accountKeys.health(targetProfileId || "", brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.accounts.getAllAccountsHealth({
@@ -122,7 +127,7 @@ export function useDeleteAccount() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: accountKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
     },
   });
 }

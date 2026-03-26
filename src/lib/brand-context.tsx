@@ -5,10 +5,12 @@ import {
   useContext,
   useState,
   useEffect,
+  useCallback,
   type ReactNode,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Brand } from "@/lib/airtable/types";
+import { useAppStore } from "@/stores";
 
 interface BrandContextValue {
   currentBrand: Brand | null;
@@ -50,9 +52,21 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const currentBrand =
     brands.find((b) => b.id === selectedBrandId) ?? brands[0] ?? null;
 
-  const switchBrand = (brandId: string) => {
+  const queryClient = useQueryClient();
+  const { setDefaultProfileId } = useAppStore();
+
+  const switchBrand = useCallback((brandId: string) => {
     setSelectedBrandId(brandId);
-  };
+    // Clear cached Zernio profile ID — new brand has different profiles
+    setDefaultProfileId(null);
+    // Invalidate all Zernio-related queries so they re-fetch with the new API key
+    queryClient.invalidateQueries({ queryKey: ["server-api-key"] });
+    queryClient.invalidateQueries({ queryKey: ["profiles"] });
+    queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["posts"] });
+    queryClient.invalidateQueries({ queryKey: ["queue"] });
+    queryClient.invalidateQueries({ queryKey: ["calendar"] });
+  }, [queryClient, setDefaultProfileId]);
 
   return (
     <BrandContext.Provider

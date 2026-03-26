@@ -13,6 +13,8 @@ export interface Brand {
   shortDomain: string | null;
   /** Env var name for this brand's Short.io API key (e.g., "SHORT_IO_KEY_INTERSECT"). Falls back to SHORT_IO_API_KEY. */
   shortApiKeyLabel: string | null;
+  /** Env var name for this brand's Anthropic API key (e.g., "ANTHROPIC_KEY_INTERSECT"). Falls back to ANTHROPIC_API_KEY. */
+  anthropicApiKeyLabel: string | null;
   status: "Active" | "Inactive";
 }
 

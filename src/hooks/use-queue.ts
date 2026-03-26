@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLate } from "./use-late";
 import { useCurrentProfileId } from "./use-profiles";
+import { useBrand } from "@/lib/brand-context";
 
 export const queueKeys = {
-  all: ["queue"] as const,
-  queues: (profileId: string) => ["queue", "queues", profileId] as const,
-  slots: (profileId: string) => ["queue", "slots", profileId] as const,
-  preview: (profileId: string, count: number) =>
-    ["queue", "preview", profileId, count] as const,
-  nextSlot: (profileId: string) => ["queue", "nextSlot", profileId] as const,
+  all: (brandId?: string) => ["queue", brandId ?? "default"] as const,
+  queues: (profileId: string, brandId?: string) => ["queue", "queues", profileId, brandId ?? "default"] as const,
+  slots: (profileId: string, brandId?: string) => ["queue", "slots", profileId, brandId ?? "default"] as const,
+  preview: (profileId: string, count: number, brandId?: string) =>
+    ["queue", "preview", profileId, count, brandId ?? "default"] as const,
+  nextSlot: (profileId: string, brandId?: string) => ["queue", "nextSlot", profileId, brandId ?? "default"] as const,
 };
 
 // SDK-aligned types
@@ -72,11 +73,13 @@ export function normalizeSlot(slot: QueueSlot): QueueSlot {
  */
 export function useQueues(profileId?: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const targetProfileId = profileId || currentProfileId;
 
   return useQuery({
-    queryKey: queueKeys.queues(targetProfileId || ""),
+    queryKey: queueKeys.queues(targetProfileId || "", brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.queue.listQueueSlots({
@@ -94,11 +97,13 @@ export function useQueues(profileId?: string) {
  */
 export function useQueueSlots(profileId?: string, queueId?: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const targetProfileId = profileId || currentProfileId;
 
   return useQuery({
-    queryKey: queueKeys.slots(targetProfileId || ""),
+    queryKey: queueKeys.slots(targetProfileId || "", brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.queue.listQueueSlots({
@@ -116,11 +121,13 @@ export function useQueueSlots(profileId?: string, queueId?: string) {
  */
 export function useQueuePreview(count = 10, profileId?: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const targetProfileId = profileId || currentProfileId;
 
   return useQuery({
-    queryKey: queueKeys.preview(targetProfileId || "", count),
+    queryKey: queueKeys.preview(targetProfileId || "", count, brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.queue.previewQueue({
@@ -138,11 +145,13 @@ export function useQueuePreview(count = 10, profileId?: string) {
  */
 export function useNextQueueSlot(profileId?: string, queueId?: string) {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const currentProfileId = useCurrentProfileId();
   const targetProfileId = profileId || currentProfileId;
 
   return useQuery({
-    queryKey: queueKeys.nextSlot(targetProfileId || ""),
+    queryKey: queueKeys.nextSlot(targetProfileId || "", brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.queue.getNextQueueSlot({
@@ -200,7 +209,7 @@ export function useCreateQueue() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queueKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
     },
   });
 }
@@ -253,7 +262,7 @@ export function useUpdateQueueSlots() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queueKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
     },
   });
 }
@@ -309,7 +318,7 @@ export function useUpdateQueue() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queueKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
     },
   });
 }
@@ -341,7 +350,7 @@ export function useDeleteQueue() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queueKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
     },
   });
 }

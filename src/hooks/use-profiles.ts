@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLate } from "./use-late";
+import { useBrand } from "@/lib/brand-context";
 import { useAppStore } from "@/stores";
 import { useEffect } from "react";
 
 export const profileKeys = {
-  all: ["profiles"] as const,
-  detail: (id: string) => ["profiles", id] as const,
+  all: (brandId?: string) => ["profiles", brandId ?? "default"] as const,
+  detail: (id: string) => ["profiles", "detail", id] as const,
 };
 
 /**
@@ -13,10 +14,12 @@ export const profileKeys = {
  */
 export function useProfiles() {
   const late = useLate();
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id;
   const { defaultProfileId, setDefaultProfileId } = useAppStore();
 
   const query = useQuery({
-    queryKey: profileKeys.all,
+    queryKey: profileKeys.all(brandId),
     queryFn: async () => {
       if (!late) throw new Error("Not authenticated");
       const { data, error } = await late.profiles.listProfiles();
@@ -82,7 +85,7 @@ export function useCreateProfile() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: profileKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
     },
   });
 }
@@ -113,7 +116,7 @@ export function useUpdateProfile() {
       return data;
     },
     onSuccess: (_, { profileId }) => {
-      queryClient.invalidateQueries({ queryKey: profileKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
       queryClient.invalidateQueries({ queryKey: profileKeys.detail(profileId) });
     },
   });

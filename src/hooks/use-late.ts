@@ -1,26 +1,32 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Late from "@getlatedev/node";
+import { useBrand } from "@/lib/brand-context";
 
 /**
- * Fetch the server-side API key (set via LATE_API_KEY env var).
- * Cached by TanStack Query — fetched once per session.
+ * Fetch the Zernio API key for the current brand.
+ * Passes brandId to the auto-auth endpoint for per-brand key resolution.
+ * Re-fetches when the brand changes.
  */
 function useServerApiKey() {
+  const { currentBrand } = useBrand();
+  const brandId = currentBrand?.id ?? null;
+
   return useQuery({
-    queryKey: ["server-api-key"],
+    queryKey: ["server-api-key", brandId],
     queryFn: async () => {
-      const res = await fetch("/api/auto-auth");
+      const params = brandId ? `?brandId=${brandId}` : "";
+      const res = await fetch(`/api/auto-auth${params}`);
       const data = await res.json();
       return data.apiKey as string | null;
     },
-    staleTime: Infinity,
+    staleTime: 5 * 60 * 1000, // 5 minutes — re-validate after brand data may change
     retry: false,
   });
 }
 
 /**
- * Hook to get a Late client instance using the server-side API key.
+ * Hook to get a Late client instance using the current brand's API key.
  * Returns null if no API key is available.
  */
 export function useLate(): Late | null {

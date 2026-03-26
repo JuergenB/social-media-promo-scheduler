@@ -35,6 +35,8 @@ interface BrandFields {
   "Voice Guidelines": string;
   "Short Domain": string;
   "Short API Key Label": string;
+  "Anthropic API Key Label": string;
+  "Zernio API Key Label": string;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────
@@ -168,6 +170,9 @@ export async function POST(
             name: brand.fields.Name,
             shortDomain: brand.fields["Short Domain"] || null,
             shortApiKeyLabel: brand.fields["Short API Key Label"] || null,
+          };
+          brandForAnthropic = {
+            anthropicApiKeyLabel: brand.fields["Anthropic API Key Label"] || null,
           };
         }
 

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useAppStore } from "@/stores";
 import { useProfiles } from "@/hooks";
+import { useBrand } from "@/lib/brand-context";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -148,6 +149,7 @@ export default function DashboardLayout({
   const { defaultProfileId, setDefaultProfileId } = useAppStore();
   const { theme, setTheme } = useTheme();
   const { data: profilesData } = useProfiles();
+  const { currentBrand, brands, switchBrand } = useBrand();
   const settingsOpen = pathname.startsWith("/dashboard/settings");
 
   const profiles = profilesData?.profiles || [];
@@ -238,6 +240,54 @@ export default function DashboardLayout({
             <div className="lg:hidden">
               <Logo size="sm" />
             </div>
+
+            {/* Brand Switcher */}
+            {brands.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    {currentBrand?.logoUrl ? (
+                      <img
+                        src={currentBrand.logoUrl}
+                        alt=""
+                        className="h-4 w-4 rounded-sm object-contain"
+                      />
+                    ) : (
+                      <Palette className="h-4 w-4" />
+                    )}
+                    <span className="max-w-32 truncate text-sm">
+                      {currentBrand?.name || "Select Brand"}
+                    </span>
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuLabel>Switch Brand</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {brands.map((brand) => (
+                    <DropdownMenuItem
+                      key={brand.id}
+                      onClick={() => switchBrand(brand.id)}
+                      className="gap-2"
+                    >
+                      {brand.logoUrl ? (
+                        <img
+                          src={brand.logoUrl}
+                          alt=""
+                          className="h-4 w-4 rounded-sm object-contain"
+                        />
+                      ) : (
+                        <Palette className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span className="flex-1 truncate">{brand.name}</span>
+                      {brand.id === currentBrand?.id && (
+                        <Check className="h-4 w-4 text-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
