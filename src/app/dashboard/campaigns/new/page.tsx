@@ -70,6 +70,7 @@ export default function NewCampaignPage() {
 
   const [url, setUrl] = useState("");
   const [type, setType] = useState<CampaignType | null>(null);
+  const [previewType, setPreviewType] = useState<CampaignType | null>(null);
   const [durationDays, setDurationDays] = useState<number>(90);
   const [distributionBias, setDistributionBias] = useState<DistributionBias>("Front-loaded");
   const [customDuration, setCustomDuration] = useState(false);
@@ -282,17 +283,24 @@ export default function NewCampaignPage() {
                 <button
                   key={t}
                   type="button"
-                  onClick={() => isEnabled && setType(t)}
-                  disabled={!isEnabled}
+                  onClick={() => {
+                    if (isEnabled) {
+                      setType(t);
+                      setPreviewType(null);
+                    } else {
+                      setPreviewType(previewType === t ? null : t);
+                    }
+                  }}
                   className={cn(
                     "flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors",
                     isSelected
                       ? "border-primary bg-primary/5 text-primary"
-                      : isEnabled
-                        ? "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                        : "border-border/50 text-muted-foreground/30 cursor-not-allowed opacity-40"
+                      : previewType === t
+                        ? "border-muted-foreground/40 bg-muted/50 text-muted-foreground"
+                        : isEnabled
+                          ? "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                          : "border-border/50 text-muted-foreground/50 opacity-60 hover:opacity-80 hover:border-border"
                   )}
-                  title={!isEnabled ? "Coming soon" : undefined}
                 >
                   <Icon className="h-5 w-5" />
                   <span className="text-center leading-tight">{t}</span>
@@ -300,11 +308,23 @@ export default function NewCampaignPage() {
               );
             })}
           </div>
-          {/* Type description */}
-          {type && (
-            <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
-              {CAMPAIGN_TYPE_DESCRIPTIONS[type]}
-            </p>
+          {/* Type description — shows for selected or previewed type */}
+          {(type || previewType) && (
+            <div className={cn(
+              "text-xs rounded-lg p-3",
+              previewType && !type
+                ? "bg-muted/30 text-muted-foreground/70 border border-dashed border-border"
+                : previewType
+                  ? "bg-muted/30 text-muted-foreground/70 border border-dashed border-border"
+                  : "bg-muted/50 text-muted-foreground"
+            )}>
+              {previewType && (
+                <span className="font-medium text-muted-foreground">
+                  {previewType} — Coming soon{"\n"}
+                </span>
+              )}
+              <p>{CAMPAIGN_TYPE_DESCRIPTIONS[previewType || type!]}</p>
+            </div>
           )}
         </CardContent>
       </Card>
