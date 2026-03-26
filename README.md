@@ -133,9 +133,13 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Rebrand to PolyWiz with Polymash Blue (#0399FE)
 - [x] **Phase I:** Campaign detail page with editable settings, post review, delete (#17, #26)
 - [x] **Phase I:** Blog post generation pipeline — Firecrawl scrape, Claude Sonnet 4.6, Short.io links, per-platform progress (#30)
+- [x] **Phase I:** Newsletter generation — Curated.co story anchor extraction, per-story short links (#31)
+- [x] **Phase I:** Campaign type selector with descriptions, context-aware URL/editorial prompts
 - [x] **Phase I:** Campaign delete with linked post cleanup
-- [ ] **Phase I:** Content drafting with brand voice (OpenAI)
-- [ ] **Phase I:** Approval queue UI
+- [x] **Phase I:** Short.io link shortener with per-brand domain/key support
+- [x] **Phase I:** Sugar Press Art brand onboarded with voice guidelines
+- [ ] **Phase I:** Post approve/dismiss actions
+- [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
