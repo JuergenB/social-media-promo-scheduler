@@ -59,7 +59,7 @@ social-media-promo-scheduler/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
-│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE)
+│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints
 │   │   │   ├── auto-auth/      # Server-side API key provider
@@ -84,7 +84,7 @@ social-media-promo-scheduler/
 │   │   ├── late-api/           # Zernio API client & platform types
 │   │   ├── airtable/           # Airtable REST client & TypeScript types
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
-│   │   ├── firecrawl.ts        # Blog + newsletter scraper with image extraction
+│   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
 │   │   ├── prompts/            # Generation prompt templates
 │   │   └── brand-context.tsx   # BrandProvider + useBrand() hook
