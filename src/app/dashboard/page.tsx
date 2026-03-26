@@ -55,11 +55,9 @@ export default function DashboardPage() {
     []
   );
 
-  // Fetch posts by status within the selected date range
+  // Scheduled posts: no date filter — always show all upcoming scheduled posts
   const { data: scheduledData, isLoading: scheduledLoading } = usePosts({
     status: "scheduled",
-    dateFrom,
-    dateTo,
     limit: 100,
   });
   const { data: publishedData, isLoading: publishedLoading } = usePosts({
