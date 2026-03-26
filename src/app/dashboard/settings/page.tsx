@@ -27,7 +27,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette, Calendar } from "lucide-react";
+import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette, Calendar, BookOpen } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
@@ -109,6 +109,27 @@ export default function SettingsPage() {
           <Button variant="outline" asChild>
             <Link href="/dashboard/settings/platforms">
               View Platform Settings
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Campaign Types */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BookOpen className="h-4 w-4" />
+            Campaign Types
+          </CardTitle>
+          <CardDescription>
+            Type-specific generation rules, scraper strategies, and feedback.
+            Controls how content is scraped and generated for each campaign type.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/settings/campaign-types">
+              Manage Campaign Types
             </Link>
           </Button>
         </CardContent>

@@ -133,6 +133,97 @@ export interface ImageSize {
   aiNotesSummary: string;
 }
 
+// ── Campaign Type Rules (Airtable-driven, replaces hardcoded constants) ──
+
+export type CampaignTypeStatus = "Active" | "Coming Soon" | "Disabled";
+
+export type ScraperStrategy =
+  | "blog-post"
+  | "newsletter"
+  | "html-structured"
+  | "api-fetch"
+  | "manual";
+
+export interface CampaignTypeRule {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  icon: string;
+  status: CampaignTypeStatus;
+  scraperStrategy: ScraperStrategy;
+  scraperConfig: string | null;
+  contentStructure: string | null;
+  urlPlaceholder: string | null;
+  sortOrder: number;
+}
+
+// ── Generation Rules ─────────────────────────────────────────────────────
+
+export type RuleCategory =
+  | "Content Pairing"
+  | "Tone & Voice"
+  | "Image Handling"
+  | "Link Handling"
+  | "Structure"
+  | "Avoidance"
+  | "Platform-Specific";
+
+export type RulePriority = "Critical" | "Important" | "Nice-to-have";
+
+export type RuleSource = "Manual" | "Feedback-derived" | "Onboarding";
+
+export interface GenerationRule {
+  id: string;
+  name: string;
+  campaignTypeIds: string[];
+  category: RuleCategory;
+  ruleText: string;
+  promptFragment: string | null;
+  priority: RulePriority;
+  active: boolean;
+  source: RuleSource;
+  createdFromFeedbackIds: string[];
+}
+
+// ── Feedback Log ─────────────────────────────────────────────────────────
+
+export const FEEDBACK_CATEGORIES = [
+  "Wrong Image Pairing",
+  "Wrong Tone",
+  "Wrong Artist",
+  "Too Generic",
+  "Wrong Length",
+  "Missing Context",
+  "Factual Error",
+  "Banned Word Used",
+  "Wrong Platform Style",
+  "Other",
+] as const;
+
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+
+export type FeedbackSeverity = "Minor" | "Moderate" | "Critical";
+
+export type FeedbackResolution =
+  | "Pending"
+  | "Rule Created"
+  | "Rule Updated"
+  | "Won't Fix";
+
+export interface FeedbackLogEntry {
+  id: string;
+  summary: string;
+  campaignIds: string[];
+  postIds: string[];
+  campaignTypeIds: string[];
+  issueCategories: FeedbackCategory[];
+  description: string;
+  severity: FeedbackSeverity;
+  resolution: FeedbackResolution;
+  resolvedByRuleIds: string[];
+}
+
 // Duration presets for campaign creation
 export const DURATION_PRESETS = [
   { label: "Sprint", days: 14, description: "2 weeks", defaultBias: "Front-loaded" as DistributionBias },

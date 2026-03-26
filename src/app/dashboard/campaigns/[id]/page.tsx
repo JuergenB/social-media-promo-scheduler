@@ -17,8 +17,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,10 +43,13 @@ import {
   CAMPAIGN_TYPES,
   DISTRIBUTION_BIASES,
   DURATION_PRESETS,
+  FEEDBACK_CATEGORIES,
   type Campaign,
   type CampaignStatus,
   type CampaignType,
   type DistributionBias,
+  type FeedbackCategory,
+  type FeedbackSeverity,
   type Post,
   type PostStatus,
 } from "@/lib/airtable/types";
@@ -74,6 +81,7 @@ import {
   Link2,
   Maximize2,
   RotateCcw,
+  Flag,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -170,7 +178,7 @@ export default function CampaignDetailPage() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
-  const [showGenOptions, setShowGenOptions] = useState(false);
+  const [showGenOptions, setShowGenOptions] = useState(true);
   const [genPlatforms, setGenPlatforms] = useState<Set<string>>(
     new Set(["instagram", "twitter", "linkedin", "facebook", "threads", "bluesky", "pinterest"])
   );
@@ -733,6 +741,7 @@ export default function CampaignDetailPage() {
             <PostDetailView
               post={selectedPost}
               posts={filteredPosts}
+              campaign={campaign}
               onClose={() => setSelectedPost(null)}
               onNavigate={(p) => setSelectedPost(p)}
             />
@@ -912,15 +921,18 @@ function CampaignPostRow({
 function PostDetailView({
   post,
   posts,
+  campaign,
   onClose,
   onNavigate,
 }: {
   post: Post;
   posts: Post[];
+  campaign: Campaign;
   onClose: () => void;
   onNavigate: (post: Post) => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const platformLower = toPlatformId(post.platform);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const charCount = post.content?.length || 0;
@@ -1083,11 +1095,28 @@ function PostDetailView({
               </Button>
             </>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => setFlagDialogOpen(true)}
+          >
+            <Flag className="mr-1.5 h-3.5 w-3.5" />
+            Flag Issue
+          </Button>
         </div>
         <Button variant="outline" size="sm" onClick={onClose}>
           Close
         </Button>
       </div>
+
+      {/* Flag Issue Dialog */}
+      <FlagIssueDialog
+        open={flagDialogOpen}
+        onOpenChange={setFlagDialogOpen}
+        post={post}
+        campaign={campaign}
+      />
     </div>
   );
 }
@@ -1599,5 +1628,173 @@ function SettingsField({
       </dt>
       <dd>{children}</dd>
     </div>
+  );
+}
+
+// ── Flag Issue Dialog ───────────────────────────────────────────────────
+
+const SEVERITY_OPTIONS: FeedbackSeverity[] = ["Minor", "Moderate", "Critical"];
+
+function FlagIssueDialog({
+  open,
+  onOpenChange,
+  post,
+  campaign,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  post: Post;
+  campaign: Campaign;
+}) {
+  const [selectedCategories, setSelectedCategories] = useState<Set<FeedbackCategory>>(
+    new Set()
+  );
+  const [description, setDescription] = useState("");
+  const [severity, setSeverity] = useState<FeedbackSeverity>("Minor");
+  const [submitting, setSubmitting] = useState(false);
+
+  const toggleCategory = (cat: FeedbackCategory) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) {
+        next.delete(cat);
+      } else {
+        next.add(cat);
+      }
+      return next;
+    });
+  };
+
+  const handleSubmit = async () => {
+    if (selectedCategories.size === 0) {
+      toast.error("Please select at least one issue category");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const categories = Array.from(selectedCategories);
+      const summary = categories.length === 1
+        ? categories[0] + " — " + post.platform
+        : categories.length + " issues — " + post.platform;
+
+      const res = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary,
+          campaignIds: [campaign.id],
+          postIds: [post.id],
+          campaignTypeIds: [],
+          issueCategories: categories,
+          description,
+          severity,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to submit feedback");
+
+      toast.success("Feedback submitted");
+      onOpenChange(false);
+      // Reset form
+      setSelectedCategories(new Set());
+      setDescription("");
+      setSeverity("Minor");
+    } catch {
+      toast.error("Failed to submit feedback");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Flag Issue</DialogTitle>
+          <DialogDescription>
+            Report a problem with this {post.platform} post. This feedback helps
+            improve future content generation.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Issue categories */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+              Issue Category
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              {FEEDBACK_CATEGORIES.map((cat) => (
+                <label
+                  key={cat}
+                  className="flex items-center gap-2 text-sm cursor-pointer"
+                >
+                  <Checkbox
+                    checked={selectedCategories.has(cat)}
+                    onCheckedChange={() => toggleCategory(cat)}
+                  />
+                  {cat}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
+              Description (optional)
+            </Label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Describe the issue in more detail..."
+              className="text-sm"
+            />
+          </div>
+
+          {/* Severity */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
+              Severity
+            </Label>
+            <div className="flex gap-3">
+              {SEVERITY_OPTIONS.map((sev) => (
+                <label
+                  key={sev}
+                  className="flex items-center gap-2 text-sm cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="severity"
+                    value={sev}
+                    checked={severity === sev}
+                    onChange={() => setSeverity(sev)}
+                    className="accent-primary"
+                  />
+                  {sev}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || selectedCategories.size === 0}
+          >
+            {submitting ? "Submitting..." : "Submit Feedback"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

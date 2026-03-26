@@ -60,6 +60,9 @@ social-media-promo-scheduler/
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
 │   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset
+│   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
+│   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
+│   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints
 │   │   │   ├── auto-auth/      # Server-side API key provider
@@ -70,7 +73,7 @@ social-media-promo-scheduler/
 │   │   │   ├── calendar/       # Calendar view (from LateWiz)
 │   │   │   ├── accounts/       # Connected social accounts (from LateWiz)
 │   │   │   ├── queue/          # Queue management (from LateWiz)
-│   │   │   └── settings/       # General settings + /brands + /platforms
+│   │   │   └── settings/       # General settings + /brands + /platforms + /campaign-types
 │   │   ├── callback/           # OAuth callbacks
 │   │   └── login/              # Auth login page
 │   ├── components/
@@ -82,14 +85,14 @@ social-media-promo-scheduler/
 │   ├── hooks/                  # React hooks (useAccounts, usePosts, etc.)
 │   ├── lib/
 │   │   ├── late-api/           # Zernio API client & platform types
-│   │   ├── airtable/           # Airtable REST client & TypeScript types
+│   │   ├── airtable/           # Airtable REST client, TypeScript types, campaign-type-rules fetch
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
-│   │   ├── prompts/            # Generation prompt templates
+│   │   ├── prompts/            # Generation prompt templates + dynamic compose-prompt.ts
 │   │   └── brand-context.tsx   # BrandProvider + useBrand() hook
 │   └── stores/                 # Zustand stores (app, auth)
-├── scripts/                    # seed-airtable.js (one-time table seeding)
+├── scripts/                    # seed-airtable.js, seed-campaign-type-rules.js (one-time seeding)
 ├── public/brands/              # Downloaded brand logos (local copies)
 ├── docs/                       # Documentation, API reference, background research
 ├── .env.local                  # Secrets (never commit)
@@ -129,6 +132,9 @@ social-media-promo-scheduler/
 | Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status, scheduling |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
+| Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 10 records: type definitions, descriptions, icons, status, scraper strategy |
+| Generation Rules | `tbliTMGAEuaU9CLBf` | Editorial rules per campaign type, composed into prompt fragments |
+| Feedback Log | `tblZWSKDdVYUcHX5J` | Structured feedback on generated posts, linked to posts/campaigns/types |
 
 ### Source base (read-only reference)
 - `appDFU2JdAw2Ckax4` — Artwork Archive campaigns base (brand logos in Campaigns table)

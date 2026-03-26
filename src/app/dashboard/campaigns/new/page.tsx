@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 import { useBrand } from "@/lib/brand-context";
 import { cn } from "@/lib/utils";
 import {
@@ -36,7 +39,10 @@ import {
   ChevronDown,
   Globe,
   Newspaper,
+  Settings,
+  Eye,
 } from "lucide-react";
+import type { GenerationRule, CampaignTypeRule } from "@/lib/airtable/types";
 
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Newsletter: Mail,
@@ -78,6 +84,35 @@ export default function NewCampaignPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
+
+  // Fetch campaign type rules from Airtable for rule counts and descriptions
+  const { data: typeRulesData } = useQuery<{ rules: CampaignTypeRule[] }>({
+    queryKey: ["campaign-type-rules"],
+    queryFn: async () => {
+      const res = await fetch("/api/campaign-type-rules");
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+  });
+
+  // Fetch generation rules for the active/previewed type
+  const activeTypeName = previewType || type;
+  const activeTypeRule = typeRulesData?.rules?.find((r) => r.name === activeTypeName);
+  const { data: genRulesData } = useQuery<{ rules: GenerationRule[] }>({
+    queryKey: ["generation-rules", activeTypeRule?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/generation-rules?campaignTypeId=${activeTypeRule!.id}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    enabled: !!activeTypeRule?.id,
+  });
+
+  const activeRuleCount = genRulesData?.rules?.filter((r) => r.active).length ?? 0;
+  const ruleCategories = useMemo(() => {
+    const cats = new Set(genRulesData?.rules?.filter((r) => r.active).map((r) => r.category) ?? []);
+    return [...cats];
+  }, [genRulesData]);
 
   const canSubmit = url.trim() !== "" && type !== null && !isSubmitting;
 
@@ -271,7 +306,16 @@ export default function NewCampaignPage() {
       {/* Campaign Type — first choice, determines everything else */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">What are you promoting?</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">What are you promoting?</CardTitle>
+            <Link
+              href="/dashboard/settings/campaign-types"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Settings className="h-3 w-3" />
+              Manage types
+            </Link>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -324,6 +368,34 @@ export default function NewCampaignPage() {
                 </span>
               )}
               <p>{CAMPAIGN_TYPE_DESCRIPTIONS[previewType || type!]}</p>
+              {activeRuleCount > 0 && (
+                <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between">
+                  <span className="text-muted-foreground/70">
+                    {activeRuleCount} active AI rule{activeRuleCount !== 1 ? "s" : ""} across{" "}
+                    {ruleCategories.length} categor{ruleCategories.length !== 1 ? "ies" : "y"}
+                  </span>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="text-primary hover:underline whitespace-nowrap ml-2 text-xs flex items-center gap-1">
+                        <Eye className="h-3 w-3" />
+                        View rules
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-96 max-h-80 overflow-y-auto p-0" align="end">
+                      <div className="p-3 border-b">
+                        <p className="text-sm font-medium">{activeTypeName} — AI Rules</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          These rules guide how AI generates social posts for this type.{" "}
+                          <Link href={`/dashboard/settings/campaign-types?type=${encodeURIComponent(activeTypeRule?.slug || "")}`} className="text-primary hover:underline">
+                            Edit in Settings →
+                          </Link>
+                        </p>
+                      </div>
+                      <RulesPreviewList rules={genRulesData?.rules ?? []} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -340,15 +412,7 @@ export default function NewCampaignPage() {
             placeholder={
               type === "Newsletter" && currentBrand?.newsletterUrl
                 ? `${currentBrand.newsletterUrl}/issues/...`
-                : type === "Newsletter"
-                  ? "https://yournewsletter.com/issues/..."
-                  : type === "Exhibition"
-                    ? "https://artworkarchive.com/.../exhibitions/..."
-                    : type === "Artist Profile"
-                      ? "https://example.com/artists/..."
-                      : type === "Podcast Episode"
-                        ? "https://example.com/podcast/episode-..."
-                        : "https://example.com/..."
+                : activeTypeRule?.urlPlaceholder || "https://example.com/..."
             }
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -511,6 +575,70 @@ export default function NewCampaignPage() {
           )}
         </Button>
       </div>
+    </div>
+  );
+}
+
+// ── Rules Preview Popover Content ────────────────────────────────────────
+
+const PRIORITY_COLORS: Record<string, string> = {
+  Critical: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+  Important: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
+  "Nice-to-have": "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+};
+
+const CATEGORY_ORDER: Record<string, number> = {
+  "Content Pairing": 0, "Tone & Voice": 1, Structure: 2,
+  "Image Handling": 3, "Link Handling": 4, Avoidance: 5, "Platform-Specific": 6,
+};
+
+function RulesPreviewList({ rules }: { rules: GenerationRule[] }) {
+  const activeRules = rules.filter((r) => r.active);
+
+  const grouped = useMemo(() => {
+    const groups = new Map<string, GenerationRule[]>();
+    for (const rule of activeRules) {
+      const existing = groups.get(rule.category) || [];
+      existing.push(rule);
+      groups.set(rule.category, existing);
+    }
+    return [...groups.entries()].sort(
+      ([a], [b]) => (CATEGORY_ORDER[a] ?? 99) - (CATEGORY_ORDER[b] ?? 99)
+    );
+  }, [activeRules]);
+
+  if (activeRules.length === 0) {
+    return (
+      <p className="p-3 text-xs text-muted-foreground italic">
+        No active rules for this type.
+      </p>
+    );
+  }
+
+  return (
+    <div className="p-2 space-y-3">
+      {grouped.map(([category, categoryRules]) => (
+        <div key={category}>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-1">
+            {category}
+          </p>
+          <div className="space-y-1">
+            {categoryRules.map((rule) => (
+              <div key={rule.id} className="flex items-start gap-2 px-1 py-1">
+                <Badge
+                  variant="secondary"
+                  className={cn("text-[9px] px-1 py-0 shrink-0 mt-0.5", PRIORITY_COLORS[rule.priority])}
+                >
+                  {rule.priority === "Nice-to-have" ? "Nice" : rule.priority}
+                </Badge>
+                <span className="text-xs text-muted-foreground leading-snug">
+                  {rule.name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

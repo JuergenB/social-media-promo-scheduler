@@ -142,6 +142,7 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Generation options — platform selector, variant limit (test mode)
 - [x] **Phase I:** Post detail: image lightbox, "Open source article" link
 - [x] **Phase I:** Campaign reset to Draft (delete posts, revert status)
+- [x] **Phase I:** Dynamic campaign type rules — Airtable-backed editorial rules, dynamic prompt composition, settings UI, feedback dialog (#39)
 - [ ] **Phase I:** Post approve/dismiss actions
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase I:** Push approved posts to Zernio scheduler

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
+import { getCampaignTypeRule, getGenerationRules } from "@/lib/airtable/campaign-type-rules";
 import { scrapeBlogPost, scrapeNewsletter, type ContentSection } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
@@ -8,6 +9,7 @@ import {
   formatPlatformSettings,
   type PlatformSetting,
 } from "@/lib/prompts/blog-post-generator";
+import { composeSystemPrompt, composeUserPrompt } from "@/lib/prompts/compose-prompt";
 import { createPlatformShortLink } from "@/lib/short-io";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -175,6 +177,29 @@ export async function POST(
           detail: brandVoice.voiceGuidelines ? `Voice: ${brandVoice.voiceGuidelines.slice(0, 80)}...` : "No voice guidelines",
         });
 
+        // ── Fetch campaign type rules from Airtable (non-blocking) ──
+        let campaignTypeRule: Awaited<ReturnType<typeof getCampaignTypeRule>> = null;
+        let generationRules: Awaited<ReturnType<typeof getGenerationRules>> = [];
+
+        try {
+          campaignTypeRule = await getCampaignTypeRule(fields.Type);
+          if (campaignTypeRule) {
+            generationRules = await getGenerationRules(campaignTypeRule.id);
+            console.log(
+              `[generate] Loaded ${generationRules.length} generation rules for type "${fields.Type}"`
+            );
+          } else {
+            console.warn(
+              `[generate] No Campaign Type Rule found for "${fields.Type}" — using hardcoded prompts`
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[generate] Failed to fetch campaign type rules — falling back to hardcoded prompts:`,
+            err
+          );
+        }
+
         // ── Step 3: Load platform settings ────────────────────────
         sendEvent(controller, encoder, {
           step: 3, totalSteps, status: "running",
@@ -267,17 +292,34 @@ export async function POST(
             detail: `${allGeneratedPosts.length} posts generated so far`,
           });
 
-          const userPrompt = buildUserPrompt({
-            blogData,
-            brandVoice,
-            editorialDirection: fields["Editorial Direction"] || "",
-            platformSettings: formattedSettings,
-            platforms: [platform],
-            postsPerPlatform,
-            imageCount: contentImages.length,
-          });
+          // Use dynamic prompt composition if Airtable rules are available,
+          // otherwise fall back to hardcoded prompts from blog-post-generator.ts
+          const systemPrompt = generationRules.length > 0
+            ? composeSystemPrompt(generationRules)
+            : SYSTEM_PROMPT;
 
-          const result = await generatePosts(SYSTEM_PROMPT, userPrompt, config);
+          const userPrompt = campaignTypeRule
+            ? composeUserPrompt({
+                blogData,
+                brandVoice,
+                editorialDirection: fields["Editorial Direction"] || "",
+                platformSettings: formattedSettings,
+                platforms: [platform],
+                postsPerPlatform,
+                imageCount: contentImages.length,
+                campaignTypeRule,
+              })
+            : buildUserPrompt({
+                blogData,
+                brandVoice,
+                editorialDirection: fields["Editorial Direction"] || "",
+                platformSettings: formattedSettings,
+                platforms: [platform],
+                postsPerPlatform,
+                imageCount: contentImages.length,
+              });
+
+          const result = await generatePosts(systemPrompt, userPrompt, config);
 
           // ── Section-aware image assignment ──────────────────────
           for (let v = 0; v < result.posts.length; v++) {
