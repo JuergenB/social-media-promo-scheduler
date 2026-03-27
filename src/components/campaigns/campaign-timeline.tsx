@@ -164,7 +164,7 @@ export function CampaignTimeline({
             </Button>
             {/* Calendar link */}
             <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
-              <Link href={`/dashboard/calendar?campaignId=${campaignId}`}>
+              <Link href={`/dashboard/calendar?date=${scheduledPosts[0]?.scheduledDate?.split("T")[0] || ""}`}>
                 <Calendar className="h-3 w-3 mr-1" />
                 Calendar
               </Link>

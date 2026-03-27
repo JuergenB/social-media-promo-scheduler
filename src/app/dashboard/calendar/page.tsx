@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { format } from "date-fns/format";
 import { parseISO } from "date-fns/parseISO";
@@ -63,9 +64,30 @@ import { toast } from "sonner";
 type ViewMode = "list" | "grid";
 
 export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  return (
+    <Suspense fallback={<div className="animate-pulse p-6">Loading...</div>}>
+      <CalendarContent />
+    </Suspense>
+  );
+}
+
+function CalendarContent() {
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get("date");
+
+  const [currentDate, setCurrentDate] = useState(() => {
+    if (dateParam) {
+      try { return parseISO(dateParam); } catch { /* fall through */ }
+    }
+    return new Date();
+  });
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(() => {
+    if (dateParam) {
+      try { return parseISO(dateParam); } catch { /* fall through */ }
+    }
+    return null;
+  });
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
