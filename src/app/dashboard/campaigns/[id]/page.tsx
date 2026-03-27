@@ -86,6 +86,10 @@ import {
   Plus,
   RotateCcw,
   Flag,
+  Upload,
+  ImageOff,
+  Pencil,
+  Link2Off,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -991,12 +995,101 @@ function PostDetailView({
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [imageEditMode, setImageEditMode] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+  const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
+  const queryClient = useQueryClient();
+
+  // Reset state when navigating between posts
+  const [prevPostId, setPrevPostId] = useState(post.id);
+  if (prevPostId !== post.id) {
+    setPrevPostId(post.id);
+    setImageEditMode(false);
+    setImageUrlInput("");
+    setCurrentImageUrl(post.imageUrl);
+    setIsDragging(false);
+  }
+
   const platformLower = toPlatformId(post.platform);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const charCount = post.content?.length || 0;
 
   // The URL to the source article — prefer shortUrl, fall back to linkUrl
   const articleUrl = post.shortUrl || post.linkUrl;
+
+  // Image update mutations
+  const updateImageMutation = useMutation({
+    mutationFn: async (imageUrl: string) => {
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl }),
+      });
+      if (!res.ok) throw new Error("Failed to update image");
+    },
+    onSuccess: (_, imageUrl) => {
+      setCurrentImageUrl(imageUrl);
+      setImageEditMode(false);
+      setImageUrlInput("");
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Image updated");
+    },
+    onError: () => toast.error("Failed to update image"),
+  });
+
+  const removeImageMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/image`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to remove image");
+    },
+    onSuccess: () => {
+      setCurrentImageUrl("");
+      setImageEditMode(false);
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Image removed");
+    },
+    onError: () => toast.error("Failed to remove image"),
+  });
+
+  const uploadImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/posts/${post.id}/image`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Failed to upload image");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setCurrentImageUrl(data.imageUrl || "");
+      setImageEditMode(false);
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Image uploaded");
+    },
+    onError: () => toast.error("Failed to upload image"),
+  });
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith("image/")) {
+      uploadImageMutation.mutate(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handlePasteUrl = () => {
+    const url = imageUrlInput.trim();
+    if (url) updateImageMutation.mutate(url);
+  };
 
   // Navigation
   const currentIndex = posts.findIndex((p) => p.id === post.id);
@@ -1053,30 +1146,128 @@ function PostDetailView({
           </Badge>
         </div>
 
-        {/* Image — clickable to open full-size lightbox */}
-        {post.imageUrl && (
-          <div className="px-6 pb-3">
+        {/* Image — editable with swap/upload/remove */}
+        <div className="px-6 pb-3">
+          {imageEditMode ? (
             <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setLightboxOpen(true)}
-              onKeyDown={(e) => e.key === "Enter" && setLightboxOpen(true)}
-              className="rounded-lg overflow-hidden bg-muted relative group cursor-pointer"
+              className={cn(
+                "rounded-lg border-2 border-dashed p-4 space-y-3 transition-colors",
+                isDragging ? "border-primary bg-primary/5" : "border-border bg-muted/30"
+              )}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={() => setIsDragging(false)}
             >
-              <img
-                src={post.imageUrl}
-                alt=""
-                className="w-full max-h-64 object-cover"
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+              {/* Current image preview with remove */}
+              {currentImageUrl && (
+                <div className="relative">
+                  <img src={currentImageUrl} alt="" className="w-full max-h-40 object-cover rounded" />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="absolute top-2 right-2 h-7 text-xs"
+                    onClick={() => removeImageMutation.mutate()}
+                    disabled={removeImageMutation.isPending}
+                  >
+                    <ImageOff className="h-3 w-3 mr-1" />
+                    Remove
+                  </Button>
+                </div>
+              )}
+
+              {/* Drag-drop zone */}
+              <div className="text-center py-4">
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {uploadImageMutation.isPending
+                    ? "Uploading..."
+                    : "Drag & drop an image here"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">or</p>
+                {/* File picker fallback */}
+                <label className="inline-block mt-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadImageMutation.mutate(file);
+                    }}
+                  />
+                  <span className="text-xs text-primary hover:underline cursor-pointer">
+                    Browse files
+                  </span>
+                </label>
               </div>
+
+              {/* Paste URL */}
+              <div className="flex gap-2">
+                <Input
+                  type="url"
+                  placeholder="Paste image URL..."
+                  value={imageUrlInput}
+                  onChange={(e) => setImageUrlInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handlePasteUrl()}
+                  className="text-sm"
+                />
+                <Button
+                  size="sm"
+                  onClick={handlePasteUrl}
+                  disabled={!imageUrlInput.trim() || updateImageMutation.isPending}
+                >
+                  {updateImageMutation.isPending ? "Saving..." : "Use URL"}
+                </Button>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs text-muted-foreground"
+                onClick={() => setImageEditMode(false)}
+              >
+                Cancel
+              </Button>
             </div>
-          </div>
-        )}
+          ) : currentImageUrl ? (
+            <>
+              <div
+                className="rounded-lg overflow-hidden bg-muted relative group cursor-pointer"
+                onClick={() => setLightboxOpen(true)}
+              >
+                <img src={currentImageUrl} alt="" className="w-full max-h-64 object-cover" />
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                  <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                </div>
+                {/* Edit button overlay */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="absolute bottom-2 right-2 h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImageEditMode(true);
+                  }}
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  Change
+                </Button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setImageEditMode(true)}
+              className="w-full rounded-lg border-2 border-dashed border-border p-6 text-center hover:border-primary/50 transition-colors"
+            >
+              <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
+              <p className="text-xs text-muted-foreground">Add an image</p>
+            </button>
+          )}
+        </div>
 
         {/* Image lightbox overlay */}
-        {post.imageUrl && lightboxOpen && (
+        {currentImageUrl && lightboxOpen && (
           <div
             className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
             onClick={() => setLightboxOpen(false)}
@@ -1088,7 +1279,7 @@ function PostDetailView({
               <X className="h-6 w-6" />
             </button>
             <img
-              src={post.imageUrl}
+              src={currentImageUrl}
               alt=""
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-pointer"
             />
