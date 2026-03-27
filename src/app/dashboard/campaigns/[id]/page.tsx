@@ -715,38 +715,7 @@ export default function CampaignDetailPage() {
                     </Button>
                   )}
                   {scheduledCount > 0 && (
-                    <Button
-                      size="sm"
-                      variant="default"
-                      className="bg-emerald-600 hover:bg-emerald-700"
-                      onClick={async () => {
-                        const confirmed = window.confirm(
-                          `Push ${scheduledCount} scheduled posts to Zernio for publishing?\n\nThis will send them to the social media scheduler. They'll go live at their assigned dates and times.`
-                        );
-                        if (!confirmed) return;
-
-                        const res = await fetch(
-                          `/api/campaigns/${campaignId}/publish`,
-                          { method: "POST" }
-                        );
-                        const data = await res.json();
-                        queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                        if (!res.ok) {
-                          toast.error(data.error || "Failed to publish to Zernio");
-                        } else if (data.failed > 0) {
-                          const errors = data.results
-                            ?.filter((r: { success: boolean }) => !r.success)
-                            .map((r: { platform: string; error: string }) => `${r.platform}: ${r.error}`)
-                            .join("\n");
-                          toast.error(`${data.published} published, ${data.failed} failed:\n${errors}`, { duration: 10000 });
-                        } else {
-                          toast.success(`${data.published} posts pushed to Zernio!`);
-                        }
-                      }}
-                    >
-                      <Send className="mr-1.5 h-3.5 w-3.5" />
-                      Push {scheduledCount} to Zernio
-                    </Button>
+                    <PublishButton campaignId={campaignId} scheduledCount={scheduledCount} />
                   )}
                 </div>
               )}
@@ -978,6 +947,61 @@ function CampaignActionButton({
     default:
       return null;
   }
+}
+
+function PublishButton({ campaignId, scheduledCount }: { campaignId: string; scheduledCount: number }) {
+  const [isPublishing, setIsPublishing] = useState(false);
+  const queryClient = useQueryClient();
+
+  return (
+    <Button
+      size="sm"
+      variant="default"
+      className="bg-emerald-600 hover:bg-emerald-700"
+      disabled={isPublishing}
+      onClick={async () => {
+        const confirmed = window.confirm(
+          `Push ${scheduledCount} scheduled posts to Zernio for publishing?\n\nThis will send them to the social media scheduler. They'll go live at their assigned dates and times.`
+        );
+        if (!confirmed) return;
+
+        setIsPublishing(true);
+        try {
+          const res = await fetch(
+            `/api/campaigns/${campaignId}/publish`,
+            { method: "POST" }
+          );
+          const data = await res.json();
+          queryClient.invalidateQueries({ queryKey: ["campaign"] });
+          if (!res.ok) {
+            toast.error(data.error || "Failed to publish to Zernio");
+          } else if (data.failed > 0) {
+            const errors = data.results
+              ?.filter((r: { success: boolean }) => !r.success)
+              .map((r: { platform: string; error: string }) => `${r.platform}: ${r.error}`)
+              .join("\n");
+            toast.error(`${data.published} published, ${data.failed} failed:\n${errors}`, { duration: 10000 });
+          } else {
+            toast.success(`${data.published} posts pushed to Zernio!`);
+          }
+        } finally {
+          setIsPublishing(false);
+        }
+      }}
+    >
+      {isPublishing ? (
+        <>
+          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          Publishing...
+        </>
+      ) : (
+        <>
+          <Send className="mr-1.5 h-3.5 w-3.5" />
+          Push {scheduledCount} to Zernio
+        </>
+      )}
+    </Button>
+  );
 }
 
 function CampaignPostRow({
