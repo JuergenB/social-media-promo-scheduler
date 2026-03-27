@@ -961,7 +961,12 @@ function PublishButton({ campaignId, scheduledCount }: { campaignId: string; sch
       disabled={isPublishing}
       onClick={async () => {
         const confirmed = window.confirm(
-          `Push ${scheduledCount} scheduled posts to Zernio for publishing?\n\nThis will send them to the social media scheduler. They'll go live at their assigned dates and times.`
+          `Push ${scheduledCount} scheduled posts to Zernio?\n\n` +
+          `These posts have been spread across the full campaign duration using the tapering algorithm. ` +
+          `Each platform respects its own cadence (e.g., LinkedIn on weekdays only, Instagram max 1/day).\n\n` +
+          `Once pushed, posts will go live at their assigned dates and times. ` +
+          `You can view them on the calendar and in the Zernio dashboard.\n\n` +
+          `Proceed?`
         );
         if (!confirmed) return;
 
