@@ -1,5 +1,6 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
+import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { getCampaignTypeRule, getGenerationRules } from "@/lib/airtable/campaign-type-rules";
 import { scrapeBlogPost, scrapeNewsletter, type ContentSection } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
@@ -102,6 +103,25 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: campaignId } = await params;
+
+  // Check brand access before starting generation
+  const access = await getUserBrandAccess();
+  if (access) {
+    try {
+      const campaign = await getRecord<CampaignFields>("Campaigns", campaignId);
+      if (!hasCampaignAccess(access, campaign.fields.Brand || [])) {
+        return NextResponse.json(
+          { error: "You do not have access to this campaign" },
+          { status: 403 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { error: "Campaign not found" },
+        { status: 404 }
+      );
+    }
+  }
 
   // Parse generation options from query params
   const url = new URL(request.url);

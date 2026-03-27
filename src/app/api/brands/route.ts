@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { listRecords } from "@/lib/airtable/client";
+import { getUserBrandAccess } from "@/lib/brand-access";
 import type { Brand } from "@/lib/airtable/types";
 
 interface AirtableAttachment {
@@ -51,9 +51,7 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
 
 export async function GET() {
   try {
-    const session = await auth();
-    const allowedBrandIds = session?.user?.allowedBrandIds || [];
-    const isSuperAdmin = session?.user?.role === "super-admin";
+    const access = await getUserBrandAccess();
 
     const records = await listRecords<BrandFields>("Brands", {
       filterByFormula: '{Status} = "Active"',
@@ -64,9 +62,9 @@ export async function GET() {
       mapBrand(r as { id: string; fields: BrandFields })
     );
 
-    // Filter by user's allowed brands (super-admin sees all)
-    if (!isSuperAdmin && allowedBrandIds.length > 0) {
-      brands = brands.filter((b) => allowedBrandIds.includes(b.id));
+    // Filter by user's allowed brands (unrestricted users see all)
+    if (access && !access.isSuperAdmin && access.brandIds.length > 0) {
+      brands = brands.filter((b) => access.brandIds.includes(b.id));
     }
 
     return NextResponse.json({ brands });

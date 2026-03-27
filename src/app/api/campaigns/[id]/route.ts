@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
+import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import type { Campaign, Post } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -41,9 +42,18 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const access = await getUserBrandAccess();
 
     // Fetch the campaign record
     const record = await getRecord<CampaignFields>("Campaigns", id);
+
+    // Check brand access
+    if (access && !hasCampaignAccess(access, record.fields.Brand || [])) {
+      return NextResponse.json(
+        { error: "You do not have access to this campaign" },
+        { status: 403 }
+      );
+    }
 
     const campaign: Campaign = {
       id: record.id,
@@ -104,6 +114,17 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const access = await getUserBrandAccess();
+
+    // Check brand access
+    const record = await getRecord<CampaignFields>("Campaigns", id);
+    if (access && !hasCampaignAccess(access, record.fields.Brand || [])) {
+      return NextResponse.json(
+        { error: "You do not have access to this campaign" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     // Only allow updates to editable fields
@@ -147,9 +168,19 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const access = await getUserBrandAccess();
 
     // Check campaign status — only allow delete if not Active/Scheduled
     const campaign = await getRecord<CampaignFields>("Campaigns", id);
+
+    // Check brand access
+    if (access && !hasCampaignAccess(access, campaign.fields.Brand || [])) {
+      return NextResponse.json(
+        { error: "You do not have access to this campaign" },
+        { status: 403 }
+      );
+    }
+
     if (campaign.fields.Status === "Active") {
       return NextResponse.json(
         { error: "Cannot delete an active campaign with scheduled posts. Archive it instead." },

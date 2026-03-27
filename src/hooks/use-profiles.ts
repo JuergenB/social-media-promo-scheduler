@@ -29,23 +29,29 @@ export function useProfiles() {
     enabled: !!late,
   });
 
-  // Auto-set default profile if not set
+  // Auto-set default profile: prefer brand's zernioProfileId, else first profile
+  const brandProfileId = currentBrand?.zernioProfileId ?? null;
   useEffect(() => {
     if (query.data?.profiles?.length && !defaultProfileId) {
-      setDefaultProfileId(query.data.profiles[0]._id);
+      if (brandProfileId && query.data.profiles.some((p: { _id: string }) => p._id === brandProfileId)) {
+        setDefaultProfileId(brandProfileId);
+      } else {
+        setDefaultProfileId(query.data.profiles[0]._id);
+      }
     }
-  }, [query.data, defaultProfileId, setDefaultProfileId]);
+  }, [query.data, defaultProfileId, setDefaultProfileId, brandProfileId]);
 
   return query;
 }
 
 /**
- * Hook to get the current profile ID (from store or first profile)
+ * Hook to get the current profile ID (from store, brand's profile, or first profile)
  */
 export function useCurrentProfileId(): string | undefined {
   const { defaultProfileId } = useAppStore();
+  const { currentBrand } = useBrand();
   const { data } = useProfiles();
-  return defaultProfileId || data?.profiles?.[0]?._id;
+  return defaultProfileId || currentBrand?.zernioProfileId || data?.profiles?.[0]?._id;
 }
 
 /**

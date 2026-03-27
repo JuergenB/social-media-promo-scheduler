@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listRecords, createRecord } from "@/lib/airtable/client";
+import { getUserBrandAccess, hasCampaignAccess, hasBrandAccess } from "@/lib/brand-access";
 import type { Campaign } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -54,11 +55,13 @@ async function fetchPageMetadata(url: string): Promise<{ title: string | null; d
 
 export async function GET() {
   try {
+    const access = await getUserBrandAccess();
+
     const records = await listRecords<CampaignFields>("Campaigns", {
       sort: [{ field: "Created At", direction: "desc" }],
     });
 
-    const campaigns: Campaign[] = records.map((r) => ({
+    let campaigns: Campaign[] = records.map((r) => ({
       id: r.id,
       name: r.fields.Name || "",
       description: r.fields.Description || "",
@@ -74,6 +77,11 @@ export async function GET() {
       createdBy: r.fields["Created By"] || "",
     }));
 
+    // Filter by user's allowed brands
+    if (access && !access.isSuperAdmin) {
+      campaigns = campaigns.filter((c) => hasCampaignAccess(access, c.brandIds));
+    }
+
     return NextResponse.json({ campaigns });
   } catch (error) {
     console.error("Failed to fetch campaigns:", error);
@@ -86,7 +94,16 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const access = await getUserBrandAccess();
     const body = await request.json();
+
+    // Validate brand access
+    if (body.brandId && access && !hasBrandAccess(access, body.brandId)) {
+      return NextResponse.json(
+        { error: "You do not have access to this brand" },
+        { status: 403 }
+      );
+    }
 
     // Fetch page metadata (title + og:image) from the URL
     const metadata = await fetchPageMetadata(body.url);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord } from "@/lib/airtable/client";
+import { getUserBrandAccess, hasBrandAccess } from "@/lib/brand-access";
 import { resolveZernioKey } from "@/lib/late-api/client";
 
 interface BrandFields {
@@ -9,9 +10,18 @@ interface BrandFields {
 /**
  * Returns the Zernio API key for the current brand (or global fallback).
  * Accepts optional ?brandId= query parameter for per-brand key resolution.
+ * Validates that the user has access to the requested brand.
  */
 export async function GET(request: NextRequest) {
   const brandId = request.nextUrl.searchParams.get("brandId");
+
+  // Validate brand access
+  if (brandId) {
+    const access = await getUserBrandAccess();
+    if (access && !hasBrandAccess(access, brandId)) {
+      return NextResponse.json({ apiKey: null });
+    }
+  }
 
   let brand: { zernioApiKeyLabel?: string | null } | undefined;
 
