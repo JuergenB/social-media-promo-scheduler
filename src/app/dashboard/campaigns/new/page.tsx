@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { differenceInDays, parseISO } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +23,10 @@ import {
   type DistributionBias,
 } from "@/lib/airtable/types";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
+import { useAccounts } from "@/hooks/use-accounts";
+import { PlatformIcon } from "@/components/shared/platform-icon";
+import { Switch } from "@/components/ui/switch";
+import type { Platform } from "@/lib/late-api";
 import {
   ArrowLeft,
   Mail,
@@ -34,13 +39,17 @@ import {
   Film,
   Building2,
   Sparkles,
+  Megaphone,
   Loader2,
   ExternalLink,
   ChevronDown,
+  ChevronUp,
   Globe,
   Newspaper,
   Settings,
   Eye,
+  Plus,
+  X,
 } from "lucide-react";
 import type { GenerationRule, CampaignTypeRule } from "@/lib/airtable/types";
 
@@ -51,6 +60,7 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   "Artist Profile": User,
   "Podcast Episode": Mic,
   Event: CalendarDays,
+  "Open Call": Megaphone,
   "Public Art": Landmark,
   "Video/Film": Film,
   Institutional: Building2,
@@ -63,7 +73,8 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Scrapes exhibition pages and artist profiles to build a months-long drip campaign. (Coming soon)",
   "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms. (Coming soon)",
   "Podcast Episode": "Promote a podcast episode using show notes, guest highlights, and key quotes. Can incorporate transcripts for deeper content extraction. (Coming soon)",
-  Event: "Promote open calls and submission deadlines. Time-sensitive campaigns that build toward a deadline, inviting artists to submit their work. (Coming soon)",
+  Event: "Promote physical or virtual events — gallery openings, anniversary celebrations, studio tours, art fairs. Date-driven campaigns that build intensity toward the event date with RSVP/ticket CTAs.",
+  "Open Call": "Promote open calls for artist submissions. Deadline-driven campaigns that build toward a submission deadline with apply/submit CTAs. (Coming soon)",
   "Public Art": "Promote public art installations, murals, and outdoor exhibitions with location-specific content and visual storytelling. (Coming soon)",
   "Video/Film": "Promote video content, short films, or video art with platform-optimized teasers and behind-the-scenes posts. (Coming soon)",
   Institutional: "Promote organizational news, grants, residencies, and institutional announcements across social platforms. (Coming soon)",
@@ -84,6 +95,49 @@ export default function NewCampaignPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
+
+  // Event-specific state
+  const [eventDate, setEventDate] = useState("");
+  const [eventDetails, setEventDetails] = useState("");
+
+  // Multi-URL state (all campaign types)
+  const [additionalUrls, setAdditionalUrls] = useState<string[]>([]);
+
+  // Generation options state (all campaign types)
+  const [showGenOptions, setShowGenOptions] = useState(true);
+  const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
+  const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
+  const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null);
+
+  // Connected accounts for generation options
+  const { data: accountsData } = useAccounts();
+  const connectedAccounts = accountsData?.accounts ?? [];
+  const connectedPlatforms = useMemo(() => {
+    const platforms = new Set<string>();
+    for (const account of connectedAccounts) {
+      if (account.isActive) platforms.add(account.platform);
+    }
+    return platforms;
+  }, [connectedAccounts]);
+
+  // Initialize genPlatforms from connected accounts
+  useEffect(() => {
+    if (connectedPlatforms.size > 0 && !genPlatformsInitialized) {
+      setGenPlatforms(new Set(connectedPlatforms));
+      setGenPlatformsInitialized(true);
+    }
+  }, [connectedPlatforms, genPlatformsInitialized]);
+
+  const isDateDriven = type === "Event" || type === "Open Call";
+
+  // Auto-compute duration from event date
+  useEffect(() => {
+    if (isDateDriven && eventDate) {
+      const days = differenceInDays(parseISO(eventDate), new Date());
+      setDurationDays(Math.max(1, days));
+      setDistributionBias("Back-loaded");
+    }
+  }, [eventDate, isDateDriven]);
 
   // Fetch campaign type rules from Airtable for rule counts and descriptions
   const { data: typeRulesData } = useQuery<{ rules: CampaignTypeRule[] }>({
@@ -131,6 +185,11 @@ export default function NewCampaignPage() {
           durationDays,
           distributionBias,
           editorialDirection,
+          ...(isDateDriven && eventDate ? { eventDate } : {}),
+          ...(isDateDriven && eventDetails ? { eventDetails } : {}),
+          ...(additionalUrls.filter(Boolean).length > 0 ? { additionalUrls: additionalUrls.filter(Boolean).join("\n") } : {}),
+          ...(genPlatforms.size > 0 ? { targetPlatforms: Array.from(genPlatforms).join(",") } : {}),
+          ...(genMaxPerPlatform !== null ? { maxVariantsPerPlatform: genMaxPerPlatform } : {}),
         }),
       });
 
@@ -406,25 +465,65 @@ export default function NewCampaignPage() {
         <CardHeader>
           <CardTitle className="text-base">Source URL</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Input
-            type="url"
-            placeholder={
-              type === "Newsletter" && currentBrand?.newsletterUrl
-                ? `${currentBrand.newsletterUrl}/issues/...`
-                : activeTypeRule?.urlPlaceholder || "https://example.com/..."
-            }
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="text-base"
-          />
-          <p className="text-xs text-muted-foreground mt-2">
-            {type === "Newsletter"
-              ? "Paste the link to the specific newsletter issue. We\u2019ll extract each story and its images."
-              : type === "Blog Post"
-                ? "Paste the blog post URL. We\u2019ll extract the content, images, and key quotes."
-                : "Paste a link to the content you want to promote."}
-          </p>
+        <CardContent className="space-y-3">
+          <div>
+            <Input
+              type="url"
+              placeholder={
+                type === "Newsletter" && currentBrand?.newsletterUrl
+                  ? `${currentBrand.newsletterUrl}/issues/...`
+                  : activeTypeRule?.urlPlaceholder || "https://example.com/..."
+              }
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="text-base"
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              {type === "Newsletter"
+                ? "Paste the link to the specific newsletter issue. We\u2019ll extract each story and its images."
+                : type === "Blog Post"
+                  ? "Paste the blog post URL. We\u2019ll extract the content, images, and key quotes."
+                  : isDateDriven
+                    ? "Paste the event or listing page URL. We\u2019ll extract dates, details, and images."
+                    : "Paste a link to the content you want to promote."}
+            </p>
+          </div>
+
+          {/* Additional URLs */}
+          {additionalUrls.map((addUrl, i) => (
+            <div key={i} className="flex gap-2">
+              <Input
+                type="url"
+                placeholder="https://additional-source.com/..."
+                value={addUrl}
+                onChange={(e) => {
+                  const next = [...additionalUrls];
+                  next[i] = e.target.value;
+                  setAdditionalUrls(next);
+                }}
+                className="text-sm"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                onClick={() => setAdditionalUrls(additionalUrls.filter((_, j) => j !== i))}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={() => setAdditionalUrls([...additionalUrls, ""])}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add another source URL
+          </Button>
         </CardContent>
       </Card>
 
@@ -453,68 +552,114 @@ export default function NewCampaignPage() {
         </CardContent>
       </Card>
 
+      {/* Event Details — only for date-driven types */}
+      {isDateDriven && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Event Details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Textarea
+              placeholder="Location, venue, time, tickets/RSVP link, dress code, parking... Include any details not on the source page."
+              value={eventDetails}
+              onChange={(e) => setEventDetails(e.target.value)}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground mt-2">
+              These details supplement what we scrape from the URL. Include anything the audience needs to know.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Duration & Distribution */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Duration & Distribution</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Duration presets */}
-          <div>
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
-              Campaign Length
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              {DURATION_PRESETS.map((preset) => (
-                <Button
-                  key={preset.label}
-                  type="button"
-                  variant={
-                    !customDuration && durationDays === preset.days
-                      ? "default"
-                      : "outline"
-                  }
-                  size="sm"
-                  onClick={() => {
-                    setDurationDays(preset.days);
-                    setDistributionBias(preset.defaultBias);
-                    setCustomDuration(false);
-                  }}
-                >
-                  {preset.label}{" "}
-                  <span className="ml-1 text-xs opacity-70">
-                    {preset.description}
-                  </span>
-                </Button>
-              ))}
-              <Button
-                type="button"
-                variant={customDuration ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCustomDuration(true)}
-              >
-                Custom
-              </Button>
+          {/* Date picker for date-driven types, duration presets for others */}
+          {isDateDriven ? (
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                {type === "Event" ? "Event Date" : "Submission Deadline"}
+              </Label>
+              <Input
+                type="date"
+                value={eventDate}
+                min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                onChange={(e) => setEventDate(e.target.value)}
+                className="w-48"
+              />
+              {eventDate && durationDays > 0 && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {durationDays} day{durationDays !== 1 ? "s" : ""} of promotion, building toward{" "}
+                  {new Date(eventDate + "T00:00:00").toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
             </div>
-            {customDuration && (
-              <div className="flex items-center gap-2 mt-2">
-                <Label htmlFor="custom-days" className="text-sm whitespace-nowrap">
-                  Days:
-                </Label>
-                <Input
-                  id="custom-days"
-                  type="number"
-                  min={7}
-                  max={730}
-                  value={durationDays}
-                  onChange={(e) =>
-                    setDurationDays(parseInt(e.target.value) || 0)
-                  }
-                  className="w-24"
-                />
+          ) : (
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                Campaign Length
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    variant={
+                      !customDuration && durationDays === preset.days
+                        ? "default"
+                        : "outline"
+                    }
+                    size="sm"
+                    onClick={() => {
+                      setDurationDays(preset.days);
+                      setDistributionBias(preset.defaultBias);
+                      setCustomDuration(false);
+                    }}
+                  >
+                    {preset.label}{" "}
+                    <span className="ml-1 text-xs opacity-70">
+                      {preset.description}
+                    </span>
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant={customDuration ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCustomDuration(true)}
+                >
+                  Custom
+                </Button>
               </div>
-            )}
-          </div>
+              {customDuration && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Label htmlFor="custom-days" className="text-sm whitespace-nowrap">
+                    Days:
+                  </Label>
+                  <Input
+                    id="custom-days"
+                    type="number"
+                    min={7}
+                    max={730}
+                    value={durationDays}
+                    onChange={(e) =>
+                      setDurationDays(parseInt(e.target.value) || 0)
+                    }
+                    className="w-24"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Distribution bias */}
           <div>
@@ -528,19 +673,22 @@ export default function NewCampaignPage() {
                   type="button"
                   variant={distributionBias === bias ? "default" : "outline"}
                   size="sm"
-                  className="flex-1"
-                  onClick={() => setDistributionBias(bias)}
+                  className={cn("flex-1", isDateDriven && bias !== "Back-loaded" && "opacity-50")}
+                  onClick={() => !isDateDriven && setDistributionBias(bias)}
+                  disabled={isDateDriven && bias !== "Back-loaded"}
                 >
                   {bias}
                 </Button>
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
-              {distributionBias === "Front-loaded"
-                ? "Heavy promotion early, tapering off over time. Best for launches and events."
-                : distributionBias === "Back-loaded"
-                  ? "Builds momentum toward a deadline. Good for countdowns and upcoming events."
-                  : "Steady presence throughout. Works well for evergreen content."}
+              {isDateDriven
+                ? "Event campaigns always build intensity toward the date."
+                : distributionBias === "Front-loaded"
+                  ? "Heavy promotion early, tapering off over time. Best for launches and events."
+                  : distributionBias === "Back-loaded"
+                    ? "Builds momentum toward a deadline. Good for countdowns and upcoming events."
+                    : "Steady presence throughout. Works well for evergreen content."}
             </p>
           </div>
 
@@ -557,6 +705,87 @@ export default function NewCampaignPage() {
             </div>
           </div>
         </CardContent>
+      </Card>
+
+      {/* Generation Options — collapsible, all campaign types */}
+      <Card>
+        <CardHeader className="cursor-pointer" onClick={() => setShowGenOptions(!showGenOptions)}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Generation Options</CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground">
+              {showGenOptions ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {showGenOptions ? "Hide" : "Show"}
+            </Button>
+          </div>
+        </CardHeader>
+        {showGenOptions && (
+          <CardContent className="space-y-4 pt-0">
+            {/* Platform selection */}
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                Platforms to generate
+              </Label>
+              <div className="flex flex-wrap gap-3">
+                {connectedPlatforms.size === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">
+                    No connected accounts for {currentBrand?.name || "this brand"}.
+                  </p>
+                ) : (
+                  [...connectedPlatforms].sort().map((p) => {
+                    const PLATFORM_LABELS: Record<string, string> = {
+                      twitter: "X/Twitter",
+                      googlebusiness: "Google Business",
+                    };
+                    const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
+                    return (
+                      <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                        <Switch
+                          checked={genPlatforms.has(p)}
+                          onCheckedChange={(checked) => {
+                            setGenPlatforms((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(p); else next.delete(p);
+                              return next;
+                            });
+                          }}
+                          className="scale-75"
+                        />
+                        <PlatformIcon platform={p as Platform} size="xs" showColor />
+                        <span className="text-xs">{label}</span>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* Variant count */}
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                Max variants per platform
+              </Label>
+              <div className="flex items-center gap-2">
+                {[1, 2, 3, 5, null].map((val) => (
+                  <Button
+                    key={val ?? "auto"}
+                    type="button"
+                    variant={genMaxPerPlatform === val ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 text-xs px-2.5"
+                    onClick={() => setGenMaxPerPlatform(val)}
+                  >
+                    {val === null ? "Auto" : val}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                {genMaxPerPlatform
+                  ? `${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
+                  : "Auto: variant count based on content and campaign duration"}
+              </p>
+            </div>
+          </CardContent>
+        )}
       </Card>
 
       {/* Submit */}

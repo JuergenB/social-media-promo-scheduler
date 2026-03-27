@@ -70,6 +70,7 @@ import {
   User,
   Mic,
   CalendarDays,
+  Megaphone,
   Landmark,
   Film,
   Building2,
@@ -82,6 +83,7 @@ import {
   X,
   Link2,
   Maximize2,
+  Plus,
   RotateCcw,
   Flag,
 } from "lucide-react";
@@ -128,6 +130,7 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   "Artist Profile": User,
   "Podcast Episode": Mic,
   Event: CalendarDays,
+  "Open Call": Megaphone,
   "Public Art": Landmark,
   "Video/Film": Film,
   Institutional: Building2,
@@ -202,14 +205,6 @@ export default function CampaignDetailPage() {
     return platforms;
   }, [connectedAccounts]);
 
-  // Initialize genPlatforms from connected accounts (once loaded)
-  useEffect(() => {
-    if (connectedPlatforms.size > 0 && !genPlatformsInitialized) {
-      setGenPlatforms(new Set(connectedPlatforms));
-      setGenPlatformsInitialized(true);
-    }
-  }, [connectedPlatforms, genPlatformsInitialized]);
-
   const { data, isLoading, error } = useQuery<{ campaign: Campaign; posts: Post[] }>({
     queryKey: ["campaign", campaignId],
     queryFn: async () => {
@@ -222,6 +217,33 @@ export default function CampaignDetailPage() {
 
   const campaign = data?.campaign;
   const posts = data?.posts ?? [];
+
+  // Initialize genPlatforms: prefer saved campaign values, fall back to connected accounts
+  useEffect(() => {
+    if (genPlatformsInitialized) return;
+
+    // Try campaign's saved target platforms first
+    if (campaign?.targetPlatforms && campaign.targetPlatforms.length > 0) {
+      setGenPlatforms(new Set(campaign.targetPlatforms));
+      setGenPlatformsInitialized(true);
+      return;
+    }
+
+    // Fall back to connected accounts
+    if (connectedPlatforms.size > 0) {
+      setGenPlatforms(new Set(connectedPlatforms));
+      setGenPlatformsInitialized(true);
+    }
+  }, [connectedPlatforms, genPlatformsInitialized, campaign?.targetPlatforms]);
+
+  // Initialize genMaxPerPlatform from campaign's saved value
+  const [genMaxInitialized, setGenMaxInitialized] = useState(false);
+  useEffect(() => {
+    if (!genMaxInitialized && campaign?.maxVariantsPerPlatform != null) {
+      setGenMaxPerPlatform(campaign.maxVariantsPerPlatform);
+      setGenMaxInitialized(true);
+    }
+  }, [campaign?.maxVariantsPerPlatform, genMaxInitialized]);
 
   // All unique platforms across posts
   const allPlatforms = useMemo(() => {
@@ -1178,13 +1200,23 @@ function CampaignSettingsEditable({
   const [customDuration, setCustomDuration] = useState(
     !DURATION_PRESETS.some((p) => p.days === campaign.durationDays)
   );
+  const [eventDate, setEventDate] = useState(campaign.eventDate || "");
+  const [eventDetails, setEventDetails] = useState(campaign.eventDetails || "");
+  const [additionalUrlsList, setAdditionalUrlsList] = useState<string[]>(
+    campaign.additionalUrls ? campaign.additionalUrls.split("\n").filter(Boolean) : []
+  );
+
+  const isDateDriven = type === "Event" || type === "Open Call";
 
   const hasChanges =
     url !== campaign.url ||
     type !== campaign.type ||
     durationDays !== campaign.durationDays ||
     distributionBias !== (campaign.distributionBias || "Front-loaded") ||
-    editorialDirection !== (campaign.editorialDirection || "");
+    editorialDirection !== (campaign.editorialDirection || "") ||
+    eventDate !== (campaign.eventDate || "") ||
+    eventDetails !== (campaign.eventDetails || "") ||
+    additionalUrlsList.filter(Boolean).join("\n") !== (campaign.additionalUrls || "");
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1197,6 +1229,9 @@ function CampaignSettingsEditable({
           durationDays,
           distributionBias,
           editorialDirection,
+          eventDate: eventDate || undefined,
+          eventDetails: eventDetails || undefined,
+          additionalUrls: additionalUrlsList.filter(Boolean).join("\n") || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to save");
@@ -1227,6 +1262,69 @@ function CampaignSettingsEditable({
           />
         </CardContent>
       </Card>
+
+      {/* Additional URLs */}
+      <Card>
+        <CardContent className="pt-6 space-y-3">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+            Additional Source URLs
+          </Label>
+          {additionalUrlsList.map((addUrl, i) => (
+            <div key={i} className="flex gap-2">
+              <Input
+                type="url"
+                placeholder="https://additional-source.com/..."
+                value={addUrl}
+                onChange={(e) => {
+                  const next = [...additionalUrlsList];
+                  next[i] = e.target.value;
+                  setAdditionalUrlsList(next);
+                }}
+                className="text-sm"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                onClick={() => setAdditionalUrlsList(additionalUrlsList.filter((_, j) => j !== i))}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={() => setAdditionalUrlsList([...additionalUrlsList, ""])}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add source URL
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Event Details — only for date-driven types */}
+      {isDateDriven && (
+        <Card>
+          <CardContent className="pt-6 space-y-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Event Details
+            </Label>
+            <Textarea
+              placeholder="Location, venue, time, tickets/RSVP link, dress code..."
+              value={eventDetails}
+              onChange={(e) => setEventDetails(e.target.value)}
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              Supplement scraped content with details the audience needs to know.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Editorial Direction */}
       <Card>
@@ -1280,62 +1378,89 @@ function CampaignSettingsEditable({
       {/* Duration & Distribution */}
       <Card>
         <CardContent className="pt-6 space-y-5">
-          {/* Duration presets */}
-          <div>
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
-              Campaign Length
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              {DURATION_PRESETS.map((preset) => (
-                <Button
-                  key={preset.label}
-                  type="button"
-                  variant={
-                    !customDuration && durationDays === preset.days
-                      ? "default"
-                      : "outline"
+          {/* Date picker for date-driven types, duration presets for others */}
+          {isDateDriven ? (
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                {type === "Event" ? "Event Date" : "Submission Deadline"}
+              </Label>
+              <Input
+                type="date"
+                value={eventDate}
+                min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                onChange={(e) => {
+                  setEventDate(e.target.value);
+                  if (e.target.value) {
+                    const days = Math.max(1, Math.ceil((new Date(e.target.value).getTime() - Date.now()) / 86400000));
+                    setDurationDays(days);
+                    setDistributionBias("Back-loaded");
                   }
-                  size="sm"
-                  onClick={() => {
-                    setDurationDays(preset.days);
-                    setDistributionBias(preset.defaultBias);
-                    setCustomDuration(false);
-                  }}
-                >
-                  {preset.label}{" "}
-                  <span className="ml-1 text-xs opacity-70">
-                    {preset.description}
-                  </span>
-                </Button>
-              ))}
-              <Button
-                type="button"
-                variant={customDuration ? "default" : "outline"}
-                size="sm"
-                onClick={() => setCustomDuration(true)}
-              >
-                Custom
-              </Button>
+                }}
+                className="w-48"
+              />
+              {eventDate && durationDays > 0 && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {durationDays} day{durationDays !== 1 ? "s" : ""} of promotion
+                </p>
+              )}
             </div>
-            {customDuration && (
-              <div className="flex items-center gap-2 mt-2">
-                <Label htmlFor="custom-days" className="text-sm whitespace-nowrap">
-                  Days:
-                </Label>
-                <Input
-                  id="custom-days"
-                  type="number"
-                  min={7}
-                  max={730}
-                  value={durationDays}
-                  onChange={(e) =>
-                    setDurationDays(parseInt(e.target.value) || 0)
-                  }
-                  className="w-24"
-                />
+          ) : (
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                Campaign Length
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    variant={
+                      !customDuration && durationDays === preset.days
+                        ? "default"
+                        : "outline"
+                    }
+                    size="sm"
+                    onClick={() => {
+                      setDurationDays(preset.days);
+                      setDistributionBias(preset.defaultBias);
+                      setCustomDuration(false);
+                    }}
+                  >
+                    {preset.label}{" "}
+                    <span className="ml-1 text-xs opacity-70">
+                      {preset.description}
+                    </span>
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  variant={customDuration ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCustomDuration(true)}
+                >
+                  Custom
+                </Button>
               </div>
-            )}
-          </div>
+              {customDuration && (
+                <div className="flex items-center gap-2 mt-2">
+                  <Label htmlFor="custom-days" className="text-sm whitespace-nowrap">
+                    Days:
+                  </Label>
+                  <Input
+                    id="custom-days"
+                    type="number"
+                    min={7}
+                    max={730}
+                    value={durationDays}
+                    onChange={(e) =>
+                      setDurationDays(parseInt(e.target.value) || 0)
+                    }
+                    className="w-24"
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Distribution bias */}
           <div>
@@ -1349,19 +1474,22 @@ function CampaignSettingsEditable({
                   type="button"
                   variant={distributionBias === bias ? "default" : "outline"}
                   size="sm"
-                  className="flex-1"
-                  onClick={() => setDistributionBias(bias)}
+                  className={cn("flex-1", isDateDriven && bias !== "Back-loaded" && "opacity-50")}
+                  onClick={() => !isDateDriven && setDistributionBias(bias)}
+                  disabled={isDateDriven && bias !== "Back-loaded"}
                 >
                   {bias}
                 </Button>
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
-              {distributionBias === "Front-loaded"
-                ? "Heavy promotion early, tapering off over time. Best for launches and events."
-                : distributionBias === "Back-loaded"
-                  ? "Builds momentum toward a deadline. Good for countdowns and upcoming events."
-                  : "Steady presence throughout. Works well for evergreen content."}
+              {isDateDriven
+                ? "Event campaigns always build intensity toward the date."
+                : distributionBias === "Front-loaded"
+                  ? "Heavy promotion early, tapering off over time. Best for launches and events."
+                  : distributionBias === "Back-loaded"
+                    ? "Builds momentum toward a deadline. Good for countdowns and upcoming events."
+                    : "Steady presence throughout. Works well for evergreen content."}
             </p>
           </div>
 

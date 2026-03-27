@@ -35,6 +35,7 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   "Artist Profile": User,
   "Podcast Episode": Mic,
   Event: CalendarDays,
+  "Open Call": Megaphone,
   "Public Art": Landmark,
   "Video/Film": Film,
   Institutional: Building2,

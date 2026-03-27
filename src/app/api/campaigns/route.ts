@@ -16,6 +16,11 @@ interface CampaignFields {
   Status: string;
   "Created At": string;
   "Created By": string;
+  "Event Date": string;
+  "Event Details": string;
+  "Additional URLs": string;
+  "Target Platforms": string;
+  "Max Variants Per Platform": number;
 }
 
 /**
@@ -46,7 +51,20 @@ async function fetchPageMetadata(url: string): Promise<{ title: string | null; d
     const metadata = data?.data?.metadata;
     const title = metadata?.title || metadata?.ogTitle || metadata?.["og:title"] || null;
     const description = metadata?.description || metadata?.ogDescription || metadata?.["og:description"] || null;
-    const imageUrl = metadata?.ogImage || metadata?.["og:image"] || null;
+    let imageUrl = metadata?.ogImage || metadata?.["og:image"] || null;
+
+    // Fallback: extract first content image from markdown if no og:image
+    if (!imageUrl && data?.data?.markdown) {
+      const imgMatch = data.data.markdown.match(/!\[[^\]]*\]\((https?:\/\/[^)]+\.(?:jpg|jpeg|png|webp|gif)[^)]*)\)/i);
+      if (imgMatch) {
+        // Skip tiny tracking pixels and icons
+        const candidateUrl = imgMatch[1];
+        if (!candidateUrl.includes("cleardot") && !candidateUrl.includes("1x1")) {
+          imageUrl = candidateUrl;
+        }
+      }
+    }
+
     return { title, description, imageUrl };
   } catch {
     return { title: null, description: null, imageUrl: null };
@@ -75,6 +93,11 @@ export async function GET() {
       status: r.fields.Status as Campaign["status"],
       createdAt: r.fields["Created At"] || "",
       createdBy: r.fields["Created By"] || "",
+      eventDate: r.fields["Event Date"] || undefined,
+      eventDetails: r.fields["Event Details"] || undefined,
+      additionalUrls: r.fields["Additional URLs"] || undefined,
+      targetPlatforms: r.fields["Target Platforms"] ? r.fields["Target Platforms"].split(",") : undefined,
+      maxVariantsPerPlatform: r.fields["Max Variants Per Platform"] ?? undefined,
     }));
 
     // Filter by user's allowed brands
@@ -121,6 +144,11 @@ export async function POST(request: NextRequest) {
       Status: "Draft",
       "Created At": new Date().toISOString(),
       "Created By": body.createdBy || "",
+      ...(body.eventDate ? { "Event Date": body.eventDate } : {}),
+      ...(body.eventDetails ? { "Event Details": body.eventDetails } : {}),
+      ...(body.additionalUrls ? { "Additional URLs": body.additionalUrls } : {}),
+      ...(body.targetPlatforms ? { "Target Platforms": body.targetPlatforms } : {}),
+      ...(body.maxVariantsPerPlatform != null ? { "Max Variants Per Platform": body.maxVariantsPerPlatform } : {}),
     });
 
     return NextResponse.json({ campaign: record }, { status: 201 });

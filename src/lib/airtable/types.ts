@@ -25,6 +25,7 @@ export const CAMPAIGN_TYPES = [
   "Artist Profile",
   "Podcast Episode",
   "Event",
+  "Open Call",
   "Public Art",
   "Video/Film",
   "Institutional",
@@ -34,7 +35,7 @@ export const CAMPAIGN_TYPES = [
 export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
 
 /** Campaign types with generation pipeline implemented */
-export const ENABLED_CAMPAIGN_TYPES: CampaignType[] = ["Newsletter", "Blog Post"];
+export const ENABLED_CAMPAIGN_TYPES: CampaignType[] = ["Newsletter", "Blog Post", "Event"];
 
 export const CAMPAIGN_STATUSES = [
   "Draft",
@@ -71,6 +72,16 @@ export interface Campaign {
   status: CampaignStatus;
   createdAt: string;
   createdBy: string;
+  /** Event/Open Call: the target date (event date or submission deadline) */
+  eventDate?: string;
+  /** Event/Open Call: user-supplied details (location, tickets, eligibility, etc.) */
+  eventDetails?: string;
+  /** Additional source URLs (one per line) for supplemental scraping */
+  additionalUrls?: string;
+  /** Comma-separated platform keys for generation (e.g. "instagram,twitter,linkedin") */
+  targetPlatforms?: string[];
+  /** Max post variants per platform (null = Auto) */
+  maxVariantsPerPlatform?: number | null;
 }
 
 export const POST_STATUSES = [
@@ -142,6 +153,8 @@ export type CampaignTypeStatus = "Active" | "Coming Soon" | "Disabled";
 export type ScraperStrategy =
   | "blog-post"
   | "newsletter"
+  | "event"
+  | "open-call"
   | "html-structured"
   | "api-fetch"
   | "manual";

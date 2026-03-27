@@ -16,6 +16,11 @@ interface CampaignFields {
   Status: string;
   "Created At": string;
   "Created By": string;
+  "Event Date": string;
+  "Event Details": string;
+  "Additional URLs": string;
+  "Target Platforms": string;
+  "Max Variants Per Platform": number;
 }
 
 interface PostFields {
@@ -69,6 +74,11 @@ export async function GET(
       status: record.fields.Status as Campaign["status"],
       createdAt: record.fields["Created At"] || "",
       createdBy: record.fields["Created By"] || "",
+      eventDate: record.fields["Event Date"] || undefined,
+      eventDetails: record.fields["Event Details"] || undefined,
+      additionalUrls: record.fields["Additional URLs"] || undefined,
+      targetPlatforms: record.fields["Target Platforms"] ? record.fields["Target Platforms"].split(",") : undefined,
+      maxVariantsPerPlatform: record.fields["Max Variants Per Platform"] ?? undefined,
     };
 
     // Fetch posts linked to this campaign
@@ -134,6 +144,11 @@ export async function PATCH(
       durationDays: "Duration Days",
       distributionBias: "Distribution Bias",
       editorialDirection: "Editorial Direction",
+      eventDate: "Event Date",
+      eventDetails: "Event Details",
+      additionalUrls: "Additional URLs",
+      targetPlatforms: "Target Platforms",
+      maxVariantsPerPlatform: "Max Variants Per Platform",
     };
 
     const fields: Record<string, unknown> = {};
