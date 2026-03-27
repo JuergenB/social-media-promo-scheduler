@@ -89,6 +89,7 @@ export const POST_STATUSES = [
   "Approved",
   "Modified",
   "Dismissed",
+  "Queued",
   "Scheduled",
   "Published",
   "Failed",

@@ -44,7 +44,7 @@ const PLATFORM_MAP: Record<string, string> = {
  * POST /api/campaigns/[id]/publish
  *
  * Push all scheduled posts to Zernio for actual publishing.
- * Posts must be in "Scheduled" status with assigned dates.
+ * Posts must be in "Queued" status with assigned dates.
  *
  * This is the final step — after approval and scheduling.
  * Creates Zernio posts and stores the zernioPostId on each record.
@@ -100,7 +100,7 @@ export async function POST(
     const scheduledPosts = allPosts.filter(
       (p) =>
         p.fields.Campaign?.includes(campaignId) &&
-        p.fields.Status === "Scheduled" &&
+        p.fields.Status === "Queued" &&
         !p.fields["Zernio Post ID"] // Skip already-pushed posts
     );
 
@@ -177,7 +177,7 @@ export async function POST(
         const zernioPostId = (zernioPost as { _id?: string })?._id || "";
         await updateRecord("Posts", post.id, {
           "Zernio Post ID": zernioPostId,
-          Status: "Published",
+          Status: "Scheduled",
         });
 
         results.push({
