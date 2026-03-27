@@ -17,6 +17,7 @@ interface PostFields {
   Campaign: string[];
   Platform: string;
   Status: string;
+  "Scheduled Date": string;
 }
 
 /** Map Airtable platform names to Zernio platform IDs */
@@ -82,19 +83,30 @@ export async function POST(
       }
     }
 
-    // Fetch approved posts for this campaign
+    // Fetch all posts for this campaign
     const allPosts = await listRecords<PostFields>("Posts", {});
-    const approvedPosts = allPosts.filter(
-      (p) =>
-        p.fields.Campaign?.includes(campaignId) &&
-        p.fields.Status === "Approved"
+    const campaignPosts = allPosts.filter(
+      (p) => p.fields.Campaign?.includes(campaignId)
     );
+
+    const approvedPosts = campaignPosts.filter((p) => p.fields.Status === "Approved");
 
     if (approvedPosts.length === 0) {
       return NextResponse.json(
         { error: "No approved posts to schedule" },
         { status: 400 }
       );
+    }
+
+    // Find already-scheduled dates to avoid collisions (for batch scheduling)
+    const alreadyScheduledDates = new Map<string, Set<string>>(); // platform → set of date strings
+    for (const p of campaignPosts) {
+      if ((p.fields.Status === "Scheduled" || p.fields.Status === "Published") && p.fields["Scheduled Date"]) {
+        const plat = PLATFORM_MAP[p.fields.Platform] || p.fields.Platform.toLowerCase();
+        const dateStr = p.fields["Scheduled Date"].split("T")[0];
+        if (!alreadyScheduledDates.has(plat)) alreadyScheduledDates.set(plat, new Set());
+        alreadyScheduledDates.get(plat)!.add(dateStr);
+      }
     }
 
     const posts = approvedPosts.map((p) => ({
@@ -121,6 +133,7 @@ export async function POST(
         startDate,
         durationDays,
         bias,
+        excludedDates: alreadyScheduledDates,
       });
 
       return NextResponse.json({
@@ -143,6 +156,7 @@ export async function POST(
       startDate,
       durationDays,
       bias,
+      excludedDates: alreadyScheduledDates,
     });
 
     // Update each post with its scheduled date

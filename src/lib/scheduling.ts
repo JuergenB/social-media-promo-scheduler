@@ -30,6 +30,8 @@ export interface ScheduleInput {
   durationDays: number;
   bias: DistributionBias;
   timezone?: string;
+  /** Per-platform dates that are already taken (avoid scheduling on these days) */
+  excludedDates?: Map<string, Set<string>>; // platform → set of "YYYY-MM-DD" strings
 }
 
 // ── Per-platform cadence defaults ──────────────────────────────────────
@@ -174,7 +176,7 @@ function isDayActive(date: Date, cadence: PlatformCadence): boolean {
  * 4. Assign specific times using organic variation
  */
 export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
-  const { posts, startDate, durationDays, bias } = input;
+  const { posts, startDate, durationDays, bias, excludedDates } = input;
 
   if (posts.length === 0 || durationDays <= 0) return [];
 
@@ -195,14 +197,19 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
     const cadence = DEFAULT_CADENCE[platform] || FALLBACK_CADENCE;
     const postCount = platformPosts.length;
 
-    // Find valid days (active days within duration)
+    // Find valid days (active days within duration, excluding already-scheduled)
+    const platformExcluded = excludedDates?.get(platform);
     const validDays: number[] = [];
     for (let d = 0; d < durationDays; d++) {
       const date = new Date(startDate);
       date.setDate(date.getDate() + d);
-      if (isDayActive(date, cadence)) {
-        validDays.push(d);
+      if (!isDayActive(date, cadence)) continue;
+      // Skip days that already have a post for this platform
+      if (platformExcluded) {
+        const dateStr = date.toISOString().split("T")[0];
+        if (platformExcluded.has(dateStr)) continue;
       }
+      validDays.push(d);
     }
 
     if (validDays.length === 0) continue;
