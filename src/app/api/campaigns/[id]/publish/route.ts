@@ -173,10 +173,11 @@ export async function POST(
           continue;
         }
 
-        // Store the Zernio post ID back on the Airtable record
+        // Store the Zernio post ID and update status to Published
         const zernioPostId = (zernioPost as { _id?: string })?._id || "";
         await updateRecord("Posts", post.id, {
           "Zernio Post ID": zernioPostId,
+          Status: "Published",
         });
 
         results.push({
