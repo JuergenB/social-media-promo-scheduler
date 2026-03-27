@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns/format";
@@ -183,6 +184,7 @@ const POST_STATUS_CONFIG: Record<
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
   const campaignId = params.id;
+  const { data: pageSession } = useSession();
 
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -638,13 +640,72 @@ export default function CampaignDetailPage() {
               {campaign.status === "Review" && (
                 <div className="flex flex-wrap items-center gap-2">
                   {reviewCount > 0 && (
-                    <Button variant="outline" size="sm" disabled>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const pendingIds = posts
+                          .filter((p) => p.status === "Pending")
+                          .map((p) => p.id);
+                        const res = await fetch("/api/posts/bulk", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            postIds: pendingIds,
+                            status: "Approved",
+                            approvedBy: pageSession?.user?.name || pageSession?.user?.email || "",
+                          }),
+                        });
+                        if (res.ok) {
+                          queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                          toast.success(`${pendingIds.length} posts approved`);
+                        } else {
+                          toast.error("Failed to approve posts");
+                        }
+                      }}
+                    >
                       <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
                       Approve All Remaining ({reviewCount})
                     </Button>
                   )}
                   {approvedCount > 0 && (
-                    <Button size="sm" disabled>
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        // Preview the schedule first
+                        const res = await fetch(
+                          `/api/campaigns/${campaignId}/schedule?preview=true`,
+                          { method: "POST" }
+                        );
+                        if (!res.ok) {
+                          toast.error("Failed to preview schedule");
+                          return;
+                        }
+                        const data = await res.json();
+                        const summary = data.weekSummary
+                          ?.map((w: { week: number; platforms: Record<string, number> }) =>
+                            `Week ${w.week + 1}: ${Object.entries(w.platforms).map(([p, n]) => `${p}×${n}`).join(", ")}`
+                          )
+                          .join("\n");
+
+                        const confirmed = window.confirm(
+                          `Schedule ${approvedCount} posts over ${campaign.durationDays} days (${campaign.distributionBias})?\n\n${summary}\n\nThis will assign dates and mark the campaign as Active.`
+                        );
+                        if (!confirmed) return;
+
+                        // Apply the schedule
+                        const applyRes = await fetch(
+                          `/api/campaigns/${campaignId}/schedule`,
+                          { method: "POST" }
+                        );
+                        if (applyRes.ok) {
+                          queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                          toast.success(`${approvedCount} posts scheduled!`);
+                        } else {
+                          toast.error("Failed to schedule posts");
+                        }
+                      }}
+                    >
                       <Calendar className="mr-1.5 h-3.5 w-3.5" />
                       Schedule {approvedCount} Approved Posts
                     </Button>
@@ -1124,6 +1185,49 @@ function PostDetailView({
     if (url) addImageUrl(url);
   };
 
+  // Approve/Dismiss mutations
+  const { data: session } = useSession();
+
+  const approveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "Approved",
+          approvedBy: session?.user?.name || session?.user?.email || "",
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to approve");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Post approved");
+      if (nextPost) onNavigate(nextPost);
+    },
+    onError: () => toast.error("Failed to approve post"),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "Dismissed",
+          shortUrl: post.shortUrl || undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to dismiss");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Post dismissed");
+      if (nextPost) onNavigate(nextPost);
+    },
+    onError: () => toast.error("Failed to dismiss post"),
+  });
+
   // Content editing
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState(post.content || "");
@@ -1548,14 +1652,52 @@ function PostDetailView({
         <div className="flex gap-2">
           {post.status === "Pending" && (
             <>
-              <Button variant="default" size="sm" disabled>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => approveMutation.mutate()}
+                disabled={approveMutation.isPending}
+              >
                 <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                Approve
+                {approveMutation.isPending ? "Approving..." : "Approve"}
               </Button>
-              <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
-                Dismiss
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={() => dismissMutation.mutate()}
+                disabled={dismissMutation.isPending}
+              >
+                {dismissMutation.isPending ? "Dismissing..." : "Dismiss"}
               </Button>
             </>
+          )}
+          {post.status === "Approved" && (
+            <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+              <CheckCircle2 className="mr-1 h-3 w-3" />
+              Approved{post.approvedBy ? ` by ${post.approvedBy}` : ""}
+            </Badge>
+          )}
+          {post.status === "Dismissed" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => {
+                // Restore to Pending
+                fetch(`/api/posts/${post.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ status: "Pending" }),
+                }).then(() => {
+                  queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                  toast.success("Post restored to Pending");
+                });
+              }}
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              Restore
+            </Button>
           )}
           <Button
             variant="ghost"

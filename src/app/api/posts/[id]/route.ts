@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateRecord } from "@/lib/airtable/client";
+import { deleteShortLink } from "@/lib/short-io";
 
 /**
  * PATCH /api/posts/[id]
  *
  * Update a post record. Supports:
- * - imageUrl: Update the Image URL (hero/first image)
- * - mediaUrls: Update the Media URLs field (newline-separated, for carousel images)
+ * - status: Update post status (Pending → Approved/Dismissed)
+ * - content: Update post text
+ * - imageUrl / mediaUrls: Update images
  * - removeImage: Clear all image fields
- * - Both imageUrl + mediaUrls together for full gallery save
+ * - scheduledDate: Set the scheduled date/time
+ * - approvedBy: Record who approved
  */
 export async function PATCH(
   request: NextRequest,
@@ -20,6 +23,7 @@ export async function PATCH(
 
     const fields: Record<string, unknown> = {};
 
+    // Image handling
     if (body.removeImage) {
       fields["Image URL"] = "";
       fields["Media URLs"] = "";
@@ -33,8 +37,33 @@ export async function PATCH(
       }
     }
 
+    // Content
     if (body.content !== undefined) {
       fields["Content"] = body.content;
+    }
+
+    // Status changes
+    if (body.status !== undefined) {
+      fields["Status"] = body.status;
+
+      if (body.status === "Approved") {
+        fields["Approved By"] = body.approvedBy || "";
+        fields["Approved At"] = new Date().toISOString();
+      }
+
+      // On dismiss, clean up Short.io link
+      if (body.status === "Dismissed" && body.shortUrl) {
+        try {
+          await deleteShortLink(body.shortUrl, body.brand);
+        } catch (err) {
+          console.warn(`[posts] Failed to delete short link on dismiss:`, err);
+        }
+      }
+    }
+
+    // Scheduled date
+    if (body.scheduledDate !== undefined) {
+      fields["Scheduled Date"] = body.scheduledDate;
     }
 
     if (Object.keys(fields).length === 0) {
