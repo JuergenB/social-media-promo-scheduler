@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
+import { deleteShortLinks } from "@/lib/short-io";
 import type { Campaign, Post } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -203,11 +204,33 @@ export async function DELETE(
       );
     }
 
+    // Resolve brand for Short.io key
+    let brand: { shortDomain?: string | null; shortApiKeyLabel?: string | null } | undefined;
+    const brandId = campaign.fields.Brand?.[0];
+    if (brandId) {
+      try {
+        const brandRecord = await getRecord<{ "Short Domain": string; "Short API Key Label": string }>("Brands", brandId);
+        brand = {
+          shortDomain: brandRecord.fields["Short Domain"] || null,
+          shortApiKeyLabel: brandRecord.fields["Short API Key Label"] || null,
+        };
+      } catch { /* fall back to global Short.io config */ }
+    }
+
     // Delete all linked posts first
-    const allPosts = await listRecords<{ Campaign: string[] }>("Posts", {});
+    const allPosts = await listRecords<{ Campaign: string[]; "Short URL": string }>("Posts", {});
     const linkedPosts = allPosts.filter(
       (r) => r.fields.Campaign && r.fields.Campaign.includes(id)
     );
+
+    // Clean up Short.io links
+    const shortUrls = linkedPosts
+      .map((p) => p.fields["Short URL"])
+      .filter(Boolean);
+    if (shortUrls.length > 0) {
+      const deleted = await deleteShortLinks(shortUrls, brand);
+      console.log(`[delete] Deleted ${deleted}/${shortUrls.length} Short.io links`);
+    }
 
     for (const post of linkedPosts) {
       await deleteRecord("Posts", post.id);
