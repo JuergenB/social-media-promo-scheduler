@@ -92,6 +92,7 @@ import {
   Pencil,
   Layers,
   Link2Off,
+  Send,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -292,6 +293,9 @@ export default function CampaignDetailPage() {
   const reviewCount = posts.filter((p) => p.status === "Pending").length;
   const approvedCount = posts.filter(
     (p) => p.status === "Approved" || p.status === "Modified"
+  ).length;
+  const scheduledCount = posts.filter(
+    (p) => p.status === "Scheduled" && !p.zernioPostId
   ).length;
 
   // ── Generate posts handler (SSE) ─────────────────────────────────────
@@ -637,7 +641,7 @@ export default function CampaignDetailPage() {
           ) : (
             <div className="space-y-4">
               {/* Bulk actions bar */}
-              {campaign.status === "Review" && (
+              {(campaign.status === "Review" || campaign.status === "Active") && (
                 <div className="flex flex-wrap items-center gap-2">
                   {reviewCount > 0 && (
                     <Button
@@ -708,6 +712,38 @@ export default function CampaignDetailPage() {
                     >
                       <Calendar className="mr-1.5 h-3.5 w-3.5" />
                       Schedule {approvedCount} Approved Posts
+                    </Button>
+                  )}
+                  {scheduledCount > 0 && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={async () => {
+                        const confirmed = window.confirm(
+                          `Push ${scheduledCount} scheduled posts to Zernio for publishing?\n\nThis will send them to the social media scheduler. They'll go live at their assigned dates and times.`
+                        );
+                        if (!confirmed) return;
+
+                        const res = await fetch(
+                          `/api/campaigns/${campaignId}/publish`,
+                          { method: "POST" }
+                        );
+                        if (res.ok) {
+                          const data = await res.json();
+                          queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                          if (data.failed > 0) {
+                            toast.error(`${data.published} published, ${data.failed} failed`);
+                          } else {
+                            toast.success(`${data.published} posts pushed to Zernio!`);
+                          }
+                        } else {
+                          toast.error("Failed to publish to Zernio");
+                        }
+                      }}
+                    >
+                      <Send className="mr-1.5 h-3.5 w-3.5" />
+                      Push {scheduledCount} to Zernio
                     </Button>
                   )}
                 </div>
