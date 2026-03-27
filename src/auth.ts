@@ -1,15 +1,28 @@
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import { fetchUserByEmail } from "@/lib/airtable/client"
+import type { UserRole } from "@/lib/airtable/types"
 
-export type UserRole = "admin" | "curator" | "viewer"
+export type { UserRole }
 
 declare module "next-auth" {
   interface User {
     displayName?: string
     role?: UserRole
+    allowedBrandIds?: string[]
+    defaultBrandId?: string | null
   }
   interface Session {
     user: User & { email?: string | null; name?: string | null; image?: string | null }
+  }
+}
+
+declare module "@auth/core/jwt" {
+  interface JWT {
+    displayName?: string
+    role?: UserRole
+    allowedBrandIds?: string[]
+    defaultBrandId?: string | null
   }
 }
 
@@ -42,12 +55,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             u.password === credentials.password
         )
         if (!user) return null
+
+        // Fetch brand access from Airtable Users table
+        const profile = await fetchUserByEmail(user.email)
+
         return {
           id: user.id,
           name: user.displayName,
           email: user.email,
           displayName: user.displayName,
-          role: user.role,
+          // Airtable role takes precedence, fall back to AUTH_USERS role
+          role: profile?.role || user.role,
+          allowedBrandIds: profile?.brandIds || [],
+          defaultBrandId: profile?.defaultBrandId || null,
         }
       },
     }),
@@ -59,7 +79,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.displayName = (user as { displayName?: string }).displayName
-        token.role = (user as { role?: string }).role
+        token.role = (user as { role?: UserRole }).role
+        token.allowedBrandIds = (user as { allowedBrandIds?: string[] }).allowedBrandIds
+        token.defaultBrandId = (user as { defaultBrandId?: string | null }).defaultBrandId
       }
       return token
     },
@@ -70,6 +92,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.role) {
         session.user.role = token.role as UserRole
       }
+      session.user.allowedBrandIds = (token.allowedBrandIds as string[]) || []
+      session.user.defaultBrandId = (token.defaultBrandId as string | null) || null
       return session
     },
     authorized({ auth, request: { nextUrl } }) {

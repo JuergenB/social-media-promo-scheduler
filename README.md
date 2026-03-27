@@ -89,11 +89,12 @@ One tool, multiple brands. Switch between them to manage campaigns for each:
 | Brand | Newsletter | Status |
 |-------|-----------|--------|
 | The Intersect of Art and Tech | [theintersect.art](https://theintersect.art) | Active (7 social accounts) |
-| Not Real Art | [newsletter.notrealart.com](https://newsletter.notrealart.com) | Planned |
-| Artsville USA | TBD | Planned |
-| Arterial | — | Planned |
+| Not Real Art | [newsletter.notrealart.com](https://newsletter.notrealart.com) | Active (Zernio profile connected) |
+| Artsville USA | TBD | Active (Zernio profile connected) |
+| Sugar Press Art | — | Active (Zernio profile connected) |
+| Arterial | — | Inactive |
 
-Each brand has its own connected social accounts, voice guidelines, and campaign history. Platform settings (formatting rules, image sizes, posting best practices) are shared.
+Each brand has its own connected social accounts, voice guidelines, Zernio profile, and campaign history. Users are mapped to specific brands via an Airtable Users table — each user only sees and can generate for their assigned brands. Platform settings (formatting rules, image sizes, posting best practices) are shared.
 
 ## Supported Platforms
 
@@ -143,13 +144,16 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Post detail: image lightbox, "Open source article" link
 - [x] **Phase I:** Campaign reset to Draft (delete posts, revert status)
 - [x] **Phase I:** Dynamic campaign type rules — Airtable-backed editorial rules, dynamic prompt composition, settings UI, feedback dialog (#39)
+- [x] **Phase I:** Per-brand Zernio key resolution + global brand switcher (#41)
+- [x] **Phase I:** User-brand access mapping — Airtable Users table, session integration, scoped brands API (#42)
+- [x] **Phase I:** Generation options show only connected platforms per brand (no more hardcoded list)
+- [x] **Phase I:** All 4 active brands have Zernio profile IDs populated
 - [ ] **Phase I:** Post approve/dismiss actions
-- [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
-- [ ] **Phase II:** Brand switching at dashboard level
+- [x] **Phase II:** Brand switching at dashboard level (#41)
 
 ## Technical Details
 

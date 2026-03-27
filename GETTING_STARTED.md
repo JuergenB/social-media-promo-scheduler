@@ -14,14 +14,17 @@ npm run dev
 
 ### Credentials (Development)
 
-| Email | Role | Access |
-|-------|------|--------|
-| juergen@polymash.com | admin | Full access, all brands |
-| scottpower@arterial.org | admin | Full access, all brands |
-| editor@notrealart.com | curator | Review/approve NRA campaigns |
-| kbviking@gmail.com | curator | Review/approve campaigns |
+| Email | Role | Brands | Access |
+|-------|------|--------|--------|
+| juergen@polymash.com | super-admin | All brands | Full access |
+| scottpower@arterial.org | admin | Artsville USA, Not Real Art | Full access to assigned brands |
+| editor@notrealart.com | curator | Artsville USA, Not Real Art | Review/approve campaigns |
+| kbviking@gmail.com | curator | Not Real Art | Review/approve NRA campaigns |
+| elise@example.com | curator | Artsville USA | Review/approve Artsville campaigns |
 
 Password for all: `REDACTED_PASSWORD` (development only)
+
+User-to-brand mapping is in the **Airtable Users table** (`tblyUmt78haC25nPZ`). Changing brand access does not require a redeploy — update the Airtable record and the user's next login picks up the change.
 
 ---
 
@@ -49,10 +52,11 @@ The system serves multiple brands from a single Airtable base with brand-level s
 
 | Brand | Zernio Profile | Newsletter | Status |
 |-------|---------------|------------|--------|
-| **The Intersect** | The Intersect High Frequency | theintersect.art (Curated.co) | Active — 7 accounts connected |
-| **Not Real Art** | TBD | newsletter.notrealart.com (Curated.co) | Planned |
-| **Artsville USA** | TBD | TBD | Planned |
-| **Arterial** | TBD | N/A | Planned |
+| **The Intersect** | The Intersect High Frequency (`68dd94a97fca0cbc457aa18e`) | theintersect.art (Curated.co) | Active — 7 accounts connected |
+| **Not Real Art** | Not Real Art (`69c454e216cdacff1d3d2b76`) | newsletter.notrealart.com (Curated.co) | Active |
+| **Artsville USA** | Artsville USA (`69c51f9c09b9b77530306823`) | TBD | Active |
+| **Sugar Press Art** | Sugarpress Art (`68ee9d7a7a448663a45de9dc`) | — | Active |
+| **Arterial** | — | N/A | Inactive |
 
 Each brand has its own Zernio API key scoped to its profile. Switching brands in the UI swaps the active API key and filters campaigns/posts to that brand. All data lives in a shared Airtable base with a `Brand` field for separation.
 
@@ -89,7 +93,10 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 | Post detail dialog | Done | Platform header, retry for failed posts, expandable text, clickable URLs, PDF media handling |
 | Dashboard overview | Done | Stats with configurable time range (today/7d/30d/90d), accurate per-status counts |
 | Calendar settings | Done | Week-starts-on-Monday preference in Settings |
-| Post generation | Pending | OpenAI integration — generate platform-specific post variants using brand voice + platform best practices |
+| Post generation | Done | Claude Sonnet 4.6 — generate platform-specific post variants using brand voice + platform best practices |
+| Per-brand Zernio keys | Done | Brand switcher, per-brand API key resolution, profile filtering (#41) |
+| User-brand access | Done | Airtable Users table, session integration, scoped brands API (#42) |
+| Connected platform filtering | Done | Generation options show only platforms with connected Zernio accounts |
 | Approval queue | Pending | List view of pending posts with approve/edit/dismiss actions |
 | Basic scheduling | Pending | Push approved posts to Zernio API with hardcoded tapering schedule |
 

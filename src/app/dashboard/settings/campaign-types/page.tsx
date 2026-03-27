@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Suspense } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -125,6 +125,14 @@ interface FeedbackEntry extends FeedbackLogEntry {
 // ── Main Page ───────────────────────────────────────────────────────────
 
 export default function CampaignTypesSettingsPage() {
+  return (
+    <Suspense fallback={<div className="animate-pulse p-6">Loading...</div>}>
+      <CampaignTypesContent />
+    </Suspense>
+  );
+}
+
+function CampaignTypesContent() {
   const searchParams = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 

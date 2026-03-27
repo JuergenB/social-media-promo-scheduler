@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { listRecords } from "@/lib/airtable/client";
 import type { Brand } from "@/lib/airtable/types";
 
@@ -50,14 +51,23 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
 
 export async function GET() {
   try {
+    const session = await auth();
+    const allowedBrandIds = session?.user?.allowedBrandIds || [];
+    const isSuperAdmin = session?.user?.role === "super-admin";
+
     const records = await listRecords<BrandFields>("Brands", {
       filterByFormula: '{Status} = "Active"',
       sort: [{ field: "Name", direction: "asc" }],
     });
 
-    const brands: Brand[] = records.map((r) =>
+    let brands: Brand[] = records.map((r) =>
       mapBrand(r as { id: string; fields: BrandFields })
     );
+
+    // Filter by user's allowed brands (super-admin sees all)
+    if (!isSuperAdmin && allowedBrandIds.length > 0) {
+      brands = brands.filter((b) => allowedBrandIds.includes(b.id));
+    }
 
     return NextResponse.json({ brands });
   } catch (error) {

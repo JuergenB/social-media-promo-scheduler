@@ -226,6 +226,19 @@ export interface FeedbackLogEntry {
   resolvedByRuleIds: string[];
 }
 
+// ── User Profile (Users table — brand access mapping) ────────────────────────
+
+export type UserRole = "super-admin" | "admin" | "curator" | "viewer";
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  brandIds: string[];
+  defaultBrandId: string | null;
+}
+
 // Duration presets for campaign creation
 export const DURATION_PRESETS = [
   { label: "Sprint", days: 14, description: "2 weeks", defaultBias: "Front-loaded" as DistributionBias },

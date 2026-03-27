@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -39,6 +39,8 @@ import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { Platform } from "@/lib/late-api";
+import { useAccounts } from "@/hooks/use-accounts";
+import { useBrand } from "@/lib/brand-context";
 import {
   CAMPAIGN_TYPES,
   DISTRIBUTION_BIASES,
@@ -179,11 +181,34 @@ export default function CampaignDetailPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
   const [showGenOptions, setShowGenOptions] = useState(true);
-  const [genPlatforms, setGenPlatforms] = useState<Set<string>>(
-    new Set(["instagram", "twitter", "linkedin", "facebook", "threads", "bluesky", "pinterest"])
-  );
+  const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
+  const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
   const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null); // null = auto
   const queryClient = useQueryClient();
+
+  // Fetch connected accounts for the current brand
+  const { currentBrand } = useBrand();
+  const { data: accountsData } = useAccounts();
+  const connectedAccounts = accountsData?.accounts ?? [];
+
+  // Derive unique connected platform IDs
+  const connectedPlatforms = useMemo(() => {
+    const platforms = new Set<string>();
+    for (const account of connectedAccounts) {
+      if (account.isActive) {
+        platforms.add(account.platform);
+      }
+    }
+    return platforms;
+  }, [connectedAccounts]);
+
+  // Initialize genPlatforms from connected accounts (once loaded)
+  useEffect(() => {
+    if (connectedPlatforms.size > 0 && !genPlatformsInitialized) {
+      setGenPlatforms(new Set(connectedPlatforms));
+      setGenPlatformsInitialized(true);
+    }
+  }, [connectedPlatforms, genPlatformsInitialized]);
 
   const { data, isLoading, error } = useQuery<{ campaign: Campaign; posts: Post[] }>({
     queryKey: ["campaign", campaignId],
@@ -247,7 +272,7 @@ export default function CampaignDetailPage() {
 
     try {
       const genParams = new URLSearchParams();
-      if (genPlatforms.size < 7) {
+      if (genPlatforms.size > 0) {
         genParams.set("platforms", Array.from(genPlatforms).join(","));
       }
       if (genMaxPerPlatform !== null) {
@@ -490,26 +515,37 @@ export default function CampaignDetailPage() {
                   Platforms to generate
                 </Label>
                 <div className="flex flex-wrap gap-3">
-                  {(["instagram", "twitter", "linkedin", "facebook", "threads", "bluesky", "pinterest"] as const).map((p) => {
-                    const label = p === "twitter" ? "X/Twitter" : p.charAt(0).toUpperCase() + p.slice(1);
-                    return (
-                      <label key={p} className="flex items-center gap-1.5 cursor-pointer">
-                        <Switch
-                          checked={genPlatforms.has(p)}
-                          onCheckedChange={(checked) => {
-                            setGenPlatforms((prev) => {
-                              const next = new Set(prev);
-                              if (checked) next.add(p); else next.delete(p);
-                              return next;
-                            });
-                          }}
-                          className="scale-75"
-                        />
-                        <PlatformIcon platform={p} size="xs" showColor />
-                        <span className="text-xs">{label}</span>
-                      </label>
-                    );
-                  })}
+                  {connectedPlatforms.size === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">
+                      No connected accounts for {currentBrand?.name || "this brand"}.
+                      Connect accounts in the Accounts page first.
+                    </p>
+                  ) : (
+                    [...connectedPlatforms].sort().map((p) => {
+                      const PLATFORM_LABELS: Record<string, string> = {
+                        twitter: "X/Twitter",
+                        googlebusiness: "Google Business",
+                      };
+                      const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
+                      return (
+                        <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                          <Switch
+                            checked={genPlatforms.has(p)}
+                            onCheckedChange={(checked) => {
+                              setGenPlatforms((prev) => {
+                                const next = new Set(prev);
+                                if (checked) next.add(p); else next.delete(p);
+                                return next;
+                              });
+                            }}
+                            className="scale-75"
+                          />
+                          <PlatformIcon platform={p as Platform} size="xs" showColor />
+                          <span className="text-xs">{label}</span>
+                        </label>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 

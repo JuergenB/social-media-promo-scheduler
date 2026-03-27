@@ -1,5 +1,7 @@
 // Airtable REST API client for server-side use
 
+import type { UserProfile, UserRole } from "./types";
+
 const AIRTABLE_PAT = process.env.AIRTABLE_API_KEY!;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID!;
 const AIRTABLE_API_URL = "https://api.airtable.com/v0";
@@ -120,4 +122,40 @@ export async function getRecord<T = Record<string, unknown>>(
   return airtableFetch<AirtableRecord<T>>(
     `/${encodeURIComponent(tableName)}/${recordId}`
   );
+}
+
+// ── User Profile Lookup ─────────────────────────────────────────────────────
+
+interface UserFields {
+  Email: string;
+  "Display Name": string;
+  Role: UserRole;
+  Brands: string[];
+  "Default Brand": string[];
+}
+
+/**
+ * Fetch a user profile by email from the Users table.
+ * Returns null if no matching user found.
+ * Used during JWT creation to populate brand access in the session.
+ */
+export async function fetchUserByEmail(
+  email: string
+): Promise<UserProfile | null> {
+  const records = await listRecords<UserFields>("Users", {
+    filterByFormula: `{Email} = "${email}"`,
+    fields: ["Email", "Display Name", "Role", "Brands", "Default Brand"],
+  });
+
+  if (records.length === 0) return null;
+
+  const r = records[0];
+  return {
+    id: r.id,
+    email: r.fields.Email || "",
+    displayName: r.fields["Display Name"] || "",
+    role: r.fields.Role || "viewer",
+    brandIds: r.fields.Brands || [],
+    defaultBrandId: r.fields["Default Brand"]?.[0] || null,
+  };
 }

@@ -85,7 +85,7 @@ social-media-promo-scheduler/
 │   ├── hooks/                  # React hooks (useAccounts, usePosts, etc.)
 │   ├── lib/
 │   │   ├── late-api/           # Zernio API client & platform types
-│   │   ├── airtable/           # Airtable REST client, TypeScript types, campaign-type-rules fetch
+│   │   ├── airtable/           # Airtable REST client, TypeScript types, campaign-type-rules fetch, user profile lookup
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
@@ -135,6 +135,7 @@ social-media-promo-scheduler/
 | Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 10 records: type definitions, descriptions, icons, status, scraper strategy |
 | Generation Rules | `tbliTMGAEuaU9CLBf` | Editorial rules per campaign type, composed into prompt fragments |
 | Feedback Log | `tblZWSKDdVYUcHX5J` | Structured feedback on generated posts, linked to posts/campaigns/types |
+| Users | `tblyUmt78haC25nPZ` | User-to-brand access mapping: email, role, allowed brands, default brand |
 
 ### Source base (read-only reference)
 - `appDFU2JdAw2Ckax4` — Artwork Archive campaigns base (brand logos in Campaigns table)
