@@ -148,6 +148,12 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** User-brand access mapping — Airtable Users table, session integration, scoped brands API (#42)
 - [x] **Phase I:** Generation options show only connected platforms per brand (no more hardcoded list)
 - [x] **Phase I:** All 4 active brands have Zernio profile IDs populated
+- [x] **Phase I:** Event campaign type — date picker, back-loaded distribution, event details, generation pipeline (#46)
+- [x] **Phase I:** Multiple source URLs per campaign — scrape and merge (#47)
+- [x] **Phase I:** Generation options (platforms, variants) on campaign creation form (#48)
+- [x] **Phase I:** Short.io link cleanup on campaign reset and delete
+- [x] **Phase I:** Per-brand Short.io domain configuration (jb9.me / artsy.short.gy)
+- [x] **Phase I:** og:image fallback — extract first content image when no og:image metadata
 - [ ] **Phase I:** Post approve/dismiss actions
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
