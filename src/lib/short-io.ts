@@ -183,6 +183,75 @@ export async function findShortLinks(
 }
 
 /**
+ * Delete a short link by its short URL (e.g., "https://jb9.me/blhmNN").
+ * Expands the URL to get the link ID, then deletes it.
+ * Silently succeeds if the link doesn't exist or is already deleted.
+ */
+export async function deleteShortLink(
+  shortUrl: string,
+  brand?: { shortDomain?: string | null; shortApiKeyLabel?: string | null }
+): Promise<boolean> {
+  if (!shortUrl) return false;
+
+  try {
+    const config = resolveConfig(brand);
+
+    // Parse domain and path from the short URL
+    const urlObj = new URL(shortUrl);
+    const domain = urlObj.hostname;
+    const path = urlObj.pathname.replace(/^\//, "");
+
+    if (!path) return false;
+
+    // Expand to get the link ID
+    const expandRes = await fetch(
+      `https://api.short.io/links/expand?domain=${encodeURIComponent(domain)}&path=${encodeURIComponent(path)}`,
+      {
+        headers: {
+          Authorization: config.apiKey,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (!expandRes.ok) return false;
+
+    const linkData = await expandRes.json();
+    const linkId = linkData?.id;
+    if (!linkId) return false;
+
+    // Delete the link
+    const deleteRes = await fetch(`${API_BASE}/${linkId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: config.apiKey,
+        Accept: "application/json",
+      },
+    });
+
+    return deleteRes.ok;
+  } catch (err) {
+    console.warn(`[short-io] Failed to delete short link ${shortUrl}:`, err);
+    return false;
+  }
+}
+
+/**
+ * Delete multiple short links. Logs failures but doesn't throw.
+ * Returns the count of successfully deleted links.
+ */
+export async function deleteShortLinks(
+  shortUrls: string[],
+  brand?: { shortDomain?: string | null; shortApiKeyLabel?: string | null }
+): Promise<number> {
+  let deleted = 0;
+  for (const url of shortUrls) {
+    if (await deleteShortLink(url, brand)) deleted++;
+  }
+  return deleted;
+}
+
+/**
  * Get click analytics for a short link.
  */
 export async function getLinkClicks(
