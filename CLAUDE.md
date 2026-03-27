@@ -63,6 +63,7 @@ social-media-promo-scheduler/
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
+│   │   │   ├── posts/           # PATCH [id] update post fields, POST [id]/image upload/swap image
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints
 │   │   │   ├── auto-auth/      # Server-side API key provider
@@ -130,7 +131,7 @@ social-media-promo-scheduler/
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
 | Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform) |
-| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status, scheduling |
+| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status, scheduling. **Image Upload** attachment field for per-post image swap/override |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
 | Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 11 records: type definitions, descriptions, icons, status, scraper strategy (includes "Open Call" — Coming Soon) |
