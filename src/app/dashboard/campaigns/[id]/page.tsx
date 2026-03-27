@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PlatformIcon, PlatformBadge } from "@/components/shared/platform-icon";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
+import { CampaignTimeline } from "@/components/campaigns/campaign-timeline";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { Platform } from "@/lib/late-api";
@@ -722,6 +723,16 @@ export default function CampaignDetailPage() {
                     <PublishButton campaignId={campaignId} queuedCount={queuedCount} />
                   )}
                 </div>
+              )}
+
+              {/* Campaign timeline heatmap — for campaigns with scheduled posts */}
+              {posts.some((p) => p.scheduledDate && ["Queued", "Scheduled", "Published"].includes(p.status)) && campaign && (
+                <CampaignTimeline
+                  posts={posts}
+                  campaignStartDate={new Date()}
+                  durationDays={campaign.durationDays}
+                  campaignId={campaignId}
+                />
               )}
 
               {/* Platform filter bar */}
