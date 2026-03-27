@@ -169,6 +169,10 @@ const POST_STATUS_CONFIG: Record<
     className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
   },
   Dismissed: { variant: "secondary", className: "opacity-50" },
+  Queued: {
+    variant: "secondary",
+    className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  },
   Scheduled: {
     variant: "secondary",
     className: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
@@ -294,8 +298,8 @@ export default function CampaignDetailPage() {
   const approvedCount = posts.filter(
     (p) => p.status === "Approved" || p.status === "Modified"
   ).length;
-  const scheduledCount = posts.filter(
-    (p) => p.status === "Scheduled" && !p.zernioPostId
+  const queuedCount = posts.filter(
+    (p) => p.status === "Queued"
   ).length;
 
   // ── Generate posts handler (SSE) ─────────────────────────────────────
@@ -714,8 +718,8 @@ export default function CampaignDetailPage() {
                       Schedule {approvedCount} Approved Posts
                     </Button>
                   )}
-                  {scheduledCount > 0 && (
-                    <PublishButton campaignId={campaignId} scheduledCount={scheduledCount} />
+                  {queuedCount > 0 && (
+                    <PublishButton campaignId={campaignId} queuedCount={queuedCount} />
                   )}
                 </div>
               )}
@@ -949,7 +953,7 @@ function CampaignActionButton({
   }
 }
 
-function PublishButton({ campaignId, scheduledCount }: { campaignId: string; scheduledCount: number }) {
+function PublishButton({ campaignId, queuedCount }: { campaignId: string; queuedCount: number }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const queryClient = useQueryClient();
 
@@ -961,7 +965,7 @@ function PublishButton({ campaignId, scheduledCount }: { campaignId: string; sch
       disabled={isPublishing}
       onClick={async () => {
         const confirmed = window.confirm(
-          `Push ${scheduledCount} scheduled posts to Zernio?\n\n` +
+          `Push ${queuedCount} scheduled posts to Zernio?\n\n` +
           `These posts have been spread across the full campaign duration using the tapering algorithm. ` +
           `Each platform respects its own cadence (e.g., LinkedIn on weekdays only, Instagram max 1/day).\n\n` +
           `Once pushed, posts will go live at their assigned dates and times. ` +
@@ -1002,7 +1006,7 @@ function PublishButton({ campaignId, scheduledCount }: { campaignId: string; sch
       ) : (
         <>
           <Send className="mr-1.5 h-3.5 w-3.5" />
-          Push {scheduledCount} to Zernio
+          Push {queuedCount} to Zernio
         </>
       )}
     </Button>

@@ -101,7 +101,7 @@ export async function POST(
     // Find already-scheduled dates to avoid collisions (for batch scheduling)
     const alreadyScheduledDates = new Map<string, Set<string>>(); // platform → set of date strings
     for (const p of campaignPosts) {
-      if ((p.fields.Status === "Scheduled" || p.fields.Status === "Published") && p.fields["Scheduled Date"]) {
+      if ((p.fields.Status === "Queued" || p.fields.Status === "Scheduled" || p.fields.Status === "Published") && p.fields["Scheduled Date"]) {
         const plat = PLATFORM_MAP[p.fields.Platform] || p.fields.Platform.toLowerCase();
         const dateStr = p.fields["Scheduled Date"].split("T")[0];
         if (!alreadyScheduledDates.has(plat)) alreadyScheduledDates.set(plat, new Set());
@@ -163,7 +163,7 @@ export async function POST(
     for (const slot of slots) {
       await updateRecord("Posts", slot.postId, {
         "Scheduled Date": slot.scheduledDate,
-        Status: "Scheduled",
+        Status: "Queued",
       });
     }
 
