@@ -994,20 +994,34 @@ function PostDetailView({
   onNavigate: (post: Post) => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
-  const [imageEditMode, setImageEditMode] = useState(false);
+  const [showAddImage, setShowAddImage] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
   const queryClient = useQueryClient();
+
+  // Multi-image state: hero image + additional media URLs
+  const buildImageList = (p: Post) => {
+    const imgs: string[] = [];
+    if (p.imageUrl) imgs.push(p.imageUrl);
+    if (p.mediaUrls) {
+      for (const u of p.mediaUrls.split("\n")) {
+        const trimmed = u.trim();
+        if (trimmed && !imgs.includes(trimmed)) imgs.push(trimmed);
+      }
+    }
+    return imgs;
+  };
+  const [mediaImages, setMediaImages] = useState<string[]>(buildImageList(post));
 
   // Reset state when navigating between posts
   const [prevPostId, setPrevPostId] = useState(post.id);
   if (prevPostId !== post.id) {
     setPrevPostId(post.id);
-    setImageEditMode(false);
+    setShowAddImage(false);
     setImageUrlInput("");
-    setCurrentImageUrl(post.imageUrl);
+    setMediaImages(buildImageList(post));
     setIsDragging(false);
   }
 
@@ -1018,39 +1032,40 @@ function PostDetailView({
   // The URL to the source article — prefer shortUrl, fall back to linkUrl
   const articleUrl = post.shortUrl || post.linkUrl;
 
-  // Image update mutations
-  const updateImageMutation = useMutation({
-    mutationFn: async (imageUrl: string) => {
+  // Save all images to Airtable (first = Image URL, rest = Media URLs)
+  const saveImagesMutation = useMutation({
+    mutationFn: async (images: string[]) => {
       const res = await fetch(`/api/posts/${post.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl }),
+        body: JSON.stringify({
+          imageUrl: images[0] || "",
+          mediaUrls: images.slice(1).join("\n"),
+        }),
       });
-      if (!res.ok) throw new Error("Failed to update image");
-    },
-    onSuccess: (_, imageUrl) => {
-      setCurrentImageUrl(imageUrl);
-      setImageEditMode(false);
-      setImageUrlInput("");
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Image updated");
-    },
-    onError: () => toast.error("Failed to update image"),
-  });
-
-  const removeImageMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/posts/${post.id}/image`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to remove image");
+      if (!res.ok) throw new Error("Failed to save images");
     },
     onSuccess: () => {
-      setCurrentImageUrl("");
-      setImageEditMode(false);
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Image removed");
     },
-    onError: () => toast.error("Failed to remove image"),
+    onError: () => toast.error("Failed to save images"),
   });
+
+  const addImageUrl = (url: string) => {
+    const next = [...mediaImages, url];
+    setMediaImages(next);
+    setImageUrlInput("");
+    setShowAddImage(false);
+    saveImagesMutation.mutate(next);
+    toast.success(mediaImages.length === 0 ? "Image added" : `${next.length} images — carousel ready`);
+  };
+
+  const removeImage = (index: number) => {
+    const next = mediaImages.filter((_, i) => i !== index);
+    setMediaImages(next);
+    saveImagesMutation.mutate(next);
+    toast.success("Image removed");
+  };
 
   const uploadImageMutation = useMutation({
     mutationFn: async (file: File) => {
@@ -1064,10 +1079,15 @@ function PostDetailView({
       return res.json();
     },
     onSuccess: (data) => {
-      setCurrentImageUrl(data.imageUrl || "");
-      setImageEditMode(false);
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Image uploaded");
+      if (data.imageUrl) {
+        const next = [...mediaImages, data.imageUrl];
+        setMediaImages(next);
+        setShowAddImage(false);
+        // Save the full list (uploaded image is already in Airtable attachment,
+        // but we need to update Media URLs for the rest)
+        saveImagesMutation.mutate(next);
+        toast.success(next.length > 1 ? `${next.length} images — carousel ready` : "Image uploaded");
+      }
     },
     onError: () => toast.error("Failed to upload image"),
   });
@@ -1075,9 +1095,10 @@ function PostDetailView({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith("image/")) {
-      uploadImageMutation.mutate(file);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    if (files.length > 0) {
+      // Upload first file (could extend to batch later)
+      uploadImageMutation.mutate(files[0]);
     }
   };
 
@@ -1088,7 +1109,7 @@ function PostDetailView({
 
   const handlePasteUrl = () => {
     const url = imageUrlInput.trim();
-    if (url) updateImageMutation.mutate(url);
+    if (url) addImageUrl(url);
   };
 
   // Navigation
@@ -1146,46 +1167,104 @@ function PostDetailView({
           </Badge>
         </div>
 
-        {/* Image — editable with swap/upload/remove */}
+        {/* Image gallery — multi-image with add/remove for carousels */}
         <div className="px-6 pb-3">
-          {imageEditMode ? (
+          {mediaImages.length > 0 ? (
+            <div className="space-y-2">
+              {/* Image strip — scrollable for multiple images */}
+              <div className={cn(
+                "flex gap-2 overflow-x-auto pb-1",
+                mediaImages.length === 1 ? "" : "snap-x snap-mandatory"
+              )}>
+                {mediaImages.map((imgUrl, idx) => (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "relative group cursor-pointer shrink-0 snap-start rounded-lg overflow-hidden bg-muted",
+                      mediaImages.length === 1 ? "w-full" : "w-48 h-48"
+                    )}
+                    onClick={() => {
+                      setLightboxIndex(idx);
+                      setLightboxOpen(true);
+                    }}
+                  >
+                    <img
+                      src={imgUrl}
+                      alt=""
+                      className={cn(
+                        "object-cover",
+                        mediaImages.length === 1 ? "w-full max-h-64" : "w-48 h-48"
+                      )}
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
+                    {/* Remove button */}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeImage(idx);
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                    {/* Slide number for carousels */}
+                    {mediaImages.length > 1 && (
+                      <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                        {idx + 1}/{mediaImages.length}
+                      </span>
+                    )}
+                  </div>
+                ))}
+
+                {/* Add more button inline */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddImage(true)}
+                  className="shrink-0 w-48 h-48 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 hover:border-primary/50 transition-colors"
+                  style={mediaImages.length === 1 ? { width: "6rem", height: "auto", minHeight: "4rem" } : {}}
+                >
+                  <Plus className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Add</span>
+                </button>
+              </div>
+
+              {/* Carousel badge */}
+              {mediaImages.length > 1 && (
+                <p className="text-[11px] text-muted-foreground">
+                  {mediaImages.length} images — will post as carousel on supported platforms
+                </p>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowAddImage(true)}
+              className="w-full rounded-lg border-2 border-dashed border-border p-6 text-center hover:border-primary/50 transition-colors"
+            >
+              <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
+              <p className="text-xs text-muted-foreground">Add an image</p>
+            </button>
+          )}
+
+          {/* Add image panel — drag-drop + paste URL */}
+          {showAddImage && (
             <div
               className={cn(
-                "rounded-lg border-2 border-dashed p-4 space-y-3 transition-colors",
+                "mt-2 rounded-lg border-2 border-dashed p-4 space-y-3 transition-colors",
                 isDragging ? "border-primary bg-primary/5" : "border-border bg-muted/30"
               )}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={() => setIsDragging(false)}
             >
-              {/* Current image preview with remove */}
-              {currentImageUrl && (
-                <div className="relative">
-                  <img src={currentImageUrl} alt="" className="w-full max-h-40 object-cover rounded" />
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="absolute top-2 right-2 h-7 text-xs"
-                    onClick={() => removeImageMutation.mutate()}
-                    disabled={removeImageMutation.isPending}
-                  >
-                    <ImageOff className="h-3 w-3 mr-1" />
-                    Remove
-                  </Button>
-                </div>
-              )}
-
-              {/* Drag-drop zone */}
-              <div className="text-center py-4">
-                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <div className="text-center py-3">
+                <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
                 <p className="text-sm text-muted-foreground">
-                  {uploadImageMutation.isPending
-                    ? "Uploading..."
-                    : "Drag & drop an image here"}
+                  {uploadImageMutation.isPending ? "Uploading..." : "Drag & drop an image"}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">or</p>
-                {/* File picker fallback */}
-                <label className="inline-block mt-2">
+                <label className="inline-block mt-1">
                   <input
                     type="file"
                     accept="image/*"
@@ -1200,8 +1279,6 @@ function PostDetailView({
                   </span>
                 </label>
               </div>
-
-              {/* Paste URL */}
               <div className="flex gap-2">
                 <Input
                   type="url"
@@ -1214,60 +1291,25 @@ function PostDetailView({
                 <Button
                   size="sm"
                   onClick={handlePasteUrl}
-                  disabled={!imageUrlInput.trim() || updateImageMutation.isPending}
+                  disabled={!imageUrlInput.trim() || saveImagesMutation.isPending}
                 >
-                  {updateImageMutation.isPending ? "Saving..." : "Use URL"}
+                  Add
                 </Button>
               </div>
-
               <Button
                 variant="ghost"
                 size="sm"
                 className="w-full text-xs text-muted-foreground"
-                onClick={() => setImageEditMode(false)}
+                onClick={() => setShowAddImage(false)}
               >
-                Cancel
+                Done
               </Button>
             </div>
-          ) : currentImageUrl ? (
-            <>
-              <div
-                className="rounded-lg overflow-hidden bg-muted relative group cursor-pointer"
-                onClick={() => setLightboxOpen(true)}
-              >
-                <img src={currentImageUrl} alt="" className="w-full max-h-64 object-cover" />
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                  <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
-                </div>
-                {/* Edit button overlay */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="absolute bottom-2 right-2 h-7 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setImageEditMode(true);
-                  }}
-                >
-                  <Pencil className="h-3 w-3 mr-1" />
-                  Change
-                </Button>
-              </div>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setImageEditMode(true)}
-              className="w-full rounded-lg border-2 border-dashed border-border p-6 text-center hover:border-primary/50 transition-colors"
-            >
-              <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-              <p className="text-xs text-muted-foreground">Add an image</p>
-            </button>
           )}
         </div>
 
-        {/* Image lightbox overlay */}
-        {currentImageUrl && lightboxOpen && (
+        {/* Image lightbox overlay with navigation */}
+        {mediaImages.length > 0 && lightboxOpen && (
           <div
             className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
             onClick={() => setLightboxOpen(false)}
@@ -1278,10 +1320,36 @@ function PostDetailView({
             >
               <X className="h-6 w-6" />
             </button>
+            {mediaImages.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
+                  }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white z-[101]"
+                >
+                  <ArrowLeft className="h-8 w-8" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
+                  }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white z-[101]"
+                >
+                  <ArrowLeft className="h-8 w-8 rotate-180" />
+                </button>
+                <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-sm z-[101]">
+                  {lightboxIndex + 1} / {mediaImages.length}
+                </span>
+              </>
+            )}
             <img
-              src={currentImageUrl}
+              src={mediaImages[lightboxIndex]}
               alt=""
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-pointer"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         )}

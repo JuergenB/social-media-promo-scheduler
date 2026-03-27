@@ -4,10 +4,11 @@ import { updateRecord } from "@/lib/airtable/client";
 /**
  * PATCH /api/posts/[id]
  *
- * Update a post record. Currently supports:
- * - imageUrl: Update the Image URL field
- * - imageUploadUrl: Upload an image by URL to the Image Upload attachment field
- * - removeImage: Clear both Image URL and Image Upload fields
+ * Update a post record. Supports:
+ * - imageUrl: Update the Image URL (hero/first image)
+ * - mediaUrls: Update the Media URLs field (newline-separated, for carousel images)
+ * - removeImage: Clear all image fields
+ * - Both imageUrl + mediaUrls together for full gallery save
  */
 export async function PATCH(
   request: NextRequest,
@@ -21,16 +22,15 @@ export async function PATCH(
 
     if (body.removeImage) {
       fields["Image URL"] = "";
+      fields["Media URLs"] = "";
       fields["Image Upload"] = [];
-    } else if (body.imageUrl) {
-      fields["Image URL"] = body.imageUrl;
-      // Clear any previous upload since URL takes precedence
-      fields["Image Upload"] = [];
-    } else if (body.imageUploadUrl) {
-      // Airtable accepts attachment URLs — it will download and host the file
-      fields["Image Upload"] = [{ url: body.imageUploadUrl }];
-      // Also set Image URL so the rest of the app can use it
-      fields["Image URL"] = body.imageUploadUrl;
+    } else {
+      if (body.imageUrl !== undefined) {
+        fields["Image URL"] = body.imageUrl;
+      }
+      if (body.mediaUrls !== undefined) {
+        fields["Media URLs"] = body.mediaUrls;
+      }
     }
 
     if (Object.keys(fields).length === 0) {
