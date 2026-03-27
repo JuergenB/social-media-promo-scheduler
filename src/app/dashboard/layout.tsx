@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
@@ -85,6 +86,11 @@ const settingsSubNav = [
     href: "/dashboard/settings/platforms",
     icon: Layers,
   },
+  {
+    label: "Campaign Types",
+    href: "/dashboard/settings/campaign-types",
+    icon: Megaphone,
+  },
 ];
 
 // Flat list for mobile bottom bar (limited space)
@@ -150,7 +156,13 @@ export default function DashboardLayout({
   const { theme, setTheme } = useTheme();
   const { data: profilesData } = useProfiles();
   const { currentBrand, brands, switchBrand } = useBrand();
-  const settingsOpen = pathname.startsWith("/dashboard/settings");
+  const isOnSettingsPage = pathname.startsWith("/dashboard/settings");
+  const [settingsExpanded, setSettingsExpanded] = useState(isOnSettingsPage);
+  // Auto-expand when navigating to a settings page
+  useEffect(() => {
+    if (isOnSettingsPage) setSettingsExpanded(true);
+  }, [isOnSettingsPage]);
+  const settingsOpen = settingsExpanded;
 
   const profiles = profilesData?.profiles || [];
   const currentProfile = profiles.find((p: any) => p._id === defaultProfileId) || profiles[0];
@@ -194,27 +206,30 @@ export default function DashboardLayout({
             ))}
           </div>
 
-          {/* Settings section — expandable */}
-          <SectionLabel>Settings</SectionLabel>
+        </nav>
+
+        {/* Settings — pinned to bottom */}
+        <div className="border-t border-border p-2">
           <div className="space-y-0.5">
-            <Link
-              href="/dashboard/settings"
+            <button
+              type="button"
+              onClick={() => setSettingsExpanded((v) => !v)}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors w-full",
                 settingsOpen
                   ? "text-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               <Settings className="h-4 w-4 shrink-0" />
-              <span className="flex-1">Settings</span>
+              <span className="flex-1 text-left">Settings</span>
               <ChevronRight
                 className={cn(
                   "h-3 w-3 transition-transform",
                   settingsOpen && "rotate-90"
                 )}
               />
-            </Link>
+            </button>
             {settingsOpen && (
               <div className="space-y-0.5">
                 {settingsSubNav.map((item) => (
@@ -228,7 +243,7 @@ export default function DashboardLayout({
               </div>
             )}
           </div>
-        </nav>
+        </div>
       </aside>
 
       {/* Main content */}

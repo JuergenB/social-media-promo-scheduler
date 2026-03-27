@@ -87,6 +87,7 @@ social-media-promo-scheduler/
 │   │   ├── late-api/           # Zernio API client & platform types
 │   │   ├── airtable/           # Airtable REST client, TypeScript types, campaign-type-rules fetch, user profile lookup
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
+│   │   ├── brand-access.ts     # Server-side brand access helpers (user-brand mapping)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
 │   │   ├── prompts/            # Generation prompt templates + dynamic compose-prompt.ts
@@ -128,11 +129,11 @@ social-media-promo-scheduler/
 | Table | ID | Purpose |
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
-| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image) |
+| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform) |
 | Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status, scheduling |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
-| Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 10 records: type definitions, descriptions, icons, status, scraper strategy |
+| Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 11 records: type definitions, descriptions, icons, status, scraper strategy (includes "Open Call" — Coming Soon) |
 | Generation Rules | `tbliTMGAEuaU9CLBf` | Editorial rules per campaign type, composed into prompt fragments |
 | Feedback Log | `tblZWSKDdVYUcHX5J` | Structured feedback on generated posts, linked to posts/campaigns/types |
 | Users | `tblyUmt78haC25nPZ` | User-to-brand access mapping: email, role, allowed brands, default brand |

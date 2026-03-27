@@ -599,46 +599,6 @@ export default function CampaignDetailPage() {
         </div>
       </Card>
 
-      {/* Progress log during generation */}
-      {progressLog.length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              {progressLog.map((event, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex items-start gap-2 text-sm",
-                    event.status === "error" && "text-destructive"
-                  )}
-                >
-                  {event.status === "running" ? (
-                    <Loader2 className="h-4 w-4 mt-0.5 animate-spin text-primary shrink-0" />
-                  ) : event.status === "success" ? (
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-500 shrink-0" />
-                  ) : (
-                    <span className="h-4 w-4 mt-0.5 text-destructive shrink-0">✗</span>
-                  )}
-                  <div>
-                    <span className="text-muted-foreground mr-1.5">
-                      [{event.step}/{event.totalSteps}]
-                    </span>
-                    <span className={event.status === "success" ? "text-foreground" : ""}>
-                      {event.message}
-                    </span>
-                    {event.detail && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {event.detail}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Tabs: Posts / Settings */}
       <Tabs defaultValue="posts">
         <TabsList>
@@ -787,6 +747,46 @@ export default function CampaignDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Progress log during generation */}
+      {progressLog.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              {progressLog.map((event, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-start gap-2 text-sm",
+                    event.status === "error" && "text-destructive"
+                  )}
+                >
+                  {event.status === "running" ? (
+                    <Loader2 className="h-4 w-4 mt-0.5 animate-spin text-primary shrink-0" />
+                  ) : event.status === "success" ? (
+                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-500 shrink-0" />
+                  ) : (
+                    <span className="h-4 w-4 mt-0.5 text-destructive shrink-0">✗</span>
+                  )}
+                  <div>
+                    <span className="text-muted-foreground mr-1.5">
+                      [{event.step}/{event.totalSteps}]
+                    </span>
+                    <span className={event.status === "success" ? "text-foreground" : ""}>
+                      {event.message}
+                    </span>
+                    {event.detail && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {event.detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Post detail dialog */}
       <Dialog
