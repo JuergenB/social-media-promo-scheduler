@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { addDays, startOfWeek, format, differenceInCalendarWeeks, isSameDay } from "date-fns";
 import Link from "next/link";
 import {
@@ -50,6 +50,22 @@ export function CampaignTimeline({
   campaignId,
 }: CampaignTimelineProps) {
   const [zoomLevel, setZoomLevel] = useState<"days" | "weeks">("days");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(600);
+
+  // Measure container width for responsive cell sizing
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    setContainerWidth(el.clientWidth);
+    return () => observer.disconnect();
+  }, []);
 
   // Filter to only posts with scheduled dates
   const scheduledPosts = useMemo(
@@ -172,13 +188,23 @@ export function CampaignTimeline({
           </div>
         </div>
 
-        {/* Month labels */}
-        <div className="overflow-x-auto">
-          {zoomLevel === "days" ? (
+        {/* Heatmap grid */}
+        <div ref={containerRef} className="overflow-x-auto">
+          {(() => {
+            // Dynamic cell sizing: fill available width
+            const dayLabelWidth = 20;
+            const gap = 2;
+            const availableWidth = containerWidth - dayLabelWidth - 16; // padding
+            const cellSize = zoomLevel === "days"
+              ? Math.min(32, Math.max(10, Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks)))
+              : Math.min(24, Math.max(8, Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks)));
+            const cellStep = cellSize + gap;
+
+            return zoomLevel === "days" ? (
             /* Day-level heatmap */
             <div>
               {/* Month row */}
-              <div className="flex gap-0 ml-5 mb-1">
+              <div className="flex gap-0 mb-1" style={{ marginLeft: `${dayLabelWidth}px` }}>
                 {monthLabels.map((m, i) => {
                   const nextCol = monthLabels[i + 1]?.col ?? totalWeeks;
                   const span = nextCol - m.col;
@@ -186,7 +212,7 @@ export function CampaignTimeline({
                     <div
                       key={m.label + m.col}
                       className="text-[10px] text-muted-foreground"
-                      style={{ width: `${span * 16}px` }}
+                      style={{ width: `${span * cellStep}px` }}
                     >
                       {m.label}
                     </div>
@@ -197,9 +223,9 @@ export function CampaignTimeline({
               {/* Grid: 7 rows x N columns */}
               <div className="flex gap-0">
                 {/* Day labels */}
-                <div className="flex flex-col gap-[2px] mr-1">
+                <div className="flex flex-col mr-0.5" style={{ gap: `${gap}px` }}>
                   {DAY_LABELS.map((label, i) => (
-                    <div key={i} className="h-[14px] w-4 text-[9px] text-muted-foreground flex items-center justify-end pr-0.5">
+                    <div key={i} className="text-[9px] text-muted-foreground flex items-center justify-end pr-0.5" style={{ height: `${cellSize}px`, width: `${dayLabelWidth}px` }}>
                       {i % 2 === 0 ? label : ""}
                     </div>
                   ))}
@@ -207,10 +233,11 @@ export function CampaignTimeline({
 
                 {/* Cells */}
                 <div
-                  className="grid gap-[2px]"
+                  className="grid"
                   style={{
-                    gridTemplateRows: "repeat(7, 14px)",
-                    gridTemplateColumns: `repeat(${totalWeeks}, 14px)`,
+                    gridTemplateRows: `repeat(7, ${cellSize}px)`,
+                    gridTemplateColumns: `repeat(${totalWeeks}, ${cellSize}px)`,
+                    gap: `${gap}px`,
                     gridAutoFlow: "column",
                   }}
                 >
@@ -229,18 +256,20 @@ export function CampaignTimeline({
                       <Tooltip key={i}>
                         <TooltipTrigger asChild>
                           <div
-                            className={`h-[14px] w-[14px] rounded-[2px] ${
+                            className={`rounded-[2px] ${
                               !isInRange
                                 ? "bg-transparent"
                                 : day.total === 0
                                   ? "bg-muted/50"
                                   : ""
                             } ${isToday ? "ring-1 ring-primary" : ""}`}
-                            style={
-                              day.total > 0 && isInRange
+                            style={{
+                              width: `${cellSize}px`,
+                              height: `${cellSize}px`,
+                              ...(day.total > 0 && isInRange
                                 ? { backgroundColor: color, opacity }
-                                : undefined
-                            }
+                                : {}),
+                            }}
                           />
                         </TooltipTrigger>
                         {isInRange && (
@@ -270,8 +299,8 @@ export function CampaignTimeline({
               </div>
             </div>
           ) : (
-            /* Week-level compact view */
-            <div className="flex gap-[2px] items-end">
+            /* Week-level compact bar view */
+            <div className="flex items-end" style={{ gap: `${gap}px` }}>
               {weeks.map((week, i) => {
                 const dominantPlatform = week.total > 0
                   ? [...week.platforms.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
@@ -280,14 +309,16 @@ export function CampaignTimeline({
                   ? PLATFORM_COLORS[dominantPlatform as keyof typeof PLATFORM_COLORS] || "#6b7280"
                   : undefined;
                 const maxWeekPosts = Math.max(...weeks.map((w) => w.total), 1);
-                const height = week.total === 0 ? 4 : Math.max(8, (week.total / maxWeekPosts) * 48);
+                const barWidth = Math.max(8, Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks));
+                const height = week.total === 0 ? 4 : Math.max(8, (week.total / maxWeekPosts) * 64);
 
                 return (
                   <Tooltip key={i}>
                     <TooltipTrigger asChild>
                       <div
-                        className="w-3 rounded-sm bg-muted/50"
+                        className="rounded-sm bg-muted/50"
                         style={{
+                          width: `${barWidth}px`,
                           height: `${height}px`,
                           backgroundColor: week.total > 0 ? color : undefined,
                           opacity: week.total > 0 ? 0.7 : 0.3,
@@ -317,7 +348,8 @@ export function CampaignTimeline({
                 );
               })}
             </div>
-          )}
+          );
+          })()}
         </div>
 
         {/* Platform legend */}
