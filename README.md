@@ -104,7 +104,7 @@ Instagram, TikTok, YouTube, LinkedIn, Pinterest, X/Twitter, Facebook, Threads, B
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| **I** | Create a campaign from a newsletter URL → draft posts → approve → schedule | Starting |
+| **I** | Create a campaign from a newsletter URL → draft posts → approve → schedule | Nearing completion |
 | **II** | Per-platform scheduling controls, distribution slider, multi-brand switching | Planned |
 | **III** | Image formatting, carousel templates, team input workflows, deep research | Planned |
 | **IV** | Performance tracking, automated triggers, production deployment | Planned |
@@ -162,6 +162,16 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Tapering schedule algorithm with configurable duration & distribution bias
 - [x] **Phase I:** Batch scheduling with date collision avoidance
 - [x] **Phase I:** Post status alignment with Zernio lifecycle (Queued → Scheduled → Published)
+- [x] **Phase I:** Unified image catalog — Claude picks images by index, works across all CMS platforms
+- [x] **Phase I:** Image-Text Integrity Rule — constraint hierarchy prevents hallucinated names/attribution
+- [x] **Phase I:** Dimension-aware image dedup, thumbnail filtering (<200px rejected)
+- [x] **Phase I:** Compact generation progress bar, tab auto-switch to Posts after generation
+- [x] **Phase I:** Generation options persist to Airtable via Save Options button
+- [x] **Phase I:** List-view Approve/Dismiss buttons functional
+- [x] **Phase I:** New campaign redirects to detail page
+- [x] **Phase I:** Ghost/CMS excludeTags for related posts sections (#58 partial)
+- [x] **Phase I:** Event page section parsing from markdown
+- [x] **Phase I:** Schedule preview heatmap visualization (#13)
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
