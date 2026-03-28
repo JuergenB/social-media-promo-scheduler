@@ -132,7 +132,7 @@ social-media-promo-scheduler/
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
 | Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform) |
-| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override |
+| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override. **imageIndex** (integer) for catalog-based image selection, **subject** field declares who/what each post is about |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
 | Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 11 records: type definitions, descriptions, icons, status, scraper strategy (includes "Open Call" — Coming Soon) |
@@ -156,6 +156,9 @@ social-media-promo-scheduler/
 - Use `cn()` from `lib/utils.ts` for class merging
 - App Router only (no pages/ directory)
 - All AI prompts must follow the XML-tag prompt architecture from global CLAUDE.md
+- **Image catalog approach:** Claude selects images by `imageIndex` from a numbered catalog. Works across all CMS platforms (Ghost, BigCommerce, WordPress, etc.). Multi-section blog posts use section headings as image labels when alt text is empty.
+- **Image-Text Integrity Rule:** Constraint hierarchy — editorial direction cannot override integrity rules. Claude must not guess names, attribute artwork to wrong artists, or fabricate attribution. This is enforced in prompt templates.
+- **Image filtering:** Thumbnails <200px in URL paths are rejected. Dimension-aware dedup keeps the largest version. Supplemental URL images are filtered by entity overlap with the main URL content.
 
 ## Session Rules
 

@@ -97,14 +97,18 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 | Per-brand Zernio keys | Done | Brand switcher, per-brand API key resolution, profile filtering (#41) |
 | User-brand access | Done | Airtable Users table, session integration, scoped brands API (#42) |
 | Connected platform filtering | Done | Generation options show only platforms with connected Zernio accounts |
-| Approval queue | Pending | List view of pending posts with approve/edit/dismiss actions |
-| Basic scheduling | Pending | Push approved posts to Zernio API with hardcoded tapering schedule |
+| Approval queue | Done | List-view approve/dismiss buttons, tab auto-switch after generation, inline editing |
+| Basic scheduling | Done | Push approved posts to Zernio API with tapering schedule, collision avoidance |
+| Image matching | Done | Unified image catalog (imageIndex), dimension-aware dedup, thumbnail filtering, Image-Text Integrity Rule |
+| Generation UX | Done | Compact progress bar, Save Options persistence, unsaved settings warning, editorial direction tips |
+| Schedule preview | Done | Campaign timeline heatmap with density visualization (#13) |
+| CMS scraping | Done | Ghost excludeTags, event section parsing, supplemental URL entity filtering |
 
 **Campaign types for Phase I:**
 - Newsletter (Curated.co) — primary development target
 - Blog Post / Article — similar pipeline, good for validation
 
-**Not in Phase I:** Per-platform frequency sliders, preset customization, image generation (Orshot), multi-brand switching, analytics.
+**Not in Phase I:** Per-platform frequency sliders, preset customization, image generation (Orshot), analytics. Multi-brand switching is done (#41). Event campaigns are done (#46).
 
 ### Phase II: Scheduling Engine + Multi-Brand
 
@@ -131,7 +135,7 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 | Pre-generation input | Chatbot or questionnaire asking team members for editorial focus before AI generation |
 | Deep artist research | Perplexity integration for artist context beyond the source URL |
 | Campaign analytics | Track post performance via Zernio analytics API, feed back into frequency optimization |
-| Event campaigns | Time-bounded campaigns that end on event date |
+| Event campaigns | ~~Time-bounded campaigns that end on event date~~ Done in Phase I (#46) |
 | Public art (Remote) | Location-based campaign type |
 | Institutional (Arterial) | Mission-driven content campaigns |
 
@@ -158,7 +162,7 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 | 3 | **Exhibition** | Gallery/museum URL | II |
 | 4 | **Artist Profile** | Artist page or Q+Art interview URL | II |
 | 5 | **Podcast Episode** | Podcast URL (NRA network, Artsville) | II |
-| 6 | **Event** | Event page URL | III |
+| 6 | **Event** | Event page URL | I (done) |
 | 7 | **Public Art** | Location/project URL (Remote series) | III |
 | 8 | **Video / Film** | Video URL (Arthouse series) | III |
 | 9 | **Institutional** | Mission/impact content URL | III |
