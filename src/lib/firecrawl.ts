@@ -377,6 +377,11 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
         ".share-buttons", ".social-share", ".related-posts",
         ".comments", "#comments",
         "script", "style", "iframe",
+        // Related/recommended content sections (Ghost, WordPress, etc.)
+        ".recommended", ".read-next",
+        ".post-feed", ".post-card", ".gh-post-feed",
+        ".more-posts", ".further-reading", ".you-might-also-like",
+        "aside",
       ],
       waitFor: 3000,
     }),
@@ -518,6 +523,11 @@ export async function scrapeEvent(url: string): Promise<ScrapedEventBlogData> {
           "nav", "footer", "header",
           ".sidebar", ".widget", ".ad", ".popup",
           "script", "style", "iframe",
+          // Related/recommended content sections (Ghost, WordPress, etc.)
+          ".related-posts", ".recommended", ".read-next",
+          ".post-feed", ".post-card", ".gh-post-feed",
+          ".more-posts", ".further-reading", ".you-might-also-like",
+          "aside",
         ],
         waitFor: 3000,
       }),
