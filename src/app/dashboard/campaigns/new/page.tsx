@@ -536,19 +536,31 @@ export default function NewCampaignPage() {
           <Textarea
             placeholder={
               type === "Newsletter"
-                ? "Which stories stood out this week? Any particular angle to emphasize?"
+                ? "e.g., Lead with the gallery partnership story — it's our biggest announcement this month."
                 : type === "Blog Post"
-                  ? "What should we emphasize? What\u2019s the key takeaway for social media?"
-                  : "What should we emphasize? Which pieces stood out? What angle should the posts take?"
+                  ? "e.g., Focus on the practical tips in the second half. Emphasize the free resources."
+                  : type === "Event"
+                    ? "e.g., Focus on the community aspect and upcoming deadline. Emphasize the free admission and family-friendly activities."
+                    : "e.g., Lead with the most surprising detail. Keep it conversational and invite discussion."
             }
             value={editorialDirection}
             onChange={(e) => setEditorialDirection(e.target.value)}
             rows={3}
           />
           <p className="text-xs text-muted-foreground mt-2">
-            Optional — this guidance shapes every post that gets generated. Your
-            perspective comes first.
+            Optional — this guidance shapes the tone and focus of every generated post.
           </p>
+          <details className="text-xs text-muted-foreground mt-1">
+            <summary className="cursor-pointer hover:text-foreground transition-colors">
+              Tips for effective editorial direction
+            </summary>
+            <ul className="mt-2 ml-4 space-y-1 list-disc text-muted-foreground/80">
+              <li><strong>Be specific about focus:</strong> &ldquo;Emphasize the free workshops and family-friendly activities&rdquo; rather than &ldquo;make it sound fun&rdquo;</li>
+              <li><strong>Guide tone and angle:</strong> &ldquo;Lead with urgency — only 3 days left to RSVP&rdquo; or &ldquo;Keep it celebratory, this is a milestone event&rdquo;</li>
+              <li><strong>Call out key details:</strong> &ldquo;Mention the new venue location&rdquo; or &ldquo;Highlight that tickets are selling fast&rdquo;</li>
+              <li><strong>Let the AI handle attribution:</strong> The system automatically matches people and images from the scraped content — no need to instruct it to name specific individuals unless you want a particular focus</li>
+            </ul>
+          </details>
         </CardContent>
       </Card>
 

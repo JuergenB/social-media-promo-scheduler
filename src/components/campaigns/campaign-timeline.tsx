@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useRef, useEffect } from "react";
-import { addDays, startOfWeek, format, differenceInCalendarWeeks, isSameDay } from "date-fns";
+import { useMemo, useRef, useEffect, useState } from "react";
+import { addDays, format, differenceInDays, isSameDay } from "date-fns";
 import Link from "next/link";
 import {
   Tooltip,
@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Calendar, ZoomIn, ZoomOut } from "lucide-react";
+import { Calendar } from "lucide-react";
 import { PLATFORM_COLORS } from "@/lib/late-api/types";
 import type { Post } from "@/lib/airtable/types";
 
@@ -20,15 +20,6 @@ interface CampaignTimelineProps {
   durationDays: number;
   campaignId: string;
 }
-
-interface DayData {
-  date: Date;
-  posts: Post[];
-  platforms: Map<string, number>;
-  total: number;
-}
-
-const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
 
 /** Map Airtable platform names to Zernio platform IDs for color lookup */
 const PLATFORM_KEY_MAP: Record<string, string> = {
@@ -49,21 +40,17 @@ export function CampaignTimeline({
   durationDays,
   campaignId,
 }: CampaignTimelineProps) {
-  const [zoomLevel, setZoomLevel] = useState<"days" | "weeks">("days");
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(600);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [trackWidth, setTrackWidth] = useState(600);
 
-  // Measure container width for responsive cell sizing
   useEffect(() => {
-    const el = containerRef.current;
+    const el = trackRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerWidth(entry.contentRect.width);
-      }
+      for (const entry of entries) setTrackWidth(entry.contentRect.width);
     });
     observer.observe(el);
-    setContainerWidth(el.clientWidth);
+    setTrackWidth(el.clientWidth);
     return () => observer.disconnect();
   }, []);
 
@@ -73,86 +60,70 @@ export function CampaignTimeline({
     [posts]
   );
 
-  // Build day-level data
-  const { days, weeks, maxPostsPerDay, activePlatforms, monthLabels } = useMemo(() => {
+  // Group posts by day with platform info
+  const { daySlots, activePlatforms, monthMarkers } = useMemo(() => {
     const endDate = addDays(campaignStartDate, durationDays);
-    const weekStart = startOfWeek(campaignStartDate, { weekStartsOn: 1 });
-    const totalWeeks = differenceInCalendarWeeks(endDate, weekStart, { weekStartsOn: 1 }) + 1;
+    const platforms = new Set<string>();
+    const today = new Date();
 
-    const dayMap = new Map<string, DayData>();
-    const platformSet = new Set<string>();
-    let maxPosts = 0;
+    // Build day slots
+    const slots: Array<{
+      dayOffset: number;
+      date: Date;
+      posts: Post[];
+      platforms: Map<string, number>;
+      isToday: boolean;
+    }> = [];
 
-    // Initialize all days
-    for (let d = 0; d < totalWeeks * 7; d++) {
-      const date = addDays(weekStart, d);
-      const key = format(date, "yyyy-MM-dd");
-      dayMap.set(key, { date, posts: [], platforms: new Map(), total: 0 });
-    }
-
-    // Place posts into days
-    for (const post of scheduledPosts) {
-      const key = post.scheduledDate.split("T")[0];
-      const day = dayMap.get(key);
-      if (day) {
-        day.posts.push(post);
-        day.total++;
-        const platKey = PLATFORM_KEY_MAP[post.platform] || post.platform.toLowerCase();
-        platformSet.add(platKey);
-        day.platforms.set(platKey, (day.platforms.get(platKey) || 0) + 1);
-        if (day.total > maxPosts) maxPosts = day.total;
+    for (let d = 0; d <= durationDays; d++) {
+      const date = addDays(campaignStartDate, d);
+      const dateStr = format(date, "yyyy-MM-dd");
+      const dayPosts = scheduledPosts.filter(
+        (p) => p.scheduledDate.split("T")[0] === dateStr
+      );
+      const platMap = new Map<string, number>();
+      for (const p of dayPosts) {
+        const key = PLATFORM_KEY_MAP[p.platform] || p.platform.toLowerCase();
+        platforms.add(key);
+        platMap.set(key, (platMap.get(key) || 0) + 1);
+      }
+      if (dayPosts.length > 0) {
+        slots.push({
+          dayOffset: d,
+          date,
+          posts: dayPosts,
+          platforms: platMap,
+          isToday: isSameDay(date, today),
+        });
       }
     }
 
-    // Build weeks array for week-zoom view
-    const weekData: Array<{ weekStart: Date; posts: Post[]; total: number; platforms: Map<string, number> }> = [];
-    for (let w = 0; w < totalWeeks; w++) {
-      const ws = addDays(weekStart, w * 7);
-      let total = 0;
-      const platforms = new Map<string, number>();
-      const weekPosts: Post[] = [];
-      for (let d = 0; d < 7; d++) {
-        const key = format(addDays(ws, d), "yyyy-MM-dd");
-        const day = dayMap.get(key);
-        if (day) {
-          total += day.total;
-          weekPosts.push(...day.posts);
-          for (const [p, c] of day.platforms) {
-            platforms.set(p, (platforms.get(p) || 0) + c);
-          }
-        }
-      }
-      weekData.push({ weekStart: ws, posts: weekPosts, total, platforms });
-    }
-
-    // Month labels with column positions
-    const months: Array<{ label: string; col: number }> = [];
+    // Month markers along the timeline
+    const months: Array<{ label: string; position: number }> = [];
     let lastMonth = -1;
-    for (let w = 0; w < totalWeeks; w++) {
-      const date = addDays(weekStart, w * 7);
+    for (let d = 0; d <= durationDays; d++) {
+      const date = addDays(campaignStartDate, d);
       const month = date.getMonth();
       if (month !== lastMonth) {
-        months.push({ label: format(date, "MMM"), col: w });
+        months.push({
+          label: d === 0 ? format(date, "MMM d") : format(date, "MMM"),
+          position: durationDays > 0 ? d / durationDays : 0,
+        });
         lastMonth = month;
       }
     }
 
-    return {
-      days: [...dayMap.values()],
-      weeks: weekData,
-      maxPostsPerDay: maxPosts,
-      activePlatforms: [...platformSet],
-      monthLabels: months,
-    };
+    return { daySlots: slots, activePlatforms: [...platforms], monthMarkers: months };
   }, [scheduledPosts, campaignStartDate, durationDays]);
 
   if (scheduledPosts.length === 0) return null;
 
-  const totalWeeks = weeks.length;
   const today = new Date();
+  const todayOffset = differenceInDays(today, campaignStartDate);
+  const todayPosition = durationDays > 0 ? Math.max(0, Math.min(1, todayOffset / durationDays)) : 0;
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <TooltipProvider delayDuration={150}>
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -161,196 +132,118 @@ export function CampaignTimeline({
               Campaign Timeline
             </h4>
             <span className="text-[11px] text-muted-foreground">
-              {scheduledPosts.length} posts across {durationDays} days
+              {scheduledPosts.length} post{scheduledPosts.length !== 1 ? "s" : ""} across {durationDays} days
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Zoom toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setZoomLevel(zoomLevel === "days" ? "weeks" : "days")}
-            >
-              {zoomLevel === "days" ? (
-                <ZoomOut className="h-3.5 w-3.5" />
-              ) : (
-                <ZoomIn className="h-3.5 w-3.5" />
-              )}
-            </Button>
-            {/* Calendar link */}
-            <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
-              <Link href={`/dashboard/calendar?date=${scheduledPosts[0]?.scheduledDate?.split("T")[0] || ""}`}>
-                <Calendar className="h-3 w-3 mr-1" />
-                Calendar
-              </Link>
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
+            <Link href={`/dashboard/calendar?date=${scheduledPosts[0]?.scheduledDate?.split("T")[0] || ""}`}>
+              <Calendar className="h-3 w-3 mr-1" />
+              Calendar
+            </Link>
+          </Button>
         </div>
 
-        {/* Heatmap grid */}
-        <div ref={containerRef} className="overflow-x-auto">
-          {(() => {
-            // Dynamic cell sizing: fill available width
-            const dayLabelWidth = 20;
-            const gap = 2;
-            const availableWidth = containerWidth - dayLabelWidth - 16; // padding
-            // Cell size scales to fill width. For 7 rows, cap height so grid isn't too tall.
-            const rawCellSize = Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks);
-            const maxCellHeight = 48; // cap so 7 rows × 48px = 336px max grid height
-            const cellSize = Math.max(10, Math.min(rawCellSize, maxCellHeight));
-            const cellStep = cellSize + gap;
-
-            return zoomLevel === "days" ? (
-            /* Day-level heatmap */
-            <div>
-              {/* Month row */}
-              <div className="flex gap-0 mb-1" style={{ marginLeft: `${dayLabelWidth}px` }}>
-                {monthLabels.map((m, i) => {
-                  const nextCol = monthLabels[i + 1]?.col ?? totalWeeks;
-                  const span = nextCol - m.col;
-                  return (
-                    <div
-                      key={m.label + m.col}
-                      className="text-[10px] text-muted-foreground"
-                      style={{ width: `${span * cellStep}px` }}
-                    >
-                      {m.label}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Grid: 7 rows x N columns */}
-              <div className="flex gap-0">
-                {/* Day labels */}
-                <div className="flex flex-col mr-0.5" style={{ gap: `${gap}px` }}>
-                  {DAY_LABELS.map((label, i) => (
-                    <div key={i} className="text-[9px] text-muted-foreground flex items-center justify-end pr-0.5" style={{ height: `${cellSize}px`, width: `${dayLabelWidth}px` }}>
-                      {i % 2 === 0 ? label : ""}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Cells */}
-                <div
-                  className="grid"
-                  style={{
-                    gridTemplateRows: `repeat(7, ${cellSize}px)`,
-                    gridTemplateColumns: `repeat(${totalWeeks}, ${cellSize}px)`,
-                    gap: `${gap}px`,
-                    gridAutoFlow: "column",
-                  }}
+        {/* Timeline track */}
+        <div className="space-y-0">
+          {/* Month labels with tick marks */}
+          <div className="relative h-5" ref={trackRef}>
+            {monthMarkers.map((m, i) => (
+              <div
+                key={i}
+                className="absolute flex flex-col items-start"
+                style={{ left: `${m.position * 100}%` }}
+              >
+                <span
+                  className="text-[10px] text-muted-foreground whitespace-nowrap"
+                  style={{ transform: i === 0 ? "none" : "translateX(-50%)" }}
                 >
-                  {days.map((day, i) => {
-                    const isInRange = day.date >= campaignStartDate && day.date <= addDays(campaignStartDate, durationDays);
-                    const isToday = isSameDay(day.date, today);
-                    const dominantPlatform = day.total > 0
-                      ? [...day.platforms.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
-                      : null;
-                    const color = dominantPlatform
-                      ? PLATFORM_COLORS[dominantPlatform as keyof typeof PLATFORM_COLORS] || "#6b7280"
-                      : undefined;
-                    const opacity = day.total === 0 ? 0 : Math.min(0.3 + (day.total / Math.max(maxPostsPerDay, 1)) * 0.7, 1);
-
-                    return (
-                      <Tooltip key={i}>
-                        <TooltipTrigger asChild>
-                          <div
-                            className={`rounded-[2px] ${
-                              !isInRange
-                                ? "bg-transparent"
-                                : day.total === 0
-                                  ? "bg-muted/50"
-                                  : ""
-                            } ${isToday ? "ring-1 ring-primary" : ""}`}
-                            style={{
-                              width: `${cellSize}px`,
-                              height: `${cellSize}px`,
-                              ...(day.total > 0 && isInRange
-                                ? { backgroundColor: color, opacity }
-                                : {}),
-                            }}
-                          />
-                        </TooltipTrigger>
-                        {isInRange && (
-                          <TooltipContent side="top" className="text-xs">
-                            <p className="font-medium">{format(day.date, "EEE, MMM d")}</p>
-                            {day.total === 0 ? (
-                              <p className="text-muted-foreground">No posts</p>
-                            ) : (
-                              <div className="space-y-0.5">
-                                {[...day.platforms.entries()].map(([p, count]) => (
-                                  <div key={p} className="flex items-center gap-1.5">
-                                    <div
-                                      className="h-2 w-2 rounded-full"
-                                      style={{ backgroundColor: PLATFORM_COLORS[p as keyof typeof PLATFORM_COLORS] || "#6b7280" }}
-                                    />
-                                    <span>{p} × {count}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </TooltipContent>
-                        )}
-                      </Tooltip>
-                    );
-                  })}
-                </div>
+                  {m.label}
+                </span>
               </div>
-            </div>
-          ) : (
-            /* Week-level compact bar view */
-            <div className="flex items-end" style={{ gap: `${gap}px` }}>
-              {weeks.map((week, i) => {
-                const dominantPlatform = week.total > 0
-                  ? [...week.platforms.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
-                  : null;
-                const color = dominantPlatform
-                  ? PLATFORM_COLORS[dominantPlatform as keyof typeof PLATFORM_COLORS] || "#6b7280"
-                  : undefined;
-                const maxWeekPosts = Math.max(...weeks.map((w) => w.total), 1);
-                const barWidth = Math.max(8, Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks));
-                const height = week.total === 0 ? 4 : Math.max(8, (week.total / maxWeekPosts) * 64);
+            ))}
+            {/* End date label */}
+            <span
+              className="absolute right-0 text-[10px] text-muted-foreground"
+            >
+              {format(addDays(campaignStartDate, durationDays), "MMM d")}
+            </span>
+          </div>
 
-                return (
-                  <Tooltip key={i}>
-                    <TooltipTrigger asChild>
-                      <div
-                        className="rounded-sm bg-muted/50"
-                        style={{
-                          width: `${barWidth}px`,
-                          height: `${height}px`,
-                          backgroundColor: week.total > 0 ? color : undefined,
-                          opacity: week.total > 0 ? 0.7 : 0.3,
-                        }}
-                      />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs">
-                      <p className="font-medium">Week of {format(week.weekStart, "MMM d")}</p>
-                      {week.total === 0 ? (
-                        <p className="text-muted-foreground">No posts</p>
-                      ) : (
-                        <div className="space-y-0.5">
-                          <p>{week.total} post{week.total !== 1 ? "s" : ""}</p>
-                          {[...week.platforms.entries()].map(([p, count]) => (
-                            <div key={p} className="flex items-center gap-1.5">
-                              <div
-                                className="h-2 w-2 rounded-full"
-                                style={{ backgroundColor: PLATFORM_COLORS[p as keyof typeof PLATFORM_COLORS] || "#6b7280" }}
-                              />
-                              <span>{p} × {count}</span>
-                            </div>
-                          ))}
+          {/* Tick marks row */}
+          <div className="relative h-1.5">
+            {monthMarkers.map((m, i) => (
+              <div
+                key={i}
+                className="absolute top-0 w-px h-1.5 bg-border"
+                style={{ left: `${m.position * 100}%` }}
+              />
+            ))}
+          </div>
+
+          {/* Track with posts */}
+          <div className="relative h-10 bg-muted/30 rounded-md border border-border/50">
+            {/* Today marker */}
+            {todayOffset >= 0 && todayOffset <= durationDays && (
+              <div
+                className="absolute top-0 bottom-0 w-px bg-primary/50 z-10"
+                style={{ left: `${todayPosition * 100}%` }}
+              />
+            )}
+
+            {/* Post markers — uniform 8px dots, side-by-side */}
+            {daySlots.map((slot, i) => {
+              const position = durationDays > 0 ? slot.dayOffset / durationDays : 0;
+              const platformEntries = [...slot.platforms.entries()];
+
+              return (
+                <Tooltip key={i}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className="absolute top-1/2 flex items-center gap-0.5 cursor-pointer"
+                      style={{ left: `${position * 100}%`, transform: `translate(-50%, -50%)` }}
+                    >
+                      {platformEntries.map(([platform, count], j) => (
+                        <div
+                          key={j}
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{
+                            backgroundColor: PLATFORM_COLORS[platform as keyof typeof PLATFORM_COLORS] || "#6b7280",
+                            opacity: 0.85,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">
+                    <p className="font-medium">{format(slot.date, "EEE, MMM d")}</p>
+                    <div className="space-y-0.5 mt-0.5">
+                      {platformEntries.map(([p, count]) => (
+                        <div key={p} className="flex items-center gap-1.5">
+                          <div
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: PLATFORM_COLORS[p as keyof typeof PLATFORM_COLORS] || "#6b7280" }}
+                          />
+                          <span className="capitalize">{p}{count > 1 ? ` ×${count}` : ""}</span>
                         </div>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+
+          {/* Today label below the track */}
+          {todayOffset >= 0 && todayOffset <= durationDays && (
+            <div className="relative h-4">
+              <span
+                className="absolute text-[9px] text-primary font-medium"
+                style={{ left: `${todayPosition * 100}%`, transform: "translateX(-50%)" }}
+              >
+                today
+              </span>
             </div>
-          );
-          })()}
+          )}
         </div>
 
         {/* Platform legend */}
@@ -358,7 +251,7 @@ export function CampaignTimeline({
           {activePlatforms.sort().map((p) => (
             <div key={p} className="flex items-center gap-1">
               <div
-                className="h-2.5 w-2.5 rounded-sm"
+                className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: PLATFORM_COLORS[p as keyof typeof PLATFORM_COLORS] || "#6b7280" }}
               />
               <span className="text-[10px] text-muted-foreground capitalize">{p}</span>

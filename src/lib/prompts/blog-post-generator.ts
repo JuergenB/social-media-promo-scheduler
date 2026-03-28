@@ -204,7 +204,29 @@ ${contentSections.slice(0, 8).map((s, i) => `  Section ${i + 1}: ${s.heading}`).
 
 Each variant must match its sectionIndex — do NOT write about "${contentSections[0]?.heading}" while setting sectionIndex to 2. The image assigned to each post will be determined by sectionIndex, so a mismatch means the wrong artist's artwork appears with the wrong artist's text.`;
 
-    imageInstructions = `IMPORTANT: Images are assigned AUTOMATICALLY based on sectionIndex. Set imageUrl to an empty string. The system will use the images from the section you specify. If you write about "${contentSections[0]?.heading}", set sectionIndex to 1 and the system will use ${contentSections[0]?.heading}'s images.`;
+    // Build image catalog for multi-section
+    const sectionImageCatalog = contentSections
+      .slice(0, 8)
+      .flatMap((s, sIdx) => s.images.map((img, iIdx) => ({
+        index: sIdx * 10 + iIdx + 1, // unique index
+        alt: img.alt || `Section ${sIdx + 1} image`,
+        sectionHeading: s.heading,
+      })));
+
+    imageInstructions = `<available_images>
+${contentSections.slice(0, 8).map((s, i) =>
+  `Section ${i + 1} (${s.heading}): ${s.images.length > 0 ? s.images.map(img => `"${img.alt || 'untitled'}"`).join(", ") : "no images"}`
+).join("\n")}
+Image 0: Event hero/general image (use when post is about the event as a whole)
+</available_images>
+
+IMAGE SELECTION RULES:
+- Set "imageIndex" to the section number (1-${contentSections.length}) whose image should accompany the post.
+- Set imageIndex to 0 for posts about the event/topic as a whole.
+- If you write about "${contentSections[0]?.heading}", set imageIndex to 1.
+- Match the image to what the post text discusses. Wrong image = wrong person's work shown.
+- If you CANNOT confidently identify who is associated with a specific image, set imageIndex to 0 and write about the overall topic instead.
+- A mix of person-specific posts and general topic posts is ideal.`;
 
   } else {
     // ── Single-section mode: flat content (original behavior) ────
@@ -219,10 +241,31 @@ ${blogData.content}
 </blog_post_content>`;
 
     angleInstructions = postsPerPlatform > 1
-      ? `For each platform, generate ${postsPerPlatform} unique variants. Each variant MUST focus on a DIFFERENT person, artist, topic, or section of the article. Do NOT write multiple posts about the same thing. Spread your focus across the entire article.\n\nSuggested approach:\n${CONTENT_ANGLES.slice(0, postsPerPlatform).map((a, i) => `  Variant ${i + 1}: ${a}`).join("\n")}`
+      ? `For each platform, generate ${postsPerPlatform} unique variants. Each variant MUST focus on a DIFFERENT angle. Spread your focus across the entire article.\n\nIMPORTANT: At least one variant per platform MUST be about the event/topic as a whole — a general promotional post with a call to action (RSVP, attend, visit, learn more). Use imageIndex 0 (the hero image) for this variant. The remaining variants can highlight specific people, works, or details from the content.\n\nSuggested approach:\n  Variant 1: General event/topic promotion — dates, venue, what to expect, CTA\n${CONTENT_ANGLES.slice(0, postsPerPlatform - 1).map((a, i) => `  Variant ${i + 2}: ${a}`).join("\n")}`
       : "Generate 1 post per platform, each optimized for that platform's format and audience.";
 
-    imageInstructions = "IMPORTANT: Images will be assigned to posts automatically after generation. You do NOT need to pick images. Set imageUrl to an empty string. Focus on writing content that covers DIFFERENT parts of the article — if the article features multiple artists or topics, each variant should highlight a different one. Set sectionIndex to 0.";
+    // Build numbered image catalog for Claude to pick from.
+    // Exclude the hero/og image — it's already Image 0 (general/event image).
+    const heroUrl = blogData.heroImage?.url || blogData.ogImage || "";
+    const catalogImages = blogData.images.filter((img) => img.url !== heroUrl).slice(0, 20);
+    const imageCatalog = catalogImages
+      .map((img, i) => `Image ${i + 1}: "${img.alt || 'untitled'}"`)
+      .join("\n");
+
+    imageInstructions = `<available_images>
+Image 0: Event hero/general image (use when post is about the event as a whole, not a specific person or work)
+${imageCatalog}
+</available_images>
+
+IMAGE SELECTION RULES:
+- You MUST select an image for each post by setting "imageIndex" to the image number from the catalog above.
+- MATCH the image to the post content. If your post discusses a specific person or work, pick the image whose description matches that person or work.
+- Set imageIndex to 0 for posts about the event/topic as a whole.
+- If you CANNOT confidently determine which image belongs to the person or work you're writing about, set imageIndex to 0 and write about the event/topic generically instead. Do NOT guess.
+- Each variant should use a DIFFERENT image where possible — spread across the available images.
+- A mix of person-specific posts (with matched images) and general event posts (imageIndex 0) is ideal.
+
+Focus on writing content that covers DIFFERENT angles — some highlighting specific people with their matched images, others promoting the event/topic itself with CTAs, questions, and engagement hooks. Set sectionIndex to 0.`;
   }
 
   return `Generate ${totalPosts} social media posts (${postsPerPlatform} per platform) for the following blog post content.
@@ -242,7 +285,7 @@ Website: ${brandVoice.websiteUrl}
 ${brandVoice.voiceGuidelines}
 </brand_voice_guidelines>
 
-${editorialDirection ? `<editorial_direction>\n${editorialDirection}\n</editorial_direction>` : ""}
+${editorialDirection ? `<editorial_direction>\n${editorialDirection}\n</editorial_direction>\n\n<constraint_priority>\nThe editorial direction above is a stylistic guide for tone and focus. It does NOT override the Image-Text Integrity Rule. You may mention a person by name ONLY if the scraped content explicitly associates them with specific work. If the editorial direction asks you to highlight or name people but you cannot confidently identify them from the content, write about the event/topic instead.\n</constraint_priority>` : ""}
 
 ${contentBlock}
 
@@ -271,6 +314,8 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
       "platform": "instagram|twitter|linkedin|facebook|threads|bluesky|pinterest",
       "variant": 1,
       "sectionIndex": 0,
+      "imageIndex": 0,
+      "subject": "",
       "postText": "The full post text including any hashtags",
       "imageUrl": "",
       "linkUrl": "${blogData.url}"
@@ -278,7 +323,9 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
   ]
 }
 
-sectionIndex: Set to the section number (1-based) that this variant is about. Set to 0 if the post is about the article as a whole rather than a specific section.
+sectionIndex: Set to the section number (1-based) that this variant is about. Set to 0 if the post is about the article as a whole.
+imageIndex: The image number from the available_images catalog that matches this post's content. Set to 0 for the event hero/general image. THIS IS THE PRIMARY IMAGE SELECTION MECHANISM.
+subject: The name of the person/entity this post focuses on, or "" if generic.
 </output_format>
 
 CRITICAL REMINDERS (read these before generating):
@@ -287,7 +334,10 @@ CRITICAL REMINDERS (read these before generating):
 - Sound like a real person, not a marketing bot
 - Incorporate the brand voice naturally — don't force it
 - Include the link naturally where the platform supports it
-- sectionIndex MUST match the content — wrong index = wrong image paired with wrong artist
+- imageIndex MUST match the post content — pick the image whose description matches what you're writing about
+- sectionIndex MUST match the content for multi-section posts
+- NEVER guess a person's name — if unsure, set imageIndex to 0 and write about the event/topic generically
+- Editorial direction is a stylistic guide, NOT permission to guess names or override image matching rules
 - Return valid JSON only
 
 Generate ALL ${totalPosts} posts now.`;

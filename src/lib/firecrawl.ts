@@ -66,6 +66,10 @@ function isNonContentImage(url: string, alt: string): boolean {
   const lowerUrl = url.toLowerCase();
   const lowerAlt = alt.toLowerCase();
 
+  // Detect thumbnail dimensions in URL paths (e.g., /50x50/, _50x50., -50x50/)
+  // Reject images where both dimensions are below the minimum usable size
+  if (isThumbnailByUrl(lowerUrl)) return true;
+
   return (
     // Tiny UI elements
     lowerUrl.includes("favicon") ||
@@ -113,6 +117,67 @@ function isNonContentImage(url: string, alt: string): boolean {
   );
 }
 
+const MIN_IMAGE_DIMENSION = 200;
+
+/**
+ * Detect thumbnail-sized images from URL dimension patterns.
+ * Matches common CDN/CMS patterns: /50x50/, _100x100., -75x75/, stencil/50x50/
+ * Returns true if BOTH dimensions are below the minimum usable size for social media.
+ */
+function isThumbnailByUrl(lowerUrl: string): boolean {
+  // Match NxN dimension patterns in URL paths (various separators)
+  // Patterns: /50x50/ | _50x50. | -50x50/ | /50x50_ | stencil/50x50/
+  const dimensionPatterns = [
+    /[/_\-.](\d{1,4})x(\d{1,4})[/_\-.]/,  // General: separator + WxH + separator
+    /\/(\d{1,4})x(\d{1,4})\//,              // Path segment: /WxH/
+    /[/_\-](\d{1,4})x(\d{1,4})\.[a-z]+$/,  // Before extension: _WxH.jpg
+    /\/thumb[s]?\/(\d{1,4})x(\d{1,4})/,     // /thumbs/WxH or /thumb/WxH
+    /[?&]w(?:idth)?=(\d{1,4})&h(?:eight)?=(\d{1,4})/,  // Query params: ?w=50&h=50
+    /[?&](?:size|s)=(\d{1,4})x(\d{1,4})/,  // ?size=50x50
+  ];
+
+  for (const pattern of dimensionPatterns) {
+    const match = lowerUrl.match(pattern);
+    if (match) {
+      const w = parseInt(match[1], 10);
+      const h = parseInt(match[2], 10);
+      if (w > 0 && h > 0 && w < MIN_IMAGE_DIMENSION && h < MIN_IMAGE_DIMENSION) {
+        return true;
+      }
+    }
+  }
+
+  // Also catch single-dimension thumbnail indicators
+  const singleDimPatterns = [
+    /\/thumb[s]?\//,                         // /thumb/ or /thumbs/ directory
+    /[/_\-]thumb[._]/,                       // _thumb. or -thumb_
+    /[/_\-]small[._]/,                       // _small. or -small_
+    /[/_\-]tiny[._]/,                        // _tiny. or -tiny_
+    /\/mini\//,                              // /mini/ directory
+  ];
+
+  for (const pattern of singleDimPatterns) {
+    if (pattern.test(lowerUrl)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Normalize a URL for dedup by stripping dimension segments from the path.
+ * This ensures the same image at different sizes (e.g., /500x659/ vs /50x50/)
+ * is recognized as the same image regardless of CDN or CMS platform.
+ */
+function normalizeImageUrlForDedup(url: string): string {
+  // Strip query params
+  let normalized = url.split("?")[0];
+  // Strip dimension segments from path: /123x456/ → /*/
+  normalized = normalized.replace(/\/\d{1,4}x\d{1,4}\//g, "/*/");
+  // Strip dimension suffixes: _123x456. or -123x456.
+  normalized = normalized.replace(/[_-]\d{1,4}x\d{1,4}(?=\.[a-z]+$)/i, "");
+  return normalized;
+}
+
 /** Extract images from a markdown string, filtering out non-content elements */
 function extractImagesFromMarkdown(markdown: string): ScrapedImage[] {
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
@@ -126,17 +191,31 @@ function extractImagesFromMarkdown(markdown: string): ScrapedImage[] {
     allImages.push({ url: fullUrl, alt });
   }
 
-  // Deduplicate by base URL (ignore query params / size variants)
-  const seen = new Set<string>();
-  const images: ScrapedImage[] = [];
+  // Deduplicate by normalized URL (collapses dimension variants into one entry).
+  // When duplicates exist, prefer the largest image (longest URL path often = bigger).
+  const seen = new Map<string, ScrapedImage>();
   for (const img of allImages) {
-    const key = img.url.split("?")[0];
-    if (!seen.has(key)) {
-      seen.add(key);
-      images.push(img);
+    const key = normalizeImageUrlForDedup(img.url);
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, img);
+    } else {
+      // Keep the one with larger dimensions in URL, or the first one found
+      const existingDims = extractDimensionsFromUrl(existing.url);
+      const newDims = extractDimensionsFromUrl(img.url);
+      if (newDims && (!existingDims || newDims.w * newDims.h > existingDims.w * existingDims.h)) {
+        seen.set(key, img);
+      }
     }
   }
-  return images;
+  return [...seen.values()];
+}
+
+/** Extract width x height from a URL if dimension pattern is present */
+function extractDimensionsFromUrl(url: string): { w: number; h: number } | null {
+  const match = url.match(/[/_\-.](\d{1,4})x(\d{1,4})[/_\-.]/);
+  if (!match) return null;
+  return { w: parseInt(match[1], 10), h: parseInt(match[2], 10) };
 }
 
 // ── Section parsing ───────────────────────────────────────────────────
@@ -471,12 +550,15 @@ export async function scrapeEvent(url: string): Promise<ScrapedEventBlogData> {
           ? { url: ogImage, alt: metadata.ogTitle || metadata.title || "" }
           : images[0] || null;
 
+        // Parse sections from event markdown (enables section-aware image matching)
+        const sections = parseSections(markdown);
+
         return {
           title: eventData?.title || metadata.title || metadata.ogTitle || "",
           description: eventData?.description || metadata.description || "",
           content: truncatedContent,
           images,
-          sections: [],
+          sections,
           heroImage,
           ogImage,
           author: null,
