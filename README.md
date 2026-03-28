@@ -177,6 +177,35 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
 - [x] **Phase II:** Brand switching at dashboard level (#41)
 
+## Content Intelligence
+
+The generation pipeline is designed to handle the real-world messiness of web content — different CMS platforms, varying image quality, inconsistent metadata, and embedded third-party exhibitions.
+
+### Image-Content Matching
+
+Rather than trying to match images to posts with regex or string heuristics (which failed at ~90%), the system gives Claude a **numbered image catalog** with descriptive labels and lets it pick the right image for each post. This works regardless of CMS platform because:
+
+- **When alt text is present** (BigCommerce, Artwork Archive): the catalog uses the alt text directly — e.g., `Image 3: "Fracturist Fair Oaks (painting) by Augustine Kofie"`
+- **When alt text is empty** (Ghost, WordPress): the catalog uses the section heading the image appears under — e.g., `Image 5: "Image from section: Katie Knorovsky"`
+- **One code path** handles both cases. No CMS-specific logic.
+
+### Image-Text Integrity Rule
+
+The system enforces a constraint hierarchy: if Claude can confidently identify who created a specific work (their name appears alongside it in the scraped content), it can mention them by name. If it can't, it writes about the event or topic generically rather than guessing. Editorial direction from the user can guide tone and focus but cannot override this integrity rule.
+
+### Multi-Source Enrichment
+
+Campaigns can combine content from multiple URLs. A typical event campaign might include:
+- **Primary URL**: The event blog post or landing page
+- **Exhibition embed**: An Artwork Archive online exhibition with structured artwork data (artist, title, medium, high-res images)
+- **Additional context**: An Eventbrite page, a partner's site, supplemental material
+
+Images from supplemental sources are filtered by **entity overlap** — only images whose alt text matches entities from the primary page are merged in. This prevents sponsor headshots or venue stock photos from polluting the image pool, while allowing artwork images that appear on both the event page and an exhibition embed to enrich the campaign.
+
+### What the AI Generates vs. What Humans Decide
+
+The system generates drafts. Humans approve, edit, or dismiss every post before it goes live. The tools make it fast — functional Approve/Dismiss buttons on the list view, inline content editing, drag-and-drop image swap — but the team always has final say.
+
 ## Technical Details
 
 For developers: see [GETTING_STARTED.md](GETTING_STARTED.md) for stack details, environment setup, API keys, and architecture.
