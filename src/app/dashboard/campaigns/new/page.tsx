@@ -194,7 +194,8 @@ export default function NewCampaignPage() {
       });
 
       if (res.ok) {
-        router.push("/dashboard/campaigns");
+        const data = await res.json();
+        router.push(`/dashboard/campaigns/${data.campaign.id}`);
       }
     } catch (error) {
       console.error("Failed to create campaign:", error);
