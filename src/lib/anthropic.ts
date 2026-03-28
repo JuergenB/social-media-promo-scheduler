@@ -121,4 +121,8 @@ export interface GeneratedPost {
   anchor?: string;
   /** Section index (1-based) for multi-section blog posts. 0 = whole article. */
   sectionIndex?: number;
+  /** The specific artist, person, or subject this post is about (for image matching) */
+  subject?: string;
+  /** Index into the available_images catalog (1-based). 0 = hero/general image. */
+  imageIndex?: number;
 }

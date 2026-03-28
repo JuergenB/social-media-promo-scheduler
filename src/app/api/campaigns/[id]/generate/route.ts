@@ -13,6 +13,247 @@ import {
 import { composeSystemPrompt, composeUserPrompt } from "@/lib/prompts/compose-prompt";
 import { createPlatformShortLink } from "@/lib/short-io";
 
+// ── Image matching helpers ────────────────────────────────────────────
+
+import type { ScrapedImage } from "@/lib/firecrawl";
+
+/**
+ * Find an image whose alt text matches the given subject.
+ * Tries artwork title first (most specific), then artist name (less specific).
+ * When multiple images match the same artist, prefers the one whose alt text
+ * also contains the artwork title from the post text.
+ */
+function findImageBySubject(
+  subject: string,
+  images: ScrapedImage[],
+  postText?: string
+): ScrapedImage | null {
+  if (!subject) return null;
+  const lowerSubject = subject.toLowerCase();
+
+  // Strategy 1: If subject contains artwork title + artist name, match on artwork title
+  // (more specific than artist name alone — "Bee Geometric" is unique, "Shepard Fairey" isn't)
+  // Extract potential artwork titles from post text (quoted or title-case phrases)
+  const artworkHints = extractArtworkTitles(postText || "", lowerSubject);
+
+  // Try matching artwork title in alt text first (most specific match)
+  if (artworkHints.length > 0) {
+    for (const title of artworkHints) {
+      for (const img of images) {
+        const lowerAlt = (img.alt || "").toLowerCase();
+        if (lowerAlt.includes(title)) {
+          return img;
+        }
+      }
+    }
+  }
+
+  // Strategy 2: Find all images matching the subject (artist name), then disambiguate
+  const lowerSubjectWords = lowerSubject.split(/\s+/).filter((w) => w.length > 2);
+  const candidates: ScrapedImage[] = [];
+
+  for (const img of images) {
+    const lowerAlt = (img.alt || "").toLowerCase();
+    if (!lowerAlt) continue;
+
+    // Full substring match
+    if (lowerAlt.includes(lowerSubject)) {
+      candidates.push(img);
+      continue;
+    }
+
+    // Word overlap match (at least 2 words)
+    if (lowerSubjectWords.length >= 2) {
+      const matchCount = lowerSubjectWords.filter((w) => lowerAlt.includes(w)).length;
+      if (matchCount >= 2) {
+        candidates.push(img);
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    // Try filename matching as last resort
+    for (const img of images) {
+      const filename = (img.url.split("/").pop()?.split("?")[0] || "")
+        .toLowerCase().replace(/[-_.]/g, " ").replace(/\d+/g, " ").trim();
+      if (filename && lowerSubjectWords.length >= 2) {
+        const matchCount = lowerSubjectWords.filter((w) => filename.includes(w)).length;
+        if (matchCount >= 2) return img;
+      }
+    }
+    return null;
+  }
+
+  if (candidates.length === 1) return candidates[0];
+
+  // Multiple candidates (e.g., artist has several works) — disambiguate using post text
+  if (postText) {
+    const lowerPost = postText.toLowerCase();
+    for (const img of candidates) {
+      const altParts = (img.alt || "").toLowerCase().split(/\s+by\s+/);
+      const artworkTitle = altParts[0]?.trim();
+      if (artworkTitle && artworkTitle.length > 3 && lowerPost.includes(artworkTitle)) {
+        return img;
+      }
+    }
+  }
+
+  // Still ambiguous — return the first candidate rather than a random unrelated image
+  return candidates[0];
+}
+
+/**
+ * Extract potential artwork titles from post text for precise image matching.
+ * Looks for title patterns like "Title by Artist" or quoted titles.
+ */
+function extractArtworkTitles(postText: string, subject: string): string[] {
+  const titles: string[] = [];
+  const lowerPost = postText.toLowerCase();
+
+  // Pattern: "Title's <rest>" or "<Artist>'s <Title>"
+  // e.g., "Shepard Fairey's Bee Geometric" → "bee geometric"
+  const possessivePattern = new RegExp(
+    subject.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "'s\\s+([^—–\\-,.!?]+)",
+    "i"
+  );
+  const possessiveMatch = lowerPost.match(possessivePattern);
+  if (possessiveMatch) {
+    const title = possessiveMatch[1].trim();
+    if (title.length > 3) titles.push(title);
+  }
+
+  // Pattern: "<Title> by <Artist>"
+  const byPattern = /([a-z][a-z\s']+)\s+by\s+/gi;
+  let byMatch;
+  while ((byMatch = byPattern.exec(lowerPost)) !== null) {
+    const title = byMatch[1].trim();
+    if (title.length > 3 && !title.includes("hand") && !title.includes("edition")) {
+      titles.push(title);
+    }
+  }
+
+  return titles;
+}
+
+/**
+ * Try to match a post's text content against image alt text.
+ * Extracts proper nouns / capitalized multi-word phrases from the post
+ * and checks them against image alt text.
+ */
+function findImageByPostText(postText: string, images: ScrapedImage[]): ScrapedImage | null {
+  // Extract capitalized multi-word names (likely artist/person names)
+  // Pattern: 2+ consecutive capitalized words that aren't common sentence starters
+  const commonWords = new Set([
+    "the", "this", "that", "these", "those", "what", "when", "where", "who",
+    "how", "join", "come", "don't", "check", "see", "get", "new", "our",
+    "your", "their", "from", "with", "for", "and", "but", "not", "are",
+    "was", "been", "have", "has", "will", "can", "may", "all", "just",
+    "more", "most", "some", "any", "each", "every", "here", "there",
+  ]);
+
+  const namePattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+  const candidates: string[] = [];
+  let match;
+
+  while ((match = namePattern.exec(postText)) !== null) {
+    const name = match[1];
+    const firstWord = name.split(" ")[0].toLowerCase();
+    if (!commonWords.has(firstWord)) {
+      candidates.push(name);
+    }
+  }
+
+  // Try each candidate against image alt text (pass full postText for disambiguation)
+  for (const candidate of candidates) {
+    const result = findImageBySubject(candidate, images, postText);
+    if (result) return result;
+  }
+
+  return null;
+}
+
+// ── Supplemental image filtering ──────────────────────────────────────
+
+import type { ScrapedBlogData } from "@/lib/firecrawl";
+
+/**
+ * Extract a set of entity names from the primary page content.
+ * Sources: section headings, image alt text, and capitalized multi-word
+ * names from the content. These represent the "what this page is about"
+ * entities used to filter supplemental images.
+ */
+function extractEntitiesFromContent(blogData: ScrapedBlogData): Set<string> {
+  const entities = new Set<string>();
+
+  // Section headings (e.g., artist names in multi-section posts)
+  for (const section of blogData.sections || []) {
+    if (section.heading && !section.isPreamble) {
+      entities.add(section.heading.toLowerCase().trim());
+    }
+  }
+
+  // Image alt text from primary page
+  for (const img of blogData.images) {
+    if (img.alt && img.alt.length > 3) {
+      entities.add(img.alt.toLowerCase().trim());
+      // Also extract individual multi-word names from alt text
+      // e.g., "Bee Geometric by Shepard Fairey" → "Shepard Fairey", "Bee Geometric"
+      const byParts = img.alt.split(/\s+by\s+/i);
+      for (const part of byParts) {
+        if (part.trim().length > 3) entities.add(part.trim().toLowerCase());
+      }
+    }
+  }
+
+  // Capitalized multi-word names from content (likely person/place names)
+  const namePattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+  let match;
+  while ((match = namePattern.exec(blogData.content)) !== null) {
+    entities.add(match[1].toLowerCase());
+  }
+
+  // Event title itself
+  if (blogData.title) {
+    entities.add(blogData.title.toLowerCase().trim());
+  }
+
+  return entities;
+}
+
+/**
+ * Check if a supplemental image is relevant to the primary page content.
+ * Returns true if the image's alt text or filename overlaps with known entities.
+ */
+function imageMatchesPrimaryEntities(img: ScrapedImage, entities: Set<string>): boolean {
+  const alt = (img.alt || "").toLowerCase().trim();
+  const filename = (img.url.split("/").pop()?.split("?")[0] || "")
+    .toLowerCase()
+    .replace(/[-_]/g, " ")
+    .replace(/\.[a-z]+$/, "");
+
+  // Direct alt text match
+  if (alt && entities.has(alt)) return true;
+
+  // Check if any entity appears within the alt text
+  for (const entity of entities) {
+    if (entity.length > 4 && alt.includes(entity)) return true;
+    if (entity.length > 4 && filename.includes(entity)) return true;
+  }
+
+  // Check if alt text words overlap significantly with any entity
+  const altWords = alt.split(/\s+/).filter((w) => w.length > 3);
+  if (altWords.length >= 2) {
+    for (const entity of entities) {
+      const entityWords = entity.split(/\s+/).filter((w) => w.length > 3);
+      if (entityWords.length < 2) continue;
+      const overlap = altWords.filter((w) => entityWords.includes(w)).length;
+      if (overlap >= 2) return true;
+    }
+  }
+
+  return false;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────
 
 interface CampaignFields {
@@ -269,13 +510,25 @@ export async function POST(
             message: `Scraping ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}...`,
           });
 
+          // Build entity set from primary page for supplemental image filtering.
+          // Only supplemental images whose alt text or filename matches an entity
+          // from the primary page are merged — this prevents sponsor headshots,
+          // venue stock photos, etc. from polluting the image pool.
+          const primaryEntities = extractEntitiesFromContent(blogData);
+
           for (const addUrl of additionalUrls) {
             try {
               const supplemental = await scrapeSupplemental(addUrl.trim());
               supplementalContent += `\n\n<source url="${addUrl.trim()}" title="${supplemental.title}">\n${supplemental.content}\n</source>`;
-              // Merge supplemental images
+
+              // Only merge supplemental images that match primary page entities
               for (const img of supplemental.images) {
-                if (!blogData.images.some((existing) => existing.url.split("?")[0] === img.url.split("?")[0])) {
+                const isDuplicate = blogData.images.some(
+                  (existing) => existing.url.split("?")[0] === img.url.split("?")[0]
+                );
+                if (isDuplicate) continue;
+
+                if (imageMatchesPrimaryEntities(img, primaryEntities)) {
                   blogData.images.push(img);
                 }
               }
@@ -316,13 +569,17 @@ export async function POST(
         const config = resolveAnthropicConfig(brandForAnthropic);
         const allGeneratedPosts: import("@/lib/anthropic").GeneratedPost[] = [];
 
-        // Deduplicate images for fallback
+        // Deduplicate images
         const contentImages = blogData.images.filter((_img, idx) => {
           if (idx === 0) return true;
           return !blogData.images.slice(0, idx).some(
             (prev) => prev.url.split("?")[0] === blogData.images[idx].url.split("?")[0]
           );
         });
+
+        // Build catalog images (hero excluded) — must match prompt catalog exactly
+        const heroUrl = blogData.heroImage?.url || blogData.ogImage || "";
+        const catalogImages = contentImages.filter((img) => img.url !== heroUrl).slice(0, 20);
 
         // Section-aware variant count: one variant per section for multi-section,
         // duration-based for single-section
@@ -389,25 +646,23 @@ export async function POST(
 
           const result = await generatePosts(systemPrompt, userPrompt, config);
 
-          // ── Section-aware image assignment ──────────────────────
-          for (let v = 0; v < result.posts.length; v++) {
-            const post = result.posts[v];
-            const sectionIdx = post.sectionIndex ?? 0;
+          // ── Image assignment via Claude's imageIndex ─────────
+          // Claude selects from the numbered catalog (hero excluded).
+          // imageIndex > 0 → catalogImages[imageIndex - 1]
+          // imageIndex === 0 or missing → hero/og fallback
+          const heroFallback = heroUrl || "";
 
-            if (isMultiSection && sectionIdx > 0 && sectionIdx <= contentSections.length) {
-              // Use the image from the matching section
-              const section = contentSections[sectionIdx - 1];
-              const sectionImage = section.images[0];
-              post.imageUrl = sectionImage?.url || blogData.heroImage?.url || "";
-              post.anchor = undefined; // Blog posts don't use anchors
-            } else if (post.anchor) {
-              // Newsletter path: anchors already set by story extraction
-              // Keep existing anchor behavior
+          for (const post of result.posts) {
+            if (post.anchor) continue; // Newsletter path: anchors already set
+
+            const imgIdx = post.imageIndex ?? 0;
+
+            if (imgIdx > 0 && imgIdx <= catalogImages.length) {
+              // imageIndex maps to catalogImages (hero excluded, 1-based)
+              post.imageUrl = catalogImages[imgIdx - 1].url;
             } else {
-              // Fallback: cycle through all images (single-section or missing sectionIndex)
-              const imgIdx = v % contentImages.length;
-              const img = contentImages[imgIdx];
-              post.imageUrl = img?.url || blogData.heroImage?.url || "";
+              // imageIndex 0 or out of range: hero/general image
+              post.imageUrl = heroFallback;
             }
           }
 

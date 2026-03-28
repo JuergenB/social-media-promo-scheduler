@@ -45,6 +45,7 @@ import { useAccounts } from "@/hooks/use-accounts";
 import { useBrand } from "@/lib/brand-context";
 import {
   CAMPAIGN_TYPES,
+  ENABLED_CAMPAIGN_TYPES,
   DISTRIBUTION_BIASES,
   DURATION_PRESETS,
   FEEDBACK_CATEGORIES,
@@ -145,6 +146,20 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Custom: Sparkles,
 };
 
+const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
+  Newsletter: "Promote a newsletter issue across social media. Each story becomes its own post with a link that scrolls directly to that story. Great for curated newsletters with multiple features.",
+  "Blog Post": "Turn a blog post or article into a series of social media posts. Images and key quotes are extracted and cycled through, with each post highlighting a different aspect of the article.",
+  Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Scrapes exhibition pages and artist profiles to build a months-long drip campaign. (Coming soon)",
+  "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms. (Coming soon)",
+  "Podcast Episode": "Promote a podcast episode using show notes, guest highlights, and key quotes. Can incorporate transcripts for deeper content extraction. (Coming soon)",
+  Event: "Promote physical or virtual events — gallery openings, anniversary celebrations, studio tours, art fairs. Date-driven campaigns that build intensity toward the event date with RSVP/ticket CTAs.",
+  "Open Call": "Promote open calls for artist submissions. Deadline-driven campaigns that build toward a submission deadline with apply/submit CTAs. (Coming soon)",
+  "Public Art": "Promote public art installations, murals, and outdoor exhibitions with location-specific content and visual storytelling. (Coming soon)",
+  "Video/Film": "Promote video content, short films, or video art with platform-optimized teasers and behind-the-scenes posts. (Coming soon)",
+  Institutional: "Promote organizational news, grants, residencies, and institutional announcements across social platforms. (Coming soon)",
+  Custom: "Create a custom campaign with manual configuration for content types not covered by other presets. (Coming soon)",
+};
+
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   Draft: "secondary",
   Scraping: "outline",
@@ -200,6 +215,7 @@ export default function CampaignDetailPage() {
   const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
   const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
   const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null); // null = auto
+  const [settingsUnsaved, setSettingsUnsaved] = useState(false);
   const queryClient = useQueryClient();
 
   // Fetch connected accounts for the current brand
@@ -257,6 +273,37 @@ export default function CampaignDetailPage() {
       setGenMaxInitialized(true);
     }
   }, [campaign?.maxVariantsPerPlatform, genMaxInitialized]);
+
+  // Track whether generation options have unsaved changes
+  const genOptionsChanged = useMemo(() => {
+    if (!campaign) return false;
+    const savedPlatforms = campaign.targetPlatforms || [];
+    const currentPlatforms = Array.from(genPlatforms).sort();
+    const platformsMatch = savedPlatforms.sort().join(",") === currentPlatforms.join(",");
+    const maxMatch = (campaign.maxVariantsPerPlatform ?? null) === genMaxPerPlatform;
+    return !platformsMatch || !maxMatch;
+  }, [campaign, genPlatforms, genMaxPerPlatform]);
+
+  const [savingGenOptions, setSavingGenOptions] = useState(false);
+  const saveGenOptions = async () => {
+    if (!campaignId) return;
+    setSavingGenOptions(true);
+    try {
+      await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetPlatforms: Array.from(genPlatforms).join(","),
+          maxVariantsPerPlatform: genMaxPerPlatform,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {
+      // Non-critical
+    } finally {
+      setSavingGenOptions(false);
+    }
+  };
 
   // All unique platforms across posts
   const allPlatforms = useMemo(() => {
@@ -523,6 +570,13 @@ export default function CampaignDetailPage() {
             </p>
           )}
 
+          {/* Unsaved settings warning */}
+          {settingsUnsaved && campaign.status === "Draft" && (
+            <div className="pt-1 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              You have unsaved changes in the Settings tab. Save them before generating, or they won&apos;t take effect.
+            </div>
+          )}
+
           {/* Action button + generation options toggle */}
           <div className="pt-1 flex items-center gap-3">
             <CampaignActionButton
@@ -610,10 +664,99 @@ export default function CampaignDetailPage() {
                     : `Auto: variant count based on content sections and campaign duration`}
                 </p>
               </div>
+
+              {genOptionsChanged && (
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+                  <span className="text-[11px] text-muted-foreground">
+                    Unsaved changes
+                  </span>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={saveGenOptions}
+                    disabled={savingGenOptions}
+                  >
+                    {savingGenOptions ? "Saving..." : "Save Options"}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
       </Card>
+
+      {/* Compact progress bar during generation */}
+      {progressLog.length > 0 && (() => {
+        const latest = progressLog[progressLog.length - 1];
+        const pct = latest.totalSteps > 0
+          ? Math.round((latest.step / latest.totalSteps) * 100)
+          : 0;
+        const isComplete = latest.status === "success" && latest.step === latest.totalSteps;
+        const isError = latest.status === "error";
+
+        return (
+          <Card>
+            <CardContent className="pt-4 pb-4 space-y-2">
+              {/* Progress bar */}
+              <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    isError ? "bg-destructive" : isComplete ? "bg-green-500" : "bg-primary"
+                  )}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              {/* Single status line */}
+              <div className="flex items-center gap-2 text-sm">
+                {latest.status === "running" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
+                ) : isError ? (
+                  <span className="h-3.5 w-3.5 text-destructive shrink-0">✗</span>
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                )}
+                <span className={cn(
+                  "truncate",
+                  isError ? "text-destructive" : "text-muted-foreground"
+                )}>
+                  Step {latest.step}/{latest.totalSteps}: {latest.message}
+                </span>
+              </div>
+              {latest.detail && (
+                <p className="text-xs text-muted-foreground truncate pl-5.5">
+                  {latest.detail}
+                </p>
+              )}
+              {/* Expandable full log */}
+              {progressLog.length > 1 && (
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer hover:text-foreground transition-colors">
+                    Show all steps
+                  </summary>
+                  <div className="mt-2 space-y-1 pl-1">
+                    {progressLog.map((event, i) => (
+                      <div key={i} className={cn(
+                        "flex items-center gap-1.5",
+                        event.status === "error" && "text-destructive"
+                      )}>
+                        {event.status === "success" ? (
+                          <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                        ) : event.status === "running" ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />
+                        ) : (
+                          <span className="h-3 w-3 text-destructive shrink-0">✗</span>
+                        )}
+                        <span className="truncate">[{event.step}/{event.totalSteps}] {event.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Tabs: Posts / Settings */}
       <Tabs defaultValue="posts">
@@ -810,6 +953,7 @@ export default function CampaignDetailPage() {
             <CampaignSettingsEditable
               campaign={campaign}
               campaignId={campaignId}
+              onUnsavedChanges={setSettingsUnsaved}
             />
           ) : (
             <CampaignSettingsReadOnly campaign={campaign} />
@@ -836,45 +980,7 @@ export default function CampaignDetailPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Progress log during generation */}
-      {progressLog.length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              {progressLog.map((event, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "flex items-start gap-2 text-sm",
-                    event.status === "error" && "text-destructive"
-                  )}
-                >
-                  {event.status === "running" ? (
-                    <Loader2 className="h-4 w-4 mt-0.5 animate-spin text-primary shrink-0" />
-                  ) : event.status === "success" ? (
-                    <CheckCircle2 className="h-4 w-4 mt-0.5 text-green-500 shrink-0" />
-                  ) : (
-                    <span className="h-4 w-4 mt-0.5 text-destructive shrink-0">✗</span>
-                  )}
-                  <div>
-                    <span className="text-muted-foreground mr-1.5">
-                      [{event.step}/{event.totalSteps}]
-                    </span>
-                    <span className={event.status === "success" ? "text-foreground" : ""}>
-                      {event.message}
-                    </span>
-                    {event.detail && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {event.detail}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Progress log moved above tabs — see generation options card */}
 
       {/* Post detail dialog */}
       <Dialog
@@ -1811,9 +1917,11 @@ function PostDetailView({
 function CampaignSettingsEditable({
   campaign,
   campaignId,
+  onUnsavedChanges,
 }: {
   campaign: Campaign;
   campaignId: string;
+  onUnsavedChanges?: (hasChanges: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const [url, setUrl] = useState(campaign.url);
@@ -1845,6 +1953,11 @@ function CampaignSettingsEditable({
     eventDate !== (campaign.eventDate || "") ||
     eventDetails !== (campaign.eventDetails || "") ||
     additionalUrlsList.filter(Boolean).join("\n") !== (campaign.additionalUrls || "");
+
+  // Notify parent of unsaved changes
+  useEffect(() => {
+    onUnsavedChanges?.(hasChanges);
+  }, [hasChanges, onUnsavedChanges]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -1961,14 +2074,25 @@ function CampaignSettingsEditable({
             Editorial Direction
           </Label>
           <Textarea
-            placeholder="What should we emphasize? Which pieces stood out?"
+            placeholder="e.g., Focus on the community aspect and upcoming deadline. Emphasize the free admission and family-friendly activities."
             value={editorialDirection}
             onChange={(e) => setEditorialDirection(e.target.value)}
             rows={3}
           />
           <p className="text-xs text-muted-foreground">
-            Optional — this guidance shapes every post that gets generated.
+            Optional — this guidance shapes the tone and focus of every generated post.
           </p>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer hover:text-foreground transition-colors">
+              Tips for effective editorial direction
+            </summary>
+            <ul className="mt-2 ml-4 space-y-1 list-disc text-muted-foreground/80">
+              <li><strong>Be specific about focus:</strong> &ldquo;Emphasize the free workshops and family-friendly activities&rdquo; rather than &ldquo;make it sound fun&rdquo;</li>
+              <li><strong>Guide tone and angle:</strong> &ldquo;Lead with urgency — only 3 days left to RSVP&rdquo; or &ldquo;Keep it celebratory, this is a milestone event&rdquo;</li>
+              <li><strong>Call out key details:</strong> &ldquo;Mention the new venue location&rdquo; or &ldquo;Highlight that tickets are selling fast&rdquo;</li>
+              <li><strong>Let the AI handle attribution:</strong> The system automatically matches people and images from the scraped content — no need to instruct it to name specific individuals unless you want a particular focus</li>
+            </ul>
+          </details>
         </CardContent>
       </Card>
 
@@ -1982,16 +2106,21 @@ function CampaignSettingsEditable({
             {CAMPAIGN_TYPES.map((t) => {
               const Icon = CAMPAIGN_TYPE_ICONS[t];
               const isSelected = type === t;
+              const isEnabled = ENABLED_CAMPAIGN_TYPES.includes(t);
               return (
                 <button
                   key={t}
                   type="button"
-                  onClick={() => setType(t)}
+                  onClick={() => {
+                    if (isEnabled) setType(t);
+                  }}
                   className={cn(
                     "flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors",
                     isSelected
                       ? "border-primary bg-primary/5 text-primary"
-                      : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                      : isEnabled
+                        ? "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                        : "border-border/50 text-muted-foreground/50 opacity-60 cursor-not-allowed"
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -2000,6 +2129,11 @@ function CampaignSettingsEditable({
               );
             })}
           </div>
+          {type && (
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+              {CAMPAIGN_TYPE_DESCRIPTIONS[type]}
+            </p>
+          )}
         </CardContent>
       </Card>
 
