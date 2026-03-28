@@ -491,6 +491,9 @@ export default function NewCampaignPage() {
           </div>
 
           {/* Additional URLs */}
+          <p className="text-xs text-muted-foreground">
+            Tip: For Artwork Archive exhibitions, use the embed URL format: <code className="bg-muted px-1 rounded">artworkarchive.com/profile/&#123;org&#125;/embed/exhibition/&#123;name&#125;</code>
+          </p>
           {additionalUrls.map((addUrl, i) => (
             <div key={i} className="flex gap-2">
               <Input
