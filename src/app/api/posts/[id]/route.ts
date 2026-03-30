@@ -35,6 +35,9 @@ export async function PATCH(
       if (body.mediaUrls !== undefined) {
         fields["Media URLs"] = body.mediaUrls;
       }
+      if (body.mediaCaptions !== undefined) {
+        fields["Media Captions"] = body.mediaCaptions;
+      }
     }
 
     // Content

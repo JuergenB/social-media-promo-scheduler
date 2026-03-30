@@ -60,6 +60,7 @@ import {
 } from "@/lib/airtable/types";
 import { toast } from "sonner";
 import { compressImage, validateImage } from "@/lib/image-compression";
+import { parseMediaItems, serializeMediaItems, type MediaItem } from "@/lib/media-items";
 import {
   ArrowLeft,
   Calendar,
@@ -1445,19 +1446,15 @@ function PostDetailView({
   const [isDragging, setIsDragging] = useState(false);
   const queryClient = useQueryClient();
 
-  // Multi-image state: hero image + additional media URLs
-  const buildImageList = (p: Post) => {
-    const imgs: string[] = [];
-    if (p.imageUrl) imgs.push(p.imageUrl);
-    if (p.mediaUrls) {
-      for (const u of p.mediaUrls.split("\n")) {
-        const trimmed = u.trim();
-        if (trimmed && !imgs.includes(trimmed)) imgs.push(trimmed);
-      }
-    }
-    return imgs;
-  };
-  const [mediaImages, setMediaImages] = useState<string[]>(buildImageList(post));
+  // Multi-image state with captions
+  const buildMediaItems = (p: Post): MediaItem[] => parseMediaItems({
+    "Image URL": p.imageUrl,
+    "Media URLs": p.mediaUrls,
+    "Media Captions": p.mediaCaptions,
+  });
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>(buildMediaItems(post));
+  // Derived URL array for backward-compatible consumers
+  const mediaImages = mediaItems.map((i) => i.url);
 
   // Reset state when navigating between posts
   const [prevPostId, setPrevPostId] = useState(post.id);
@@ -1465,7 +1462,7 @@ function PostDetailView({
     setPrevPostId(post.id);
     setShowAddImage(false);
     setImageUrlInput("");
-    setMediaImages(buildImageList(post));
+    setMediaItems(buildMediaItems(post));
     setIsDragging(false);
   }
 
@@ -1476,15 +1473,17 @@ function PostDetailView({
   // The URL to the source article — prefer shortUrl, fall back to linkUrl
   const articleUrl = post.shortUrl || post.linkUrl;
 
-  // Save all images to Airtable (first = Image URL, rest = Media URLs)
+  // Save all images + captions to Airtable
   const saveImagesMutation = useMutation({
-    mutationFn: async (images: string[]) => {
+    mutationFn: async (items: MediaItem[]) => {
+      const serialized = serializeMediaItems(items);
       const res = await fetch(`/api/posts/${post.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageUrl: images[0] || "",
-          mediaUrls: images.slice(1).join("\n"),
+          imageUrl: serialized["Image URL"],
+          mediaUrls: serialized["Media URLs"],
+          mediaCaptions: serialized["Media Captions"],
         }),
       });
       if (!res.ok) throw new Error("Failed to save images");
@@ -1496,19 +1495,29 @@ function PostDetailView({
   });
 
   const addImageUrl = (url: string) => {
-    const next = [...mediaImages, url];
-    setMediaImages(next);
+    const next = [...mediaItems, { url, caption: "" }];
+    setMediaItems(next);
     setImageUrlInput("");
     setShowAddImage(false);
     saveImagesMutation.mutate(next);
-    toast.success(mediaImages.length === 0 ? "Image added" : `${next.length} images — carousel ready`);
+    toast.success(mediaItems.length === 0 ? "Image added" : `${next.length} images — carousel ready`);
   };
 
   const removeImage = (index: number) => {
-    const next = mediaImages.filter((_, i) => i !== index);
-    setMediaImages(next);
+    const next = mediaItems.filter((_, i) => i !== index);
+    setMediaItems(next);
     saveImagesMutation.mutate(next);
     toast.success("Image removed");
+  };
+
+  const updateCaption = (index: number, caption: string) => {
+    const next = [...mediaItems];
+    next[index] = { ...next[index], caption };
+    setMediaItems(next);
+  };
+
+  const saveCaption = (index: number) => {
+    saveImagesMutation.mutate(mediaItems);
   };
 
   const uploadImageMutation = useMutation({
@@ -1527,11 +1536,9 @@ function PostDetailView({
     },
     onSuccess: (data) => {
       if (data.imageUrl) {
-        const next = [...mediaImages, data.imageUrl];
-        setMediaImages(next);
+        const next = [...mediaItems, { url: data.imageUrl, caption: "" }];
+        setMediaItems(next);
         setShowAddImage(false);
-        // Save the full list (uploaded image is already in Airtable attachment,
-        // but we need to update Media URLs for the rest)
         saveImagesMutation.mutate(next);
         toast.success(next.length > 1 ? `${next.length} images — carousel ready` : "Image uploaded");
       }
@@ -1603,9 +1610,11 @@ function PostDetailView({
   });
 
   const publishNowMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (scheduledFor?: string) => {
       const res = await fetch(`/api/posts/${post.id}/publish`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledFor: scheduledFor || undefined }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -1613,13 +1622,21 @@ function PostDetailView({
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, scheduledFor) => {
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success(`Published to ${post.platform} — scheduled in ~2 min`);
+      toast.success(scheduledFor
+        ? `Scheduled ${post.platform} for ${format(new Date(scheduledFor), "MMM d, h:mm a")}`
+        : `Published to ${post.platform} — scheduled in ~2 min`);
+      setShowSchedulePicker(false);
+      setScheduleDateTime("");
       onClose();
     },
     onError: (err: Error) => toast.error(err.message),
   });
+
+  // Schedule / Publish Now
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [scheduleDateTime, setScheduleDateTime] = useState("");
 
   // Regenerate
   const [regenDialogOpen, setRegenDialogOpen] = useState(false);
@@ -1705,6 +1722,11 @@ function PostDetailView({
             >
               {post.status}
             </Badge>
+            {post.approvedBy && (
+              <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:inline">
+                by {post.approvedBy}
+              </span>
+            )}
             {post.scheduledDate && (
               <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:inline">
                 {format(parseISO(post.scheduledDate), "MMM d, h:mm a")}
@@ -1760,9 +1782,9 @@ function PostDetailView({
                 /* Multiple images — horizontal strip */
                 <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
                   {mediaImages.map((imgUrl, idx) => (
+                    <div key={idx} className="shrink-0 snap-start flex flex-col gap-1">
                     <div
-                      key={idx}
-                      className="relative group cursor-pointer shrink-0 snap-start rounded-lg overflow-hidden bg-muted w-40 h-40"
+                      className="relative group cursor-pointer rounded-lg overflow-hidden bg-muted w-40 h-40"
                       onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
                     >
                       <img src={imgUrl} alt="" className="w-40 h-40 object-cover" />
@@ -1776,9 +1798,9 @@ function PostDetailView({
                             className="h-5 w-5"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const next = [...mediaImages];
+                              const next = [...mediaItems];
                               [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                              setMediaImages(next);
+                              setMediaItems(next);
                               saveImagesMutation.mutate(next);
                             }}
                           >
@@ -1792,9 +1814,9 @@ function PostDetailView({
                             className="h-5 w-5"
                             onClick={(e) => {
                               e.stopPropagation();
-                              const next = [...mediaImages];
+                              const next = [...mediaItems];
                               [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-                              setMediaImages(next);
+                              setMediaItems(next);
                               saveImagesMutation.mutate(next);
                             }}
                           >
@@ -1816,7 +1838,19 @@ function PostDetailView({
                         {idx + 1}/{mediaImages.length}
                       </span>
                     </div>
-                  ))}
+                    {/* Caption input */}
+                    <input
+                      type="text"
+                      placeholder="Caption..."
+                      maxLength={120}
+                      value={mediaItems[idx]?.caption || ""}
+                      onChange={(e) => updateCaption(idx, e.target.value)}
+                      onBlur={() => saveCaption(idx)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveCaption(idx); }}
+                      className="w-40 text-[11px] px-1.5 py-1 border border-border rounded bg-background text-foreground truncate"
+                    />
+                  </div>
+                ))}
                 </div>
               )}
 
@@ -2144,19 +2178,50 @@ function PostDetailView({
           )}
           {post.status === "Approved" && (
             <>
-              <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                <CheckCircle2 className="mr-1 h-3 w-3" />
-                Approved{post.approvedBy ? ` by ${post.approvedBy}` : ""}
-              </Badge>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => publishNowMutation.mutate()}
-                disabled={publishNowMutation.isPending}
-              >
-                <Send className="mr-1.5 h-3.5 w-3.5" />
-                {publishNowMutation.isPending ? "Publishing..." : "Publish Now"}
-              </Button>
+              {showSchedulePicker ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="datetime-local"
+                    value={scheduleDateTime}
+                    onChange={(e) => setScheduleDateTime(e.target.value)}
+                    className="text-xs border border-border rounded px-2 py-1 bg-background"
+                    min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
+                  />
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => publishNowMutation.mutate(new Date(scheduleDateTime).toISOString())}
+                    disabled={publishNowMutation.isPending || !scheduleDateTime}
+                  >
+                    {publishNowMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
+                    {publishNowMutation.isPending ? "" : "Schedule"}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setShowSchedulePicker(false); setScheduleDateTime(""); }}>
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => publishNowMutation.mutate(undefined)}
+                    disabled={publishNowMutation.isPending}
+                  >
+                    <Send className="mr-1.5 h-3.5 w-3.5" />
+                    {publishNowMutation.isPending ? "Publishing..." : "Publish Now"}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground"
+                    onClick={() => setShowSchedulePicker(true)}
+                  >
+                    <Clock className="mr-1 h-3 w-3" />
+                    Schedule
+                  </Button>
+                </div>
+              )}
             </>
           )}
           {post.status === "Scheduled" && (

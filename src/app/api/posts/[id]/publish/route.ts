@@ -3,6 +3,7 @@ import { getRecord, updateRecord } from "@/lib/airtable/client";
 import { createBrandClient } from "@/lib/late-api/client";
 import { assembleCarouselPDF } from "@/lib/pdf-carousel";
 import { ensureAspectRatio } from "@/lib/image-crop";
+import { parseMediaItems } from "@/lib/media-items";
 
 interface PostFields {
   Campaign: string[];
@@ -10,6 +11,7 @@ interface PostFields {
   Content: string;
   "Image URL": string;
   "Media URLs": string;
+  "Media Captions": string;
   "Short URL": string;
   "Link URL": string;
   "First Comment": string;
@@ -46,11 +48,13 @@ const PLATFORM_MAP: Record<string, string> = {
  * Post must be in "Approved" status. Sets scheduledFor to now.
  */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id: postId } = await params;
+    const body = await request.json().catch(() => ({}));
+    const userScheduledFor = (body as { scheduledFor?: string }).scheduledFor;
 
     // Fetch post
     const post = await getRecord<PostFields>("Posts", postId);
@@ -121,36 +125,30 @@ export async function POST(
       );
     }
 
-    // Build media items — collect all image URLs first
-    const imageUrls: string[] = [];
-    if (post.fields["Image URL"]) {
-      imageUrls.push(post.fields["Image URL"]);
-    }
-    if (post.fields["Media URLs"]) {
-      for (const url of post.fields["Media URLs"].split("\n")) {
-        const trimmed = url.trim();
-        if (trimmed && !imageUrls.includes(trimmed)) {
-          imageUrls.push(trimmed);
-        }
-      }
-    }
+    // Build media items from Airtable fields (supports captions via Media Captions JSON)
+    const postMediaItems = parseMediaItems(post.fields);
+    const imageUrls = postMediaItems.map((i) => i.url);
 
     // Ensure images meet platform aspect ratio requirements (e.g., Instagram max 1.91:1)
     for (let i = 0; i < imageUrls.length; i++) {
-      imageUrls[i] = await ensureAspectRatio(imageUrls[i], platform, postId);
+      const cropped = await ensureAspectRatio(imageUrls[i], platform, postId);
+      if (cropped !== imageUrls[i]) {
+        postMediaItems[i] = { ...postMediaItems[i], url: cropped };
+        imageUrls[i] = cropped;
+      }
     }
 
-    // LinkedIn carousel: multiple images → assemble PDF document
-    let mediaItems: Array<{ type: "image" | "document"; url: string }>;
+    // LinkedIn carousel: multiple images → assemble PDF document (with captions)
+    let mediaItems: Array<{ type: "image" | "document"; url: string; filename?: string }>;
     if (platform === "linkedin" && imageUrls.length > 1) {
-      console.log(`[publish-now] LinkedIn carousel: assembling ${imageUrls.length} images into PDF`);
-      const pdfBuffer = await assembleCarouselPDF(imageUrls);
+      console.log(`[publish-now] LinkedIn carousel: assembling ${postMediaItems.length} images into PDF`);
+      const pdfBuffer = await assembleCarouselPDF(postMediaItems);
       console.log(`[publish-now] PDF assembled: ${(pdfBuffer.length / 1024).toFixed(0)}KB`);
 
       // Upload PDF via Zernio presign
       const { data: presignData, error: presignError } = await client.media.getMediaPresignedUrl({
         body: {
-          filename: `${(campaign.fields.Name || "carousel").replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "-").slice(0, 60)}.pdf`,
+          filename: `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`,
           contentType: "application/pdf",
           size: pdfBuffer.length,
         },
@@ -179,15 +177,19 @@ export async function POST(
         );
       }
 
-      console.log(`[publish-now] PDF uploaded to: ${presignData.publicUrl}`);
-      mediaItems = [{ type: "document", url: presignData.publicUrl! }];
+      const pdfDisplayName = `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`;
+      console.log(`[publish-now] PDF uploaded to: ${presignData.publicUrl} (${pdfDisplayName})`);
+      mediaItems = [{ type: "document", url: presignData.publicUrl!, filename: pdfDisplayName }];
     } else {
       mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
     }
 
     // Publish to Zernio with scheduledFor = 2 minutes from now
     // (Zernio requires a future date; 2 min gives buffer for processing)
-    const publishAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
+    // Use user-provided date or default to 2 minutes from now
+    const publishAt = userScheduledFor
+      ? new Date(userScheduledFor).toISOString()
+      : new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
     const createBody: Record<string, unknown> = {
       content: post.fields.Content || "",
