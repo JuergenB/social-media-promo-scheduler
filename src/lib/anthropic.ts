@@ -45,7 +45,7 @@ export async function generatePosts(
 
   const response = await client.messages.create({
     model: config.model,
-    max_tokens: 4096,
+    max_tokens: 8192,
     temperature: 0.3,
     system: systemPrompt,
     messages: [
@@ -125,4 +125,6 @@ export interface GeneratedPost {
   subject?: string;
   /** Index into the available_images catalog (1-based). 0 = hero/general image. */
   imageIndex?: number;
+  /** First comment text (Instagram: hashtags + engagement hook, posted as first comment) */
+  firstComment?: string;
 }

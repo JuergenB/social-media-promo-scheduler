@@ -14,6 +14,7 @@ interface PlatformSettingFields {
   Engagement_Notes: string;
   Hashtag_Limit: string;
   Video_Length: string;
+  First_Comment_Strategy: string;
 }
 
 export async function GET() {
@@ -38,6 +39,7 @@ export async function GET() {
       engagementNotes: r.fields.Engagement_Notes || "",
       hashtagLimit: r.fields.Hashtag_Limit || "",
       videoLength: r.fields.Video_Length || "",
+      firstCommentStrategy: r.fields.First_Comment_Strategy || "",
     }));
 
     return NextResponse.json({ settings });

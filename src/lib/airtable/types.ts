@@ -131,6 +131,7 @@ export interface PlatformSetting {
   engagementNotes: string;
   hashtagLimit: string;
   videoLength: string;
+  firstCommentStrategy: string;
 }
 
 export interface ImageSize {

@@ -12,6 +12,7 @@ interface PostFields {
   "Media URLs": string;
   "Short URL": string;
   "Link URL": string;
+  "First Comment": string;
   Status: string;
   "Zernio Post ID": string;
 }
@@ -188,17 +189,24 @@ export async function POST(
     // (Zernio requires a future date; 2 min gives buffer for processing)
     const publishAt = new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
+    const createBody: Record<string, unknown> = {
+      content: post.fields.Content || "",
+      mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
+      platforms: [{
+        platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
+        accountId: (account as { _id: string })._id,
+      }],
+      scheduledFor: publishAt,
+      timezone: "America/New_York",
+    };
+
+    // Add first comment for Instagram (hashtags + engagement hook)
+    if (post.fields["First Comment"]) {
+      createBody.firstComment = post.fields["First Comment"];
+    }
+
     const { data: zernioPost, error: zernioError } = await client.posts.createPost({
-      body: {
-        content: post.fields.Content || "",
-        mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
-        platforms: [{
-          platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
-          accountId: (account as { _id: string })._id,
-        }],
-        scheduledFor: publishAt,
-        timezone: "America/New_York",
-      },
+      body: createBody as Parameters<typeof client.posts.createPost>[0]["body"],
     });
 
     if (zernioError) {
