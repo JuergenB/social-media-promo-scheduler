@@ -1469,6 +1469,11 @@ function PostDetailView({
   const platformLower = toPlatformId(post.platform);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const charCount = post.content?.length || 0;
+  const platformCharLimits: Record<string, number> = {
+    instagram: 2200, threads: 500, bluesky: 300, twitter: 280,
+    linkedin: 3000, facebook: 63206, pinterest: 500, tiktok: 4000,
+  };
+  const charLimit = platformCharLimits[platformLower] || 0;
 
   // The URL to the source article — prefer shortUrl, fall back to linkUrl
   const articleUrl = post.shortUrl || post.linkUrl;
@@ -2011,8 +2016,8 @@ function PostDetailView({
                 {post.content || "(No content)"}
               </p>
               <div className="flex items-center justify-between mt-2">
-                <p className="text-xs text-muted-foreground">
-                  {charCount} characters
+                <p className={cn("text-xs", charLimit && charCount > charLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
+                  {charCount}{charLimit ? ` / ${charLimit.toLocaleString()}` : ""} chars
                 </p>
                 <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                   <Pencil className="h-3 w-3" />
@@ -2023,36 +2028,25 @@ function PostDetailView({
           )}
         </div>
 
-        {/* Article link — launch the source URL in browser */}
-        {articleUrl && (
-          <div className="px-6 pb-3">
+        {/* Metadata row: article link + variant — consolidated */}
+        <div className="px-6 pb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {articleUrl && (
             <a
               href={articleUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
             >
               <Link2 className="h-3 w-3" />
-              Open source article
-              <ExternalLink className="h-3 w-3" />
+              {post.shortUrl || "Source"}
+              <ExternalLink className="h-2.5 w-2.5" />
             </a>
-          </div>
-        )}
-
-        {/* Short link (display only, separate from launch hint) */}
-        {post.shortUrl && (
-          <div className="px-6 pb-3">
-            <span className="text-xs text-muted-foreground">{post.shortUrl}</span>
-          </div>
-        )}
-
-        {/* Metadata */}
-        <div className="px-6 pb-4 space-y-1 text-xs text-muted-foreground">
+          )}
           {post.contentVariant && (
-            <div><span className="font-medium">Variant:</span> {post.contentVariant}</div>
+            <span>Variant {post.contentVariant}</span>
           )}
           {post.notes && (
-            <div><span className="font-medium">Notes:</span> {post.notes}</div>
+            <span>{post.notes}</span>
           )}
         </div>
       </div>
