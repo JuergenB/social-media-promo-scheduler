@@ -64,7 +64,8 @@ social-media-promo-scheduler/
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
-│   │   │   ├── posts/           # PATCH [id] update post fields, POST [id]/image upload/swap image
+│   │   │   ├── posts/           # PATCH [id] update post fields, POST [id]/image upload/swap image, POST [id]/publish single-post publish
+│   │   │   ├── webhooks/zernio/ # POST — Zernio webhook receiver (post.published/failed/partial status sync)
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints
 │   │   │   ├── auto-auth/      # Server-side API key provider
@@ -89,8 +90,11 @@ social-media-promo-scheduler/
 │   │   ├── late-api/           # Zernio API client & platform types
 │   │   ├── airtable/           # Airtable REST client, TypeScript types, campaign-type-rules fetch, user profile lookup
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
-│   │   ├── blob-storage.ts     # Vercel Blob upload/delete for permanent image hosting
-│   │   ├── image-compression.ts # Client-side compression, PNG→JPEG conversion, validation
+│   │   ├── blob-storage.ts     # Vercel Blob upload/delete, Sharp server-side optimization (PNG/WebP→JPEG)
+│   │   ├── image-compression.ts # Client-side compression, PNG→JPEG conversion, timeout guards
+│   │   ├── image-crop.ts       # Platform aspect ratio auto-crop (center-crop to 16:9 for Instagram/Threads)
+│   │   ├── lnk-bio.ts          # lnk.bio OAuth2 client — auto-create link-in-bio entries after Instagram publish
+│   │   ├── pdf-carousel.ts     # LinkedIn PDF carousel — assemble multi-image posts into PDF via pdf-lib
 │   │   ├── brand-access.ts     # Server-side brand access helpers (user-brand mapping)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── scheduling.ts       # Tapering schedule algorithm, date assignment with collision avoidance
@@ -162,6 +166,9 @@ social-media-promo-scheduler/
 - **Image catalog approach:** Claude selects images by `imageIndex` from a numbered catalog. Works across all CMS platforms (Ghost, BigCommerce, WordPress, etc.). Multi-section blog posts use section headings as image labels when alt text is empty.
 - **Image-Text Integrity Rule:** Constraint hierarchy — editorial direction cannot override integrity rules. Claude must not guess names, attribute artwork to wrong artists, or fabricate attribution. This is enforced in prompt templates.
 - **Image filtering:** Thumbnails <200px in URL paths are rejected. Dimension-aware dedup keeps the largest version. Supplemental URL images are filtered by entity overlap with the main URL content.
+- **lnk.bio integration:** After Instagram posts are published, a lnk.bio entry is auto-created with the campaign's source URL. Currently hardcoded for The Intersect brand (group ID 68052). Per-brand config tracked in #68.
+- **Zernio webhook:** `POST /api/webhooks/zernio` receives post lifecycle events and syncs status to Airtable. Auth middleware bypassed for `/api/webhooks` path. Currently registered via ngrok; permanent URL tracked in #67.
+- **LinkedIn PDF carousel:** Posts with 2+ images targeting LinkedIn are auto-assembled into a PDF at publish time using `pdf-lib`. PDF uploaded to Zernio as document media type.
 
 ## Session Rules
 

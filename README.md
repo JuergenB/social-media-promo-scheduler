@@ -176,6 +176,12 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Permanent image hosting via Vercel Blob (#62)
 - [x] **Phase I:** Campaign hero image upload (file upload + paste URL) (#62)
 - [x] **Phase I:** Carousel lightbox keyboard navigation + mobile swipe
+- [x] **Phase I:** Single-post Publish Now button with double-publish guard
+- [x] **Phase I:** Zernio webhook status sync (post.published/failed/partial → Airtable)
+- [x] **Phase I:** LinkedIn PDF carousel — auto-assemble multi-image posts into PDF at publish time (#65)
+- [x] **Phase I:** lnk.bio integration — auto-create link-in-bio entry after Instagram publish (#52 partial)
+- [x] **Phase I:** Server-side Sharp image optimization (PNG/WebP→JPEG, re-compress >500KB)
+- [x] **Phase I:** Platform aspect ratio auto-crop (Instagram/Threads 1.91:1 max enforced)
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
