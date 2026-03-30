@@ -249,6 +249,16 @@ export default function CampaignDetailPage() {
   const campaign = data?.campaign;
   const posts = data?.posts ?? [];
 
+  // Keep selectedPost in sync with fresh query data (e.g., after regeneration)
+  useEffect(() => {
+    if (selectedPost && posts.length > 0) {
+      const fresh = posts.find((p) => p.id === selectedPost.id);
+      if (fresh && fresh.content !== selectedPost.content) {
+        setSelectedPost(fresh);
+      }
+    }
+  }, [posts, selectedPost]);
+
   // Initialize genPlatforms: prefer saved campaign values, fall back to connected accounts.
   // Wait for campaign data to load before falling back, to avoid a race condition
   // where connected accounts load first and override saved platform selections.
@@ -1611,6 +1621,32 @@ function PostDetailView({
     onError: (err: Error) => toast.error(err.message),
   });
 
+  // Regenerate
+  const [regenDialogOpen, setRegenDialogOpen] = useState(false);
+  const [regenGuidance, setRegenGuidance] = useState("");
+
+  const regenerateMutation = useMutation({
+    mutationFn: async (guidance: string) => {
+      const res = await fetch(`/api/posts/${post.id}/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guidance }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to regenerate");
+      }
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Post regenerated");
+      setRegenDialogOpen(false);
+      setRegenGuidance("");
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // Content editing
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState(post.content || "");
@@ -2092,6 +2128,18 @@ function PostDetailView({
               >
                 {dismissMutation.isPending ? "Dismissing..." : "Dismiss"}
               </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground"
+                onClick={() => setRegenDialogOpen(true)}
+                disabled={regenerateMutation.isPending}
+                title="Regenerate"
+              >
+                {regenerateMutation.isPending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RotateCcw className="h-3.5 w-3.5" />}
+              </Button>
             </>
           )}
           {post.status === "Approved" && (
@@ -2140,12 +2188,12 @@ function PostDetailView({
           )}
           <Button
             variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-destructive"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
             onClick={() => setFlagDialogOpen(true)}
+            title="Flag Issue"
           >
-            <Flag className="mr-1.5 h-3.5 w-3.5" />
-            Flag Issue
+            <Flag className="h-3.5 w-3.5" />
           </Button>
         </div>
         <Button variant="outline" size="sm" onClick={onClose}>
@@ -2160,6 +2208,40 @@ function PostDetailView({
         post={post}
         campaign={campaign}
       />
+
+      {/* Regenerate Dialog */}
+      <Dialog open={regenDialogOpen} onOpenChange={setRegenDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Regenerate Post</DialogTitle>
+            <DialogDescription>
+              Optionally describe what this post should focus on. Leave blank to generate a fresh take.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="e.g., Focus on the event itself, not a specific artist. Highlight the opening night details and CTA."
+            value={regenGuidance}
+            onChange={(e) => setRegenGuidance(e.target.value)}
+            rows={3}
+            disabled={regenerateMutation.isPending}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setRegenDialogOpen(false); setRegenGuidance(""); }} disabled={regenerateMutation.isPending}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => regenerateMutation.mutate(regenGuidance)}
+              disabled={regenerateMutation.isPending}
+            >
+              {regenerateMutation.isPending ? (
+                <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Regenerating...</>
+              ) : (
+                <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Regenerate</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
