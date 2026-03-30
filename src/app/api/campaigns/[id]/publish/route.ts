@@ -4,6 +4,7 @@ import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { createBrandClient } from "@/lib/late-api/client";
 import { assembleCarouselPDF } from "@/lib/pdf-carousel";
 import { ensureAspectRatio } from "@/lib/image-crop";
+import { parseMediaItems } from "@/lib/media-items";
 
 interface CampaignFields {
   Name: string;
@@ -26,6 +27,7 @@ interface PostFields {
   "Short URL": string;
   "Link URL": string;
   "First Comment": string;
+  "Media Captions": string;
   Status: string;
   "Zernio Post ID": string;
 }
@@ -136,32 +138,26 @@ export async function POST(
       }
 
       try {
-        // Build media items — collect all image URLs first
-        const imageUrls: string[] = [];
-        if (post.fields["Image URL"]) {
-          imageUrls.push(post.fields["Image URL"]);
-        }
-        if (post.fields["Media URLs"]) {
-          for (const url of post.fields["Media URLs"].split("\n")) {
-            const trimmed = url.trim();
-            if (trimmed && !imageUrls.includes(trimmed)) {
-              imageUrls.push(trimmed);
-            }
-          }
-        }
+        // Build media items from Airtable fields (supports captions via Media Captions JSON)
+        const postMediaItems = parseMediaItems(post.fields);
+        const imageUrls = postMediaItems.map((i) => i.url);
 
         // Ensure images meet platform aspect ratio requirements
         for (let i = 0; i < imageUrls.length; i++) {
-          imageUrls[i] = await ensureAspectRatio(imageUrls[i], platform, post.id);
+          const cropped = await ensureAspectRatio(imageUrls[i], platform, post.id);
+          if (cropped !== imageUrls[i]) {
+            postMediaItems[i] = { ...postMediaItems[i], url: cropped };
+            imageUrls[i] = cropped;
+          }
         }
 
-        // LinkedIn carousel: multiple images → assemble PDF document
-        let mediaItems: Array<{ type: "image" | "document"; url: string }>;
+        // LinkedIn carousel: multiple images → assemble PDF document (with captions)
+        let mediaItems: Array<{ type: "image" | "document"; url: string; filename?: string }>;
         if (platform === "linkedin" && imageUrls.length > 1) {
-          const pdfBuffer = await assembleCarouselPDF(imageUrls);
+          const pdfBuffer = await assembleCarouselPDF(postMediaItems);
           const { data: presignData } = await client.media.getMediaPresignedUrl({
             body: {
-              filename: `${(campaign.fields.Name || "carousel").replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "-").slice(0, 60)}.pdf`,
+              filename: `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`,
               contentType: "application/pdf",
               size: pdfBuffer.length,
             },
@@ -172,7 +168,8 @@ export async function POST(
               body: new Uint8Array(pdfBuffer),
               headers: { "Content-Type": "application/pdf" },
             });
-            mediaItems = [{ type: "document", url: presignData.publicUrl! }];
+            const pdfDisplayName = `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`;
+            mediaItems = [{ type: "document", url: presignData.publicUrl!, filename: pdfDisplayName }];
           } else {
             // Fallback to individual images if presign fails
             mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));

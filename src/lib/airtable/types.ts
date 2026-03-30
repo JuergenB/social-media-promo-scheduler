@@ -106,6 +106,7 @@ export interface Post {
   platform: string;
   content: string;
   mediaUrls: string;
+  mediaCaptions: string;
   imageUrl: string;
   shortUrl: string;
   linkUrl: string;

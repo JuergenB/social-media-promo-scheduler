@@ -31,6 +31,7 @@ interface PostFields {
   Platform: string;
   Content: string;
   "Media URLs": string;
+  "Media Captions": string;
   "Image URL": string;
   "Short URL": string;
   "Link URL": string;
@@ -99,6 +100,7 @@ export async function GET(
       platform: r.fields.Platform || "",
       content: r.fields.Content || "",
       mediaUrls: r.fields["Media URLs"] || "",
+      mediaCaptions: r.fields["Media Captions"] || "",
       imageUrl: r.fields["Image URL"] || "",
       shortUrl: r.fields["Short URL"] || "",
       linkUrl: r.fields["Link URL"] || "",
