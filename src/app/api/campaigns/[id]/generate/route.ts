@@ -764,7 +764,7 @@ export async function POST(
 
         let savedCount = 0;
         for (const post of postsWithLinks) {
-          await createRecord("Posts", {
+          const postRecord: Record<string, unknown> = {
             Title: `${blogData.title} — ${post.platform}${post.variant > 1 ? ` (v${post.variant})` : ""}`,
             Campaign: [campaignId],
             Platform: PLATFORM_TO_AIRTABLE[post.platform] || post.platform,
@@ -774,7 +774,11 @@ export async function POST(
             "Short URL": post.shortUrl || "",
             "Content Variant": String(post.variant),
             Status: "Pending",
-          });
+          };
+          if (post.firstComment) {
+            postRecord["First Comment"] = post.firstComment;
+          }
+          await createRecord("Posts", postRecord);
           savedCount++;
         }
 

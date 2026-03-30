@@ -84,6 +84,7 @@ export interface PlatformSetting {
   Primary_Use_Case: string;
   Engagement_Notes: string;
   Hashtag_Limit: string;
+  First_Comment_Strategy: string;
 }
 
 /** Map Zernio platform names to Airtable Platform_Post_Type values */
@@ -115,6 +116,9 @@ export function formatPlatformSettings(
     lines.push(`  - Use Case: ${setting.Primary_Use_Case || ""}`);
     lines.push(`  - Engagement Notes: ${setting.Engagement_Notes || ""}`);
     lines.push(`  - Hashtag Limit: ${setting.Hashtag_Limit || "No limit"}`);
+    if (setting.First_Comment_Strategy) {
+      lines.push(`  - First Comment Strategy: ${setting.First_Comment_Strategy}`);
+    }
     lines.push("");
   }
 
@@ -296,16 +300,17 @@ ${contentBlock}
 
 ${imageInstructions}
 
-<token_budgets>
-- Instagram: under 300 characters (first 125 visible in feed)
-- Twitter/X: under 280 characters
-- LinkedIn: 400-600 characters
-- Facebook: 300-500 characters
-- Threads: 200-400 characters
-- Bluesky: under 300 characters
-- Pinterest: 200-400 characters with keywords for search
-Quality over quantity. Every word must earn its place.
-</token_budgets>
+<post_length_guidance>
+Follow the Ideal Length from <platform_best_practices> above for each platform. These are target ranges, not hard limits.
+- Instagram Feed: Write LONG captions (800-1500 chars). Use multiple paragraphs with hook → story → question → CTA. Use emojis as visual breaks. Do NOT put hashtags in the caption — they go in firstComment.
+- LinkedIn: Write thought-leadership content (1000-1500 chars). Heavy line breaks. Bold opening, 2-3 insight paragraphs, closing question.
+- Facebook: Either short + punchy (200-500 chars) OR long storytelling (1500-2500 chars). Mid-length underperforms.
+- Threads: Conversational, 200-300 chars.
+- Bluesky: Concise, 200-275 chars (hard limit 300).
+- X/Twitter: Use full 280 chars.
+- Pinterest: Search-optimized keywords, 200-300 chars.
+Quality over quantity. Every word must earn its place. Sound like a real person, not a marketing bot.
+</post_length_guidance>
 
 <link_instructions>
 Include the blog post URL (${blogData.url}) naturally in each post. The URL will be replaced with a shortened tracking link after generation. For platforms where URLs aren't clickable in captions (Instagram), mention "link in bio" instead.
@@ -321,7 +326,8 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
       "sectionIndex": 0,
       "imageIndex": 0,
       "subject": "",
-      "postText": "The full post text including any hashtags",
+      "postText": "The full post text — NO hashtags for Instagram (put them in firstComment instead)",
+      "firstComment": "For Instagram ONLY: a brief engagement summary + 10-20 relevant hashtags. Leave empty string for other platforms.",
       "imageUrl": "",
       "linkUrl": "${blogData.url}"
     }
@@ -331,6 +337,7 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
 sectionIndex: Set to the section number (1-based) that this variant is about. Set to 0 if the post is about the article as a whole.
 imageIndex: The image number from the available_images catalog that matches this post's content. Set to 0 for the event hero/general image. THIS IS THE PRIMARY IMAGE SELECTION MECHANISM.
 subject: The name of the person/entity this post focuses on, or "" if generic.
+firstComment: For Instagram posts ONLY — write a brief 1-sentence engagement hook followed by 10-20 relevant hashtags. Example: "The future of mobile photography could be modular — and we're here for it. #TechInnovation #MobilePhotography #CreativeTech". For all other platforms, set to "".
 </output_format>
 
 CRITICAL REMINDERS (read these before generating):
