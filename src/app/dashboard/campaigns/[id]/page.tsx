@@ -1499,6 +1499,74 @@ function PostDetailView({
     onError: () => toast.error("Failed to save images"),
   });
 
+  // Optimize for platform — AI outpainting
+  const platformTargets: Record<string, { w: number; h: number; label: string }> = {
+    instagram: { w: 1080, h: 1350, label: "4:5 portrait" },
+    pinterest: { w: 1000, h: 1500, label: "2:3 tall pin" },
+    threads: { w: 1440, h: 1920, label: "3:4" },
+    tiktok: { w: 1080, h: 1920, label: "9:16 vertical" },
+    bluesky: { w: 1000, h: 1000, label: "1:1 square" },
+    facebook: { w: 1080, h: 1350, label: "4:5 portrait" },
+    linkedin: { w: 1200, h: 1200, label: "1:1 square" },
+  };
+  const optimizeTarget = platformTargets[platformLower];
+  const optimizeTooltip = optimizeTarget
+    ? `AI outpaint to ${optimizeTarget.label} (${optimizeTarget.w}×${optimizeTarget.h})`
+    : "Optimize image for this platform";
+
+  const [optimizePreview, setOptimizePreview] = useState<{
+    optimizedUrl: string;
+    originalUrl: string;
+    dimensions: string;
+    duration: number;
+  } | null>(null);
+
+  const optimizeMutation = useMutation({
+    mutationFn: async (imageIndex: number) => {
+      const res = await fetch(`/api/posts/${post.id}/optimize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageIndex }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to optimize");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.skipped) {
+        toast.info(data.reason || "Image already optimal");
+      } else {
+        // Show preview dialog instead of auto-applying
+        setOptimizePreview(data);
+      }
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  const acceptOptimization = () => {
+    if (!optimizePreview) return;
+    // Image is already saved by the endpoint — just refresh the view
+    const next = [...mediaItems];
+    next[0] = { ...next[0], url: optimizePreview.optimizedUrl };
+    setMediaItems(next);
+    queryClient.invalidateQueries({ queryKey: ["campaign"] });
+    toast.success(`Optimized for ${post.platform} (${optimizePreview.dimensions})`);
+    setOptimizePreview(null);
+  };
+
+  const rejectOptimization = () => {
+    // Revert: restore the original image URL in Airtable
+    if (optimizePreview?.originalUrl) {
+      const next = [...mediaItems];
+      next[0] = { ...next[0], url: optimizePreview.originalUrl };
+      setMediaItems(next);
+      saveImagesMutation.mutate(next);
+    }
+    setOptimizePreview(null);
+  };
+
   const addImageUrl = (url: string) => {
     const next = [...mediaItems, { url, caption: "" }];
     setMediaItems(next);
@@ -1891,6 +1959,22 @@ function PostDetailView({
               >
                 <Pencil className="h-3 w-3 mr-1" />
                 Replace
+              </Button>
+            )}
+            {mediaImages.length >= 1 && optimizeTarget && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => optimizeMutation.mutate(0)}
+                disabled={optimizeMutation.isPending}
+                title={optimizeTooltip}
+              >
+                {optimizeMutation.isPending ? (
+                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Optimizing ({optimizeTarget.label})...</>
+                ) : (
+                  <><Sparkles className="h-3 w-3 mr-1" /> Optimize ({optimizeTarget.label})</>
+                )}
               </Button>
             )}
           </div>
@@ -2297,6 +2381,49 @@ function PostDetailView({
               ) : (
                 <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Regenerate</>
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Optimize Preview Dialog */}
+      <Dialog open={!!optimizePreview} onOpenChange={(open) => !open && rejectOptimization()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Optimized for {post.platform}</DialogTitle>
+            <DialogDescription>
+              {optimizePreview?.dimensions} — generated in {optimizePreview?.duration}s. Accept, retry, or dismiss.
+            </DialogDescription>
+          </DialogHeader>
+          {optimizePreview && (
+            <div className="grid grid-cols-2 gap-3 items-end">
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1 text-center">Original</p>
+                <img src={optimizePreview.originalUrl} alt="Original" className="w-full rounded border object-contain max-h-56 bg-muted" />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground mb-1 text-center">Optimized ({optimizePreview.dimensions})</p>
+                <img src={optimizePreview.optimizedUrl} alt="Optimized" className="w-full rounded border object-contain max-h-56 bg-muted" />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={rejectOptimization}>
+              Dismiss
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOptimizePreview(null);
+                optimizeMutation.mutate(0);
+              }}
+            >
+              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+              Retry
+            </Button>
+            <Button onClick={acceptOptimization}>
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+              Accept
             </Button>
           </DialogFooter>
         </DialogContent>
