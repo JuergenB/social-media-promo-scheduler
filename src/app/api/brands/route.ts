@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess } from "@/lib/brand-access";
-import type { Brand } from "@/lib/airtable/types";
+import type { Brand, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface AirtableAttachment {
   id: string;
@@ -28,7 +28,18 @@ interface BrandFields {
   "Short Domain": string;
   "Short API Key Label": string;
   "Anthropic API Key Label": string;
+  Timezone: string;
+  "Platform Cadence": string;
   Status: "Active" | "Inactive";
+}
+
+function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PlatformCadenceConfig;
+  } catch {
+    return null;
+  }
 }
 
 function mapBrand(r: { id: string; fields: BrandFields }): Brand {
@@ -45,6 +56,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     shortDomain: r.fields["Short Domain"] || null,
     shortApiKeyLabel: r.fields["Short API Key Label"] || null,
     anthropicApiKeyLabel: r.fields["Anthropic API Key Label"] || null,
+    timezone: r.fields.Timezone || null,
+    platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
     status: r.fields.Status || "Active",
   };
 }
@@ -94,6 +107,8 @@ export async function PATCH(request: NextRequest) {
       voiceGuidelines: "Voice Guidelines",
       zernioProfileId: "Zernio Profile ID",
       zernioApiKeyLabel: "Zernio API Key Label",
+      timezone: "Timezone",
+      platformCadence: "Platform Cadence",
       status: "Status",
     };
 
@@ -101,7 +116,10 @@ export async function PATCH(request: NextRequest) {
     for (const [key, value] of Object.entries(updates)) {
       const airtableField = fieldMap[key];
       if (airtableField) {
-        fields[airtableField] = value;
+        // Serialize objects to JSON for long-text fields
+        fields[airtableField] = key === "platformCadence" && typeof value === "object"
+          ? JSON.stringify(value)
+          : value;
       }
     }
 

@@ -8,6 +8,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import type { Brand } from "@/lib/airtable/types";
@@ -96,20 +97,35 @@ export function BrandProvider({ children }: { children: ReactNode }) {
 
   const queryClient = useQueryClient();
   const { setDefaultProfileId } = useAppStore();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const switchBrand = useCallback((brandId: string) => {
     setSelectedBrandId(brandId);
     setBrandCookie(brandId);
     // Clear cached Zernio profile ID — new brand has different profiles
     setDefaultProfileId(null);
-    // Invalidate all Zernio-related queries so they re-fetch with the new API key
+    // Invalidate ALL brand-specific queries so they re-fetch for the new brand
     queryClient.invalidateQueries({ queryKey: ["server-api-key"] });
     queryClient.invalidateQueries({ queryKey: ["profiles"] });
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
     queryClient.invalidateQueries({ queryKey: ["posts"] });
     queryClient.invalidateQueries({ queryKey: ["queue"] });
     queryClient.invalidateQueries({ queryKey: ["calendar"] });
-  }, [queryClient, setDefaultProfileId]);
+    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    queryClient.invalidateQueries({ queryKey: ["campaign"] });
+    queryClient.invalidateQueries({ queryKey: ["feedback"] });
+
+    // Navigate to campaigns list if on a brand-specific page (campaign detail, new campaign, compose)
+    // This prevents stale data from the previous brand being shown
+    const brandSpecificPaths = ["/dashboard/campaigns/", "/dashboard/compose"];
+    const isOnBrandSpecificPage = brandSpecificPaths.some((p) =>
+      pathname.startsWith(p)
+    );
+    if (isOnBrandSpecificPage) {
+      router.push("/dashboard/campaigns");
+    }
+  }, [queryClient, setDefaultProfileId, router, pathname]);
 
   return (
     <BrandContext.Provider

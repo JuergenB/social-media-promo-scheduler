@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { schedulePostsAlgorithm, previewSchedule } from "@/lib/scheduling";
-import type { DistributionBias } from "@/lib/airtable/types";
+import type { DistributionBias, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
   Name: string;
@@ -70,6 +70,24 @@ export async function POST(
     const durationDays = campaign.fields["Duration Days"] || 90;
     const bias = (campaign.fields["Distribution Bias"] || "Front-loaded") as DistributionBias;
 
+    // Fetch brand's cadence preferences
+    let brandCadence: PlatformCadenceConfig | null = null;
+    const brandIds = campaign.fields.Brand || [];
+    if (brandIds.length > 0) {
+      try {
+        const brandRecord = await getRecord<{ "Platform Cadence": string; Timezone: string }>(
+          "Brands",
+          brandIds[0]
+        );
+        const raw = brandRecord.fields["Platform Cadence"];
+        if (raw) {
+          brandCadence = JSON.parse(raw) as PlatformCadenceConfig;
+        }
+      } catch {
+        // Fall through to global defaults
+      }
+    }
+
     // Start date: use campaign's Start Date if set, otherwise today
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -136,6 +154,7 @@ export async function POST(
         startDate,
         durationDays,
         bias,
+        brandCadence,
       });
 
       const slots = schedulePostsAlgorithm({
@@ -143,6 +162,7 @@ export async function POST(
         startDate,
         durationDays,
         bias,
+        brandCadence,
         excludedDates: alreadyScheduledDates,
       });
 
@@ -166,6 +186,7 @@ export async function POST(
       startDate,
       durationDays,
       bias,
+      brandCadence,
       excludedDates: alreadyScheduledDates,
     });
 

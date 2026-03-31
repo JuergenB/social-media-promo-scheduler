@@ -15,8 +15,27 @@ export interface Brand {
   shortApiKeyLabel: string | null;
   /** Env var name for this brand's Anthropic API key (e.g., "ANTHROPIC_KEY_INTERSECT"). Falls back to ANTHROPIC_API_KEY. */
   anthropicApiKeyLabel: string | null;
+  /** IANA timezone for scheduling (e.g. "America/New_York"). */
+  timezone: string | null;
+  /** JSON: per-platform posting cadence preferences. */
+  platformCadence: PlatformCadenceConfig | null;
   status: "Active" | "Inactive";
 }
+
+// ── Per-brand platform cadence ────────────────────────────────────────
+
+export type TimeWindow = "morning" | "afternoon" | "evening";
+
+export interface PlatformCadenceEntry {
+  postsPerWeek: number;
+  /** Days of week: 0=Sun … 6=Sat. Empty = all days. */
+  activeDays: number[];
+  /** Which time-of-day windows to use. Maps to platform-specific hours. */
+  timeWindows: TimeWindow[];
+}
+
+/** Platform ID → cadence config. Missing platforms inherit global defaults. */
+export type PlatformCadenceConfig = Record<string, PlatformCadenceEntry>;
 
 export const CAMPAIGN_TYPES = [
   "Newsletter",

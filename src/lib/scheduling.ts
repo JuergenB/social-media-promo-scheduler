@@ -5,13 +5,17 @@
  * The algorithm assigns date/time slots to approved posts based on:
  * - Campaign duration (days)
  * - Distribution bias (front-loaded, balanced, back-loaded)
- * - Per-platform cadence defaults
+ * - Per-brand, per-platform cadence preferences (with global defaults)
  * - Organic timing (randomized minutes within windows)
  *
  * Reference: Missinglettr-inspired exponential curve
  */
 
-import type { DistributionBias } from "@/lib/airtable/types";
+import type { DistributionBias, PlatformCadenceConfig } from "@/lib/airtable/types";
+import {
+  getEffectiveCadence,
+  resolveTimeWindows,
+} from "@/lib/platform-cadence-defaults";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -30,72 +34,51 @@ export interface ScheduleInput {
   durationDays: number;
   bias: DistributionBias;
   timezone?: string;
+  /** Brand-level per-platform cadence overrides. Merged over global defaults. */
+  brandCadence?: PlatformCadenceConfig | null;
   /** Per-platform dates that are already taken (avoid scheduling on these days) */
   excludedDates?: Map<string, Set<string>>; // platform → set of "YYYY-MM-DD" strings
 }
 
-// ── Per-platform cadence defaults ──────────────────────────────────────
+// ── Resolved cadence (internal) ───────────────────────────────────────
 
-interface PlatformCadence {
+interface ResolvedCadence {
   maxPerDay: number;
   minSpacingHours: number;
-  /** Preferred posting windows (hours in 24h format) */
   windows: number[];
-  /** Days of week (0=Sun, 1=Mon, ..., 6=Sat). Empty = all days. */
   activeDays: number[];
 }
 
-const DEFAULT_CADENCE: Record<string, PlatformCadence> = {
-  instagram: {
-    maxPerDay: 1,
-    minSpacingHours: 24,
-    windows: [9, 12, 17],
-    activeDays: [], // all days
-  },
-  twitter: {
-    maxPerDay: 3,
-    minSpacingHours: 4,
-    windows: [8, 11, 14, 17, 20],
-    activeDays: [],
-  },
-  linkedin: {
-    maxPerDay: 1,
-    minSpacingHours: 24,
-    windows: [8, 10, 12],
-    activeDays: [1, 2, 3, 4, 5], // weekdays only
-  },
-  facebook: {
-    maxPerDay: 2,
-    minSpacingHours: 8,
-    windows: [9, 13, 18],
-    activeDays: [],
-  },
-  threads: {
-    maxPerDay: 2,
-    minSpacingHours: 6,
-    windows: [10, 14, 19],
-    activeDays: [],
-  },
-  bluesky: {
-    maxPerDay: 2,
-    minSpacingHours: 6,
-    windows: [9, 13, 17],
-    activeDays: [],
-  },
-  pinterest: {
-    maxPerDay: 3,
-    minSpacingHours: 4,
-    windows: [10, 14, 20],
-    activeDays: [],
-  },
-};
+/**
+ * Resolve brand cadence entry → internal scheduling cadence.
+ * Converts postsPerWeek to maxPerDay and maps time windows to hours.
+ */
+function resolveCadence(
+  platform: string,
+  brandCadence?: PlatformCadenceConfig | null,
+): ResolvedCadence {
+  const entry = getEffectiveCadence(platform, brandCadence);
 
-const FALLBACK_CADENCE: PlatformCadence = {
-  maxPerDay: 1,
-  minSpacingHours: 24,
-  windows: [10, 14],
-  activeDays: [],
-};
+  // Convert postsPerWeek → maxPerDay
+  // Calculate based on active days per week
+  const activeDaysPerWeek = entry.activeDays.length || 7;
+  const maxPerDay = Math.max(1, Math.ceil(entry.postsPerWeek / activeDaysPerWeek));
+
+  // Min spacing: if more than 1/day, space them out; otherwise 24h
+  const minSpacingHours = maxPerDay > 1
+    ? Math.max(2, Math.floor(24 / (maxPerDay + 1)))
+    : 24;
+
+  // Resolve time-of-day toggles to concrete hours
+  const windows = resolveTimeWindows(platform, entry.timeWindows);
+
+  return {
+    maxPerDay,
+    minSpacingHours,
+    windows: windows.length > 0 ? windows : [10, 14],
+    activeDays: entry.activeDays,
+  };
+}
 
 // ── Tapering curve ─────────────────────────────────────────────────────
 
@@ -142,7 +125,7 @@ function generateCurve(durationDays: number, bias: DistributionBias): number[] {
  * Pick a random time from the platform's posting windows with
  * organic variation (±30 minutes).
  */
-function pickTime(cadence: PlatformCadence): { hour: number; minute: number } {
+function pickTime(cadence: ResolvedCadence): { hour: number; minute: number } {
   const baseHour = cadence.windows[Math.floor(Math.random() * cadence.windows.length)];
   // Add organic variation: ±30 minutes
   const minuteOffset = Math.floor(Math.random() * 60) - 30;
@@ -158,7 +141,7 @@ function pickTime(cadence: PlatformCadence): { hour: number; minute: number } {
 /**
  * Check if a day of week is active for a platform.
  */
-function isDayActive(date: Date, cadence: PlatformCadence): boolean {
+function isDayActive(date: Date, cadence: ResolvedCadence): boolean {
   if (cadence.activeDays.length === 0) return true;
   return cadence.activeDays.includes(date.getDay());
 }
@@ -176,7 +159,7 @@ function isDayActive(date: Date, cadence: PlatformCadence): boolean {
  * 4. Assign specific times using organic variation
  */
 export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
-  const { posts, startDate, durationDays, bias, excludedDates } = input;
+  const { posts, startDate, durationDays, bias, brandCadence, excludedDates } = input;
 
   if (posts.length === 0 || durationDays <= 0) return [];
 
@@ -194,7 +177,7 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
   const slots: ScheduleSlot[] = [];
 
   for (const [platform, platformPosts] of byPlatform) {
-    const cadence = DEFAULT_CADENCE[platform] || FALLBACK_CADENCE;
+    const cadence = resolveCadence(platform, brandCadence);
     const postCount = platformPosts.length;
 
     // Find valid days (active days within duration, excluding already-scheduled)
@@ -275,7 +258,7 @@ export function previewSchedule(input: Omit<ScheduleInput, "posts"> & {
   startDate: string;
   platforms: Record<string, number>;
 }> {
-  const { platformCounts, startDate, durationDays, bias } = input;
+  const { platformCounts, startDate, durationDays, bias, brandCadence } = input;
 
   // Create dummy posts for each platform
   const posts: Array<{ id: string; platform: string }> = [];
@@ -285,7 +268,7 @@ export function previewSchedule(input: Omit<ScheduleInput, "posts"> & {
     }
   }
 
-  const slots = schedulePostsAlgorithm({ posts, startDate, durationDays, bias });
+  const slots = schedulePostsAlgorithm({ posts, startDate, durationDays, bias, brandCadence });
 
   // Group into weeks
   const weeks = new Map<number, { startDate: string; platforms: Record<string, number> }>();

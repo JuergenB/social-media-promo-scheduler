@@ -94,6 +94,7 @@ import {
   Upload,
   ImageOff,
   Pencil,
+  ArrowLeftRight,
   Layers,
   Link2Off,
   Send,
@@ -1467,6 +1468,7 @@ function PostDetailView({
   }
 
   const platformLower = toPlatformId(post.platform);
+  const isPublished = post.status === "Published";
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const charCount = post.content?.length || 0;
   const platformCharLimits: Record<string, number> = {
@@ -1842,6 +1844,7 @@ function PostDetailView({
                     <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
                   </div>
                   {/* Remove on hover */}
+                  {!isPublished && (
                   <Button
                     variant="destructive"
                     size="icon"
@@ -1850,6 +1853,7 @@ function PostDetailView({
                   >
                     <X className="h-3 w-3" />
                   </Button>
+                  )}
                 </div>
               ) : (
                 /* Multiple images — horizontal strip */
@@ -1863,6 +1867,7 @@ function PostDetailView({
                       <img src={imgUrl} alt="" className="w-40 h-40 object-cover" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
                       {/* Reorder buttons */}
+                      {!isPublished && (
                       <div className="absolute top-1 left-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {idx > 0 && (
                           <Button
@@ -1897,7 +1902,9 @@ function PostDetailView({
                           </Button>
                         )}
                       </div>
+                      )}
                       {/* Remove button */}
+                      {!isPublished && (
                       <Button
                         variant="destructive"
                         size="icon"
@@ -1906,6 +1913,7 @@ function PostDetailView({
                       >
                         <X className="h-3 w-3" />
                       </Button>
+                      )}
                       {/* Slide number */}
                       <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
                         {idx + 1}/{mediaImages.length}
@@ -1920,7 +1928,8 @@ function PostDetailView({
                       onChange={(e) => updateCaption(idx, e.target.value)}
                       onBlur={() => saveCaption(idx)}
                       onKeyDown={(e) => { if (e.key === "Enter") saveCaption(idx); }}
-                      className="w-40 text-[11px] px-1.5 py-1 border border-border rounded bg-background text-foreground truncate"
+                      readOnly={isPublished}
+                      className={cn("w-40 text-[11px] px-1.5 py-1 border border-border rounded bg-background text-foreground truncate", isPublished && "opacity-60 cursor-default")}
                     />
                   </div>
                 ))}
@@ -1936,7 +1945,8 @@ function PostDetailView({
             </>
           )}
 
-          {/* Always-visible action bar */}
+          {/* Always-visible action bar — hidden for published posts */}
+          {!isPublished && (
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -1957,7 +1967,7 @@ function PostDetailView({
                   setShowAddImage(true);
                 }}
               >
-                <Pencil className="h-3 w-3 mr-1" />
+                <ArrowLeftRight className="h-3 w-3 mr-1" />
                 Replace
               </Button>
             )}
@@ -1978,6 +1988,7 @@ function PostDetailView({
               </Button>
             )}
           </div>
+          )}
 
           {/* Add image panel — drag-drop + paste URL */}
           {showAddImage && (
@@ -2090,8 +2101,9 @@ function PostDetailView({
             </div>
           ) : (
             <div
-              className="group relative cursor-pointer rounded-md hover:bg-muted/30 transition-colors p-1 -m-1"
+              className={cn("group relative rounded-md p-1 -m-1", !isPublished && "cursor-pointer hover:bg-muted/30 transition-colors")}
               onClick={() => {
+                if (isPublished) return;
                 setEditedContent(post.content || "");
                 setIsEditingContent(true);
               }}
@@ -2103,10 +2115,12 @@ function PostDetailView({
                 <p className={cn("text-xs", charLimit && charCount > charLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
                   {charCount}{charLimit ? ` / ${charLimit.toLocaleString()}` : ""} chars
                 </p>
+                {!isPublished && (
                 <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
                   <Pencil className="h-3 w-3" />
                   Click to edit
                 </span>
+                )}
               </div>
             </div>
           )}

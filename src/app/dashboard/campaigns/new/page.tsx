@@ -850,7 +850,7 @@ export default function NewCampaignPage() {
               Creating...
             </>
           ) : (
-            "Generate Campaign"
+            "Create Campaign"
           )}
         </Button>
       </div>
