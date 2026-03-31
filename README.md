@@ -216,6 +216,26 @@ Images from supplemental sources are filtered by **entity overlap** — only ima
 
 The system generates drafts. Humans approve, edit, or dismiss every post before it goes live. The tools make it fast — functional Approve/Dismiss buttons on the list view, inline content editing, drag-and-drop image swap — but the team always has final say.
 
+## Tech Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Framework** | Next.js 16, React 19, TypeScript | App Router, server components, API routes |
+| **Styling** | Tailwind CSS v4, shadcn/ui | Utility-first CSS, accessible component library |
+| **State** | Zustand, TanStack Query | Client state management, server state caching |
+| **Data** | Airtable (REST API) | Campaigns, posts, brands, platform settings, user access |
+| **Auth** | Auth.js v5 | Credential-based login with role-based access |
+| **AI Generation** | Anthropic Claude Sonnet 4.6 | Post content generation (per-brand API keys) |
+| **Web Scraping** | Firecrawl | Campaign source URL extraction (newsletters, exhibitions, blogs) |
+| **Social Scheduling** | Zernio API (`@getlatedev/node` SDK) | Publish to 14 platforms, webhook status sync |
+| **Link Shortening** | Short.io | Per-brand shortened links with UTM tracking |
+| **Image Storage** | Vercel Blob | Permanent public URLs for campaign and post images |
+| **Image Optimization** | Sharp | Server-side PNG/WebP to JPEG conversion, re-compression |
+| **Image AI** | Replicate (Flux models) | AI outpainting for aspect ratio correction |
+| **PDF Generation** | pdf-lib | LinkedIn PDF carousel assembly from multi-image posts |
+| **Link-in-Bio** | lnk.bio (OAuth2) | Auto-create link-in-bio entries after Instagram publish |
+| **Deployment** | Vercel | Hosting, serverless functions, blob storage |
+
 ## Technical Details
 
 For developers: see [GETTING_STARTED.md](GETTING_STARTED.md) for stack details, environment setup, API keys, and architecture.

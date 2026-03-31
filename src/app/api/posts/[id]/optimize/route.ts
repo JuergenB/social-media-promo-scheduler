@@ -98,9 +98,30 @@ export async function POST(
       currentWidth || undefined, currentHeight || undefined
     );
 
-    // Download the outpainted image and upload to Vercel Blob
+    // Download the outpainted image
     const outpaintedRes = await fetch(result.url);
-    const outpaintedBuffer = Buffer.from(await outpaintedRes.arrayBuffer());
+    let outpaintedBuffer: Buffer = Buffer.from(await outpaintedRes.arrayBuffer());
+
+    // Verify output dimensions — models sometimes ignore target canvas size
+    const outMeta = await sharp(outpaintedBuffer).metadata();
+    const outW = outMeta.width || 0;
+    const outH = outMeta.height || 0;
+    const dimensionOk =
+      Math.abs(outW - target.width) <= 10 && Math.abs(outH - target.height) <= 10;
+
+    if (!dimensionOk && outW > 0 && outH > 0) {
+      console.log(
+        `[optimize] Model returned ${outW}x${outH}, expected ${target.width}x${target.height} — resizing with Sharp`
+      );
+      outpaintedBuffer = Buffer.from(
+        await sharp(outpaintedBuffer)
+          .resize(target.width, target.height, { fit: "cover" })
+          .jpeg({ quality: 85 })
+          .toBuffer()
+      );
+    }
+
+    // Upload to Vercel Blob
     const blobUrl = await uploadImage("posts", postId, outpaintedBuffer, "image/jpeg");
 
     // Update the media item with the new URL
@@ -118,6 +139,7 @@ export async function POST(
       optimizedUrl: blobUrl,
       originalUrl: sourceUrl,
       dimensions: `${target.width}x${target.height}`,
+      modelOutput: dimensionOk ? undefined : `${outW}x${outH} (corrected)`,
       duration: result.duration,
     });
   } catch (error) {
