@@ -202,7 +202,7 @@ export async function POST(
     for (const slot of slots) {
       await updateRecord("Posts", slot.postId, {
         "Scheduled Date": slot.scheduledDate,
-        Status: "Queued",
+        Status: "Scheduled",
       });
     }
 
