@@ -300,7 +300,7 @@ export default function DashboardPage() {
                 data.posts.pendingReview.map((post) => (
                   <Link
                     key={post.id}
-                    href={`/dashboard/campaigns/${post.campaignId}`}
+                    href={`/dashboard/campaigns/${post.campaignId}?postId=${post.id}`}
                     className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors cursor-pointer"
                   >
                     {post.imageUrl && (
