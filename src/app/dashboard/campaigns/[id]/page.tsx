@@ -2452,15 +2452,15 @@ function PostDetailView({
           )}
 
           {/* Image + caption + counter */}
-          <div className="flex flex-col items-center max-w-[90%] max-h-[85%] gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex flex-col items-center max-w-[90%] max-h-[85%] gap-2 overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <img
               src={mediaImages[lightboxIndex]}
               alt=""
-              className="max-h-[75vh] object-contain rounded-lg shadow-2xl"
+              className="max-h-[75vh] object-contain rounded-lg shadow-2xl shrink-0"
               draggable={false}
             />
             {mediaItems[lightboxIndex]?.caption && (
-              <p className="text-white/90 text-sm text-center bg-black/50 px-4 py-1.5 rounded-full max-w-full truncate">
+              <p className="text-white/90 text-sm text-center bg-black/50 px-4 py-1.5 rounded-full max-w-full truncate shrink-0">
                 {mediaItems[lightboxIndex].caption}
               </p>
             )}

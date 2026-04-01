@@ -261,11 +261,13 @@ export async function renderCarouselSlide(
   const imgAreaBottom = slideH - captionAreaH;
   const imgY = Math.round(imgAreaTop + (imgAreaBottom - imgAreaTop - fitH) / 2);
 
-  // Resize source image (preserve alpha if chroma key was applied)
-  const resizedImg = await sharp(imgBuffer)
-    .resize(fitW, fitH, { fit: "inside" })
-    .png() // PNG to preserve transparency from chroma key
-    .toBuffer();
+  // Resize source image
+  // Use PNG only when chroma key was applied (needs alpha). JPEG otherwise to avoid
+  // transparent edge artifacts from PNG antialiasing that show as white fringe lines.
+  const resizedImgPipeline = sharp(imgBuffer).resize(fitW, fitH, { fit: "inside" });
+  const resizedImg = options?.removeColor
+    ? await resizedImgPipeline.png().toBuffer()
+    : await resizedImgPipeline.flatten({ background: frame }).jpeg({ quality: 95 }).toBuffer();
 
   // Build SVG caption overlay
   const captionSvg = caption ? buildCaptionSvg(caption, textColor, slideW, captionAreaH) : null;
@@ -337,14 +339,16 @@ function buildCaptionSvg(caption: string, textColor: string, width: number, heig
 
   const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+  const bottomPad = 8; // prevent descenders from touching the slide bottom edge
   const totalTextHeight = lines.length * lineHeight;
-  const startY = (height - totalTextHeight) / 2 + fontSize * 0.8;
+  const startY = (height - bottomPad - totalTextHeight) / 2 + fontSize * 0.8;
 
   const textElements = lines
     .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="${lines.length === 1 ? 'bold' : 'normal'}" fill="${esc(textColor)}">${esc(line)}</text>`)
     .join("\n    ");
 
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" overflow="hidden">
+    <rect width="${width}" height="${height}" fill="none" />
     ${textElements}
   </svg>`;
 }
