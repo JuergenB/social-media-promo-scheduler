@@ -427,7 +427,7 @@ export default function CampaignDetailPage() {
   const outOfViewCount = queuedCount + scheduledCount + publishedCount;
 
   // Queue-focused view: only show actionable posts (not scheduled/published/queued)
-  const ACTIONABLE_STATUSES = new Set(["Pending", "Approved", "Modified", "Failed"]);
+  const ACTIONABLE_STATUSES = new Set(["Pending", "Approved", "Modified", "Failed", "Scheduled"]);
   const actionablePosts = useMemo(() => {
     return posts.filter((p) => ACTIONABLE_STATUSES.has(p.status));
   }, [posts]);
