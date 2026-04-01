@@ -246,6 +246,14 @@ export function parseSections(markdown: string): ContentSection[] {
     const h2Match = line.match(/^## (.+)$/);
     const h3Match = !h2Match ? line.match(/^### (.+)$/) : null;
 
+    // Merge H3 sub-headings into the current H2 section when they appear
+    // within the first few lines (common CMS pattern: H2=title, H3=location/subtitle)
+    if (h3Match && !isPreamble && currentLines.length <= 2) {
+      // Treat as content within the current section, not a new section
+      currentLines.push(line);
+      continue;
+    }
+
     if (h2Match || h3Match) {
       // Flush previous section
       const sectionContent = currentLines.join("\n").trim();
