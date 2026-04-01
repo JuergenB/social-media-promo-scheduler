@@ -201,22 +201,48 @@ ${blogData.author ? `Author: ${blogData.author}` : ""}
 ${preamble?.content ? `<hero_content>\n${preamble.content.slice(0, 800)}\n</hero_content>\n\n` : ""}${sectionXml}
 </blog_post_sections>`;
 
-    angleInstructions = `This article has ${contentSections.length} distinct sections, each about a DIFFERENT artist/topic. Generate ${postsPerPlatform} variant${postsPerPlatform > 1 ? "s" : ""} per platform.
+    // Build explicit variant→section assignments to guarantee full coverage
+    const sectionAssignments: string[] = [];
+    for (let v = 1; v <= postsPerPlatform; v++) {
+      const sectionIdx = ((v - 1) % contentSections.length) + 1;
+      const heading = contentSections[sectionIdx - 1]?.heading?.replace(/\*\*/g, "").replace(/\u200B/g, "").trim() || `Section ${sectionIdx}`;
+      sectionAssignments.push(`  Variant ${v} → Section ${sectionIdx}: ${heading}`);
+    }
 
-CRITICAL SECTION RULE: Each variant MUST focus on the content from ONE specific section. In the JSON output, set "sectionIndex" to the section number (1-${contentSections.length}) that the variant is about. The sections are:
-${contentSections.slice(0, 8).map((s, i) => `  Section ${i + 1}: ${s.heading}`).join("\n")}
+    angleInstructions = `This article has ${contentSections.length} distinct sections, each about a DIFFERENT artist/topic/event. Generate ${postsPerPlatform} variant${postsPerPlatform > 1 ? "s" : ""} per platform.
 
-Each variant must match its sectionIndex — do NOT write about "${contentSections[0]?.heading}" while setting sectionIndex to 2. The image assigned to each post will be determined by sectionIndex, so a mismatch means the wrong artist's artwork appears with the wrong artist's text.`;
+MANDATORY VARIANT-TO-SECTION ASSIGNMENTS (follow exactly):
+${sectionAssignments.join("\n")}
+
+Each variant MUST write about its assigned section. Set "sectionIndex" in the JSON output to the section number shown above. The image for each post is determined by sectionIndex — a mismatch means the wrong image appears with the wrong text.
+
+The sections are:
+${contentSections.slice(0, 12).map((s, i) => `  Section ${i + 1}: ${s.heading}`).join("\n")}`;
 
     // Build numbered image catalog from sections — use section heading as
-    // description when alt text is empty (common on Ghost, WordPress, etc.)
+    // description when alt text is empty, generic, or duplicated across images
+    // (common on Ghost, WordPress, StoryChief where og:description is used as alt)
     const heroUrl = blogData.heroImage?.url || blogData.ogImage || "";
+
+    // Detect duplicate alt text: if >50% of images share the same alt, treat alt as unreliable
+    const allSectionImages = contentSections.flatMap((s) => s.images);
+    const altCounts = new Map<string, number>();
+    for (const img of allSectionImages) {
+      if (img.alt) altCounts.set(img.alt, (altCounts.get(img.alt) || 0) + 1);
+    }
+    const mostCommonAltCount = Math.max(...altCounts.values(), 0);
+    const altIsUnreliable = allSectionImages.length > 1 && mostCommonAltCount > allSectionImages.length * 0.5;
+
     const sectionCatalogImages: { url: string; label: string }[] = [];
     for (const s of contentSections.slice(0, 12)) {
       for (const img of s.images) {
-        const label = img.alt && img.alt !== "image" && img.alt !== "untitled"
+        // Use section heading when alt is missing, generic, or unreliable (duplicated)
+        const altUsable = img.alt && img.alt !== "image" && img.alt !== "untitled" && !altIsUnreliable;
+        // Strip markdown bold markers and zero-width spaces from heading
+        const cleanHeading = s.heading.replace(/\*\*/g, "").replace(/\u200B/g, "").trim();
+        const label = altUsable
           ? img.alt
-          : `Image from section: ${s.heading}`;
+          : `Image from section: ${cleanHeading}`;
         sectionCatalogImages.push({ url: img.url, label });
       }
     }
@@ -257,8 +283,27 @@ ${blogData.content}
     // Exclude the hero/og image — it's already Image 0 (general/event image).
     const heroUrl = blogData.heroImage?.url || blogData.ogImage || "";
     const catalogImages = blogData.images.filter((img) => img.url !== heroUrl).slice(0, 20);
+
+    // Detect duplicate alt text (CMS often uses og:description for all images)
+    const singleAltCounts = new Map<string, number>();
+    for (const img of catalogImages) {
+      if (img.alt) singleAltCounts.set(img.alt, (singleAltCounts.get(img.alt) || 0) + 1);
+    }
+    const singleMostCommonAlt = Math.max(...singleAltCounts.values(), 0);
+    const singleAltUnreliable = catalogImages.length > 1 && singleMostCommonAlt > catalogImages.length * 0.5;
+
     const imageCatalog = catalogImages
-      .map((img, i) => `Image ${i + 1}: "${img.alt || 'untitled'}"`)
+      .map((img, i) => {
+        if (singleAltUnreliable || !img.alt || img.alt === "image" || img.alt === "untitled") {
+          // Fall back to filename-derived label
+          const filenameMatch = img.url.match(/\/([^/?]+?)(?:_[a-f0-9]{10,})?(?:_\d+)?\.\w+(?:\?|$)/);
+          const filename = filenameMatch
+            ? filenameMatch[1].replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim()
+            : "untitled";
+          return `Image ${i + 1}: "${filename}"`;
+        }
+        return `Image ${i + 1}: "${img.alt}"`;
+      })
       .join("\n");
 
     imageInstructions = `<available_images>

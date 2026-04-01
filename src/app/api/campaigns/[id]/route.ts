@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { deleteShortLinks } from "@/lib/short-io";
-import type { Campaign, Post } from "@/lib/airtable/types";
+import type { Campaign, Post, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
   Name: string;
@@ -23,6 +23,16 @@ interface CampaignFields {
   "Start Date": string;
   "Target Platforms": string;
   "Max Variants Per Platform": number;
+  "Platform Cadence": string;
+}
+
+function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PlatformCadenceConfig;
+  } catch {
+    return null;
+  }
 }
 
 interface PostFields {
@@ -63,6 +73,17 @@ export async function GET(
       );
     }
 
+    // Auto-complete: if campaign is Active and past its end date, mark Completed
+    if (record.fields.Status === "Active" && record.fields["Start Date"] && record.fields["Duration Days"]) {
+      const startDate = new Date(record.fields["Start Date"] + "T00:00:00");
+      const endDate = new Date(startDate);
+      endDate.setDate(endDate.getDate() + record.fields["Duration Days"]);
+      if (new Date() > endDate) {
+        await updateRecord("Campaigns", id, { Status: "Completed" });
+        record.fields.Status = "Completed";
+      }
+    }
+
     const campaign: Campaign = {
       id: record.id,
       name: record.fields.Name || "",
@@ -83,6 +104,7 @@ export async function GET(
       startDate: record.fields["Start Date"] || undefined,
       targetPlatforms: record.fields["Target Platforms"] ? record.fields["Target Platforms"].split(",") : undefined,
       maxVariantsPerPlatform: record.fields["Max Variants Per Platform"] ?? undefined,
+      platformCadence: parseCadenceJson(record.fields["Platform Cadence"]),
     };
 
     // Fetch posts linked to this campaign
@@ -155,13 +177,17 @@ export async function PATCH(
       startDate: "Start Date",
       targetPlatforms: "Target Platforms",
       maxVariantsPerPlatform: "Max Variants Per Platform",
+      platformCadence: "Platform Cadence",
       imageUrl: "Image URL",
     };
 
     const fields: Record<string, unknown> = {};
     for (const [key, airtableField] of Object.entries(allowedFields)) {
       if (body[key] !== undefined) {
-        fields[airtableField] = body[key];
+        // Serialize objects to JSON for long-text fields
+        fields[airtableField] = key === "platformCadence" && typeof body[key] === "object"
+          ? JSON.stringify(body[key])
+          : body[key];
       }
     }
 

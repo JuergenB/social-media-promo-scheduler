@@ -39,13 +39,14 @@ export function resolveAnthropicConfig(brand?: {
 export async function generatePosts(
   systemPrompt: string,
   userPrompt: string,
-  config: AnthropicConfig
+  config: AnthropicConfig,
+  options?: { maxTokens?: number }
 ): Promise<{ posts: GeneratedPost[] }> {
   const client = new Anthropic({ apiKey: config.apiKey });
 
   const response = await client.messages.create({
     model: config.model,
-    max_tokens: 8192,
+    max_tokens: options?.maxTokens || 8192,
     temperature: 0.3,
     system: systemPrompt,
     messages: [

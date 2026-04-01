@@ -12,6 +12,7 @@ interface CampaignFields {
   Status: string;
   "Event Date": string;
   "Start Date": string;
+  "Platform Cadence": string;
 }
 
 interface PostFields {
@@ -70,21 +71,28 @@ export async function POST(
     const durationDays = campaign.fields["Duration Days"] || 90;
     const bias = (campaign.fields["Distribution Bias"] || "Front-loaded") as DistributionBias;
 
-    // Fetch brand's cadence preferences
-    let brandCadence: PlatformCadenceConfig | null = null;
-    const brandIds = campaign.fields.Brand || [];
-    if (brandIds.length > 0) {
+    // Resolve cadence: campaign-level first, then brand-level, then global defaults
+    let cadence: PlatformCadenceConfig | null = null;
+    if (campaign.fields["Platform Cadence"]) {
       try {
-        const brandRecord = await getRecord<{ "Platform Cadence": string; Timezone: string }>(
-          "Brands",
-          brandIds[0]
-        );
-        const raw = brandRecord.fields["Platform Cadence"];
-        if (raw) {
-          brandCadence = JSON.parse(raw) as PlatformCadenceConfig;
+        cadence = JSON.parse(campaign.fields["Platform Cadence"]) as PlatformCadenceConfig;
+      } catch { /* fall through */ }
+    }
+    if (!cadence) {
+      const brandIds = campaign.fields.Brand || [];
+      if (brandIds.length > 0) {
+        try {
+          const brandRecord = await getRecord<{ "Platform Cadence": string }>(
+            "Brands",
+            brandIds[0]
+          );
+          const raw = brandRecord.fields["Platform Cadence"];
+          if (raw) {
+            cadence = JSON.parse(raw) as PlatformCadenceConfig;
+          }
+        } catch {
+          // Fall through to global defaults
         }
-      } catch {
-        // Fall through to global defaults
       }
     }
 
@@ -154,7 +162,7 @@ export async function POST(
         startDate,
         durationDays,
         bias,
-        brandCadence,
+        cadence,
       });
 
       const slots = schedulePostsAlgorithm({
@@ -162,7 +170,7 @@ export async function POST(
         startDate,
         durationDays,
         bias,
-        brandCadence,
+        cadence,
         excludedDates: alreadyScheduledDates,
       });
 
@@ -186,7 +194,7 @@ export async function POST(
       startDate,
       durationDays,
       bias,
-      brandCadence,
+      cadence,
       excludedDates: alreadyScheduledDates,
     });
 

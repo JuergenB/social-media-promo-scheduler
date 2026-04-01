@@ -394,13 +394,38 @@ export default function CampaignDetailPage() {
     return Array.from(platforms).sort();
   }, [posts]);
 
-  // Filtered posts
-  const filteredPosts = useMemo(() => {
-    if (platformFilter.size === 0) return posts;
-    return posts.filter((p) => platformFilter.has(p.platform));
-  }, [posts, platformFilter]);
+  // (postsByDate and sortedDateKeys moved after filteredPosts definition below)
 
-  // Group posts by date
+  // Post counts by status
+  const reviewCount = posts.filter((p) => p.status === "Pending").length;
+  const approvedCount = posts.filter(
+    (p) => p.status === "Approved" || p.status === "Modified"
+  ).length;
+  const queuedCount = posts.filter(
+    (p) => p.status === "Queued"
+  ).length;
+  const scheduledCount = posts.filter((p) => p.status === "Scheduled").length;
+  const publishedCount = posts.filter((p) => p.status === "Published").length;
+  const failedCount = posts.filter((p) => p.status === "Failed").length;
+  const dismissedCount = posts.filter((p) => p.status === "Dismissed").length;
+  const outOfViewCount = queuedCount + scheduledCount + publishedCount;
+
+  // Queue-focused view: only show actionable posts (not scheduled/published/queued)
+  const ACTIONABLE_STATUSES = new Set(["Pending", "Approved", "Modified", "Failed"]);
+  const actionablePosts = useMemo(() => {
+    return posts.filter((p) => ACTIONABLE_STATUSES.has(p.status));
+  }, [posts]);
+  const dismissedPosts = useMemo(() => {
+    return posts.filter((p) => p.status === "Dismissed");
+  }, [posts]);
+
+  // Filtered posts (only actionable — Pending/Approved/Modified/Failed)
+  const filteredPosts = useMemo(() => {
+    if (platformFilter.size === 0) return actionablePosts;
+    return actionablePosts.filter((p) => platformFilter.has(p.platform));
+  }, [actionablePosts, platformFilter]);
+
+  // Group filtered posts by date
   const postsByDate = useMemo(() => {
     const groups: Record<string, Post[]> = {};
     filteredPosts.forEach((p) => {
@@ -420,15 +445,6 @@ export default function CampaignDetailPage() {
       return a.localeCompare(b);
     });
   }, [postsByDate]);
-
-  // Post counts by status
-  const reviewCount = posts.filter((p) => p.status === "Pending").length;
-  const approvedCount = posts.filter(
-    (p) => p.status === "Approved" || p.status === "Modified"
-  ).length;
-  const queuedCount = posts.filter(
-    (p) => p.status === "Queued"
-  ).length;
 
   // ── Quick approve/dismiss from list view ─────────────────────────────
   const quickApprove = async (postId: string) => {
@@ -1051,6 +1067,84 @@ export default function CampaignDetailPage() {
                 />
               )}
 
+              {/* Status summary bar — scheduled/published/queued posts (not shown inline) */}
+              {outOfViewCount > 0 && (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5 text-xs">
+                  {publishedCount > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      {publishedCount} published
+                    </span>
+                  )}
+                  {scheduledCount > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-indigo-500" />
+                      {scheduledCount} scheduled
+                    </span>
+                  )}
+                  {queuedCount > 0 && (
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-amber-500" />
+                      {queuedCount} queued
+                    </span>
+                  )}
+                  <a
+                    href={`/dashboard/calendar?campaign=${campaignId}`}
+                    className="ml-auto text-primary hover:underline text-xs"
+                  >
+                    View on calendar →
+                  </a>
+                </div>
+              )}
+
+              {/* "Running Low" / "Generate More" alert */}
+              {campaign && (campaign.status === "Review" || campaign.status === "Active") && (() => {
+                const cadence = campaign.platformCadence;
+                if (!cadence) return null;
+                const startDate = campaign.startDate ? new Date(campaign.startDate + "T00:00:00") : new Date();
+                const endDate = new Date(startDate);
+                endDate.setDate(endDate.getDate() + (campaign.durationDays || 90));
+                const now = new Date();
+                const remainingMs = endDate.getTime() - now.getTime();
+                if (remainingMs <= 0) return null;
+                const remainingWeeks = Math.max(1, remainingMs / (7 * 86400000));
+                const totalSlotsRemaining = Object.values(cadence).reduce(
+                  (sum, entry) => sum + (entry.postsPerWeek * remainingWeeks), 0
+                );
+                const approvedAvailable = approvedCount;
+                const isUrgent = approvedAvailable === 0 && totalSlotsRemaining > 0;
+                const isLow = approvedAvailable < totalSlotsRemaining * 0.3;
+                if (!isUrgent && !isLow) return null;
+                return (
+                  <div className={cn(
+                    "flex items-center justify-between rounded-lg border px-4 py-3",
+                    isUrgent
+                      ? "border-destructive/50 bg-destructive/5 text-destructive"
+                      : "border-amber-500/50 bg-amber-500/5 text-amber-700 dark:text-amber-400"
+                  )}>
+                    <div className="text-xs">
+                      {isUrgent ? (
+                        <><strong>Queue empty</strong> — generate posts to keep your campaign active</>
+                      ) : (
+                        <><strong>Running low</strong> — {approvedAvailable} approved, ~{Math.round(totalSlotsRemaining)} slots remaining</>
+                      )}
+                    </div>
+                    <Button
+                      variant={isUrgent ? "destructive" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs shrink-0"
+                      onClick={() => {
+                        // Navigate to generate with append mode
+                        window.location.href = `/dashboard/campaigns/${campaignId}?tab=posts&generate=more`;
+                      }}
+                    >
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      Generate More
+                    </Button>
+                  </div>
+                );
+              })()}
+
               {/* Platform filter bar */}
               {allPlatforms.length > 1 && (
                 <div className="flex flex-wrap items-center gap-2">
@@ -1089,9 +1183,13 @@ export default function CampaignDetailPage() {
                 </div>
               )}
 
-              {/* Posts grouped by date */}
+              {/* Posts grouped by date — actionable only (Pending/Approved/Modified/Failed) */}
+              {filteredPosts.length > 0 ? (
               <div className="space-y-1">
-                {sortedDateKeys.map((dateKey) => (
+                {sortedDateKeys.map((dateKey) => {
+                  const datePosts = postsByDate[dateKey];
+                  if (!datePosts || datePosts.length === 0) return null;
+                  return (
                   <div key={dateKey}>
                     {/* Date header */}
                     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border px-3 py-2">
@@ -1104,7 +1202,7 @@ export default function CampaignDetailPage() {
 
                     {/* Posts for this date */}
                     <div className="divide-y divide-border">
-                      {postsByDate[dateKey].map((post) => (
+                      {datePosts.map((post) => (
                         <CampaignPostRow
                           key={post.id}
                           post={post}
@@ -1116,15 +1214,44 @@ export default function CampaignDetailPage() {
                       ))}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
+              ) : posts.length > 0 ? (
+                <div className="rounded-lg bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                  All posts have been scheduled or published. <a href={`/dashboard/calendar?campaign=${campaignId}`} className="text-primary hover:underline">View on calendar</a>
+                </div>
+              ) : null}
+
+              {/* Dismissed posts — collapsed section */}
+              {dismissedCount > 0 && (
+                <details className="group">
+                  <summary className="flex items-center gap-2 cursor-pointer text-xs text-muted-foreground hover:text-foreground py-2 select-none">
+                    <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+                    {dismissedCount} dismissed {dismissedCount === 1 ? "post" : "posts"}
+                  </summary>
+                  <div className="divide-y divide-border border rounded-lg mt-1 opacity-60">
+                    {dismissedPosts.map((post) => (
+                      <CampaignPostRow
+                        key={post.id}
+                        post={post}
+                        campaignStatus={campaign.status}
+                        onClick={() => setSelectedPost(post)}
+                        onApprove={() => quickApprove(post.id)}
+                        onDismiss={() => quickDismiss(post.id)}
+                      />
+                    ))}
+                  </div>
+                </details>
+              )}
             </div>
           )}
         </TabsContent>
 
         {/* ── Settings Tab ──────────────────────────────────────────── */}
         <TabsContent value="settings">
-          {campaign.status === "Draft" ? (
+          {/* Settings editable if no posts have been scheduled yet */}
+          {!posts.some((p) => ["Queued", "Scheduled", "Published"].includes(p.status)) ? (
             <CampaignSettingsEditable
               campaign={campaign}
               campaignId={campaignId}
@@ -2863,7 +2990,7 @@ function CampaignSettingsReadOnly({ campaign }: { campaign: Campaign }) {
     <Card>
       <CardContent className="space-y-6 pt-6">
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-200">
-          Settings are locked because posts have been generated. To change settings, regenerate the campaign.
+          Settings are locked because posts have been scheduled. To change settings, unschedule posts first or reset the campaign.
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

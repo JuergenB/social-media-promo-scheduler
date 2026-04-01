@@ -21,7 +21,12 @@ import {
   DURATION_PRESETS,
   type CampaignType,
   type DistributionBias,
+  type PlatformCadenceConfig,
 } from "@/lib/airtable/types";
+import {
+  PLATFORM_LABELS as CADENCE_PLATFORM_LABELS,
+  GLOBAL_CADENCE_DEFAULTS,
+} from "@/lib/platform-cadence-defaults";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
 import { useAccounts } from "@/hooks/use-accounts";
 import { PlatformIcon } from "@/components/shared/platform-icon";
@@ -108,9 +113,11 @@ export default function NewCampaignPage() {
 
   // Generation options state (all campaign types)
   const [showGenOptions, setShowGenOptions] = useState(true);
-  const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
-  const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
   const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null);
+
+  // Cadence-aware platform selection
+  const [cadencePlatformToggles, setCadencePlatformToggles] = useState<Record<string, boolean>>({});
+  const [cadenceInitialized, setCadenceInitialized] = useState(false);
 
   // Connected accounts for generation options
   const { data: accountsData } = useAccounts();
@@ -123,13 +130,57 @@ export default function NewCampaignPage() {
     return platforms;
   }, [connectedAccounts]);
 
-  // Initialize genPlatforms from connected accounts
-  useEffect(() => {
-    if (connectedPlatforms.size > 0 && !genPlatformsInitialized) {
-      setGenPlatforms(new Set(connectedPlatforms));
-      setGenPlatformsInitialized(true);
+  // Brand cadence: the brand's saved cadence (or global defaults for connected platforms)
+  const brandCadence: PlatformCadenceConfig = useMemo(() => {
+    if (currentBrand?.platformCadence && Object.keys(currentBrand.platformCadence).length > 0) {
+      return currentBrand.platformCadence;
     }
-  }, [connectedPlatforms, genPlatformsInitialized]);
+    // Fallback: build from global defaults for connected platforms
+    const fallback: PlatformCadenceConfig = {};
+    for (const p of connectedPlatforms) {
+      fallback[p] = GLOBAL_CADENCE_DEFAULTS[p] || { postsPerWeek: 3, activeDays: [1,2,3,4,5], timeWindows: ["morning", "afternoon"] };
+    }
+    return fallback;
+  }, [currentBrand?.platformCadence, connectedPlatforms]);
+
+  // Platforms available for this campaign: intersection of cadence platforms and connected accounts
+  const availableCadencePlatforms = useMemo(() => {
+    return Object.keys(brandCadence)
+      .filter((p) => connectedPlatforms.has(p))
+      .sort();
+  }, [brandCadence, connectedPlatforms]);
+
+  // Initialize toggles: all available cadence platforms ON
+  useEffect(() => {
+    if (availableCadencePlatforms.length > 0 && !cadenceInitialized) {
+      const toggles: Record<string, boolean> = {};
+      for (const p of availableCadencePlatforms) {
+        toggles[p] = true;
+      }
+      setCadencePlatformToggles(toggles);
+      setCadenceInitialized(true);
+    }
+  }, [availableCadencePlatforms, cadenceInitialized]);
+
+  // Derived: active platforms set (for backward compat references)
+  const genPlatforms = useMemo(() => {
+    return new Set(
+      Object.entries(cadencePlatformToggles)
+        .filter(([, on]) => on)
+        .map(([p]) => p)
+    );
+  }, [cadencePlatformToggles]);
+
+  // Derived: campaign cadence (only enabled platforms)
+  const campaignCadence: PlatformCadenceConfig = useMemo(() => {
+    const result: PlatformCadenceConfig = {};
+    for (const [p, on] of Object.entries(cadencePlatformToggles)) {
+      if (on && brandCadence[p]) {
+        result[p] = brandCadence[p];
+      }
+    }
+    return result;
+  }, [cadencePlatformToggles, brandCadence]);
 
   const isDateDriven = type === "Event" || type === "Open Call";
 
@@ -195,6 +246,7 @@ export default function NewCampaignPage() {
           ...(additionalUrls.filter(Boolean).length > 0 ? { additionalUrls: additionalUrls.filter(Boolean).join("\n") } : {}),
           ...(genPlatforms.size > 0 ? { targetPlatforms: Array.from(genPlatforms).join(",") } : {}),
           ...(genMaxPerPlatform !== null ? { maxVariantsPerPlatform: genMaxPerPlatform } : {}),
+          ...(Object.keys(campaignCadence).length > 0 ? { platformCadence: campaignCadence } : {}),
         }),
       });
 
@@ -723,18 +775,15 @@ export default function NewCampaignPage() {
                   type="button"
                   variant={distributionBias === bias ? "default" : "outline"}
                   size="sm"
-                  className={cn("flex-1", isDateDriven && bias !== "Back-loaded" && "opacity-50")}
-                  onClick={() => !isDateDriven && setDistributionBias(bias)}
-                  disabled={isDateDriven && bias !== "Back-loaded"}
+                  className="flex-1"
+                  onClick={() => setDistributionBias(bias)}
                 >
                   {bias}
                 </Button>
               ))}
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
-              {isDateDriven
-                ? "Event campaigns always build intensity toward the date."
-                : distributionBias === "Front-loaded"
+              {distributionBias === "Front-loaded"
                   ? "Heavy promotion early, tapering off over time. Best for launches and events."
                   : distributionBias === "Back-loaded"
                     ? "Builds momentum toward a deadline. Good for countdowns and upcoming events."
@@ -770,43 +819,53 @@ export default function NewCampaignPage() {
         </CardHeader>
         {showGenOptions && (
           <CardContent className="space-y-4 pt-0">
-            {/* Platform selection */}
+            {/* Platform selection — cadence-aware */}
             <div>
               <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
                 Platforms to generate
               </Label>
-              <div className="flex flex-wrap gap-3">
-                {connectedPlatforms.size === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">
-                    No connected accounts for {currentBrand?.name || "this brand"}.
-                  </p>
-                ) : (
-                  [...connectedPlatforms].sort().map((p) => {
-                    const PLATFORM_LABELS: Record<string, string> = {
-                      twitter: "X/Twitter",
-                      googlebusiness: "Google Business",
-                    };
-                    const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
+              {availableCadencePlatforms.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  {connectedPlatforms.size === 0
+                    ? `No connected accounts for ${currentBrand?.name || "this brand"}.`
+                    : "No cadence configured. Set up platform cadence in brand settings."}
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {availableCadencePlatforms.map((p) => {
+                    const label = CADENCE_PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
+                    const entry = brandCadence[p];
+                    const isOn = cadencePlatformToggles[p] ?? false;
                     return (
-                      <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                      <label
+                        key={p}
+                        className={cn(
+                          "flex items-center gap-2 cursor-pointer rounded-md px-2.5 py-1.5 transition-colors",
+                          isOn ? "bg-muted/50" : "opacity-50"
+                        )}
+                      >
                         <Switch
-                          checked={genPlatforms.has(p)}
+                          checked={isOn}
                           onCheckedChange={(checked) => {
-                            setGenPlatforms((prev) => {
-                              const next = new Set(prev);
-                              if (checked) next.add(p); else next.delete(p);
-                              return next;
-                            });
+                            setCadencePlatformToggles((prev) => ({
+                              ...prev,
+                              [p]: checked,
+                            }));
                           }}
                           className="scale-75"
                         />
                         <PlatformIcon platform={p as Platform} size="xs" showColor />
-                        <span className="text-xs">{label}</span>
+                        <span className="text-xs font-medium">{label}</span>
+                        {entry && (
+                          <span className="text-[11px] text-muted-foreground ml-auto">
+                            {entry.postsPerWeek} post{entry.postsPerWeek !== 1 ? "s" : ""}/week
+                          </span>
+                        )}
                       </label>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Variant count */}

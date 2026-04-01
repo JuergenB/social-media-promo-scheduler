@@ -103,6 +103,8 @@ export interface Campaign {
   targetPlatforms?: string[];
   /** Max post variants per platform (null = Auto) */
   maxVariantsPerPlatform?: number | null;
+  /** Per-campaign platform cadence overrides. Seeded from brand defaults on creation. */
+  platformCadence?: PlatformCadenceConfig | null;
 }
 
 export const POST_STATUSES = [

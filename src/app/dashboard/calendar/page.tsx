@@ -11,7 +11,9 @@ import { startOfMonth } from "date-fns/startOfMonth";
 import { endOfMonth } from "date-fns/endOfMonth";
 import { addDays } from "date-fns/addDays";
 import { subDays } from "date-fns/subDays";
+import { useQuery } from "@tanstack/react-query";
 import { useCalendarPosts, useDeletePost, useRetryPost } from "@/hooks";
+import { useBrand } from "@/lib/brand-context";
 import { useAppStore } from "@/stores";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { PostCard, PostStatusBadge, PlatformIcons } from "@/components/posts";
 import { PlatformIcon } from "@/components/shared/platform-icon";
@@ -46,6 +61,7 @@ import { type Platform, PLATFORM_NAMES } from "@/lib/late-api";
 import { PlatformBadge } from "@/components/shared/platform-icon";
 import { CalendarGrid } from "./_components/calendar-grid";
 import { CalendarList } from "./_components/calendar-list";
+import type { Campaign, CampaignType, Post } from "@/lib/airtable/types";
 import {
   ChevronLeft,
   ChevronRight,
@@ -58,8 +74,34 @@ import {
   Clock,
   FileText,
   ExternalLink,
+  Mail,
+  Frame,
+  User,
+  Mic,
+  CalendarDays,
+  Megaphone,
+  Landmark,
+  Film,
+  Building2,
+  Sparkles,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
+
+const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
+  Newsletter: Mail,
+  "Blog Post": FileText,
+  Exhibition: Frame,
+  "Artist Profile": User,
+  "Podcast Episode": Mic,
+  Event: CalendarDays,
+  "Open Call": Megaphone,
+  "Public Art": Landmark,
+  "Video/Film": Film,
+  Institutional: Building2,
+  Custom: Sparkles,
+};
 
 type ViewMode = "list" | "grid";
 
@@ -91,7 +133,12 @@ function CalendarContent() {
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string>(
+    searchParams.get("campaign") || "all"
+  );
+  const [campaignFilterOpen, setCampaignFilterOpen] = useState(false);
   const weekStartsOn = useAppStore((s) => s.weekStartsOn);
+  const { currentBrand } = useBrand();
 
   // Default to list on mobile, grid on desktop
   useEffect(() => {
@@ -108,6 +155,52 @@ function CalendarContent() {
 
   const { data: postsData, isLoading } = useCalendarPosts(dateFrom, dateTo);
   const posts = useMemo(() => (postsData?.posts || []) as any[], [postsData?.posts]);
+
+  // Fetch campaigns list for the filter dropdown
+  const { data: campaignsData } = useQuery({
+    queryKey: ["campaigns", currentBrand?.id],
+    queryFn: async () => {
+      const res = await fetch("/api/campaigns");
+      if (!res.ok) throw new Error("Failed to fetch campaigns");
+      return res.json() as Promise<{ campaigns: Campaign[] }>;
+    },
+  });
+
+  const campaigns = useMemo(() => {
+    const all = campaignsData?.campaigns ?? [];
+    const branded = currentBrand ? all.filter((c) => c.brandIds.includes(currentBrand.id)) : all;
+    // Exclude Draft campaigns (no posts generated yet) — everything else may have published posts
+    const withPosts = branded.filter((c) => c.status !== "Draft");
+    // Sort: Active first, then Review, then Completed, by creation date (newest first)
+    const statusPriority: Record<string, number> = { Active: 0, Review: 1, Generating: 2, Scraping: 2, Completed: 3, Archived: 4 };
+    return withPosts.sort((a, b) => {
+      const pa = statusPriority[a.status] ?? 2;
+      const pb = statusPriority[b.status] ?? 2;
+      if (pa !== pb) return pa - pb;
+      return (b.createdAt || "").localeCompare(a.createdAt || "");
+    });
+  }, [campaignsData, currentBrand]);
+
+  // Fetch selected campaign's posts to get zernioPostId values
+  const { data: campaignPostsData, isLoading: isCampaignPostsLoading } = useQuery({
+    queryKey: ["campaign-posts", selectedCampaignId],
+    queryFn: async () => {
+      const res = await fetch(`/api/campaigns/${selectedCampaignId}`);
+      if (!res.ok) throw new Error("Failed to fetch campaign posts");
+      return res.json() as Promise<{ campaign: Campaign; posts: Post[] }>;
+    },
+    enabled: selectedCampaignId !== "all",
+  });
+
+  // Set of zernioPostIds for the selected campaign
+  const campaignZernioIds = useMemo(() => {
+    if (selectedCampaignId === "all" || !campaignPostsData?.posts) return null;
+    const ids = new Set<string>();
+    for (const post of campaignPostsData.posts) {
+      if (post.zernioPostId) ids.add(post.zernioPostId);
+    }
+    return ids;
+  }, [selectedCampaignId, campaignPostsData]);
 
   const selectedPost = useMemo(
     () => posts.find((p: any) => p._id === selectedPostId),
@@ -139,26 +232,6 @@ function CalendarContent() {
     }
   };
 
-  // Stats for the month
-  const monthPosts = useMemo(() => {
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
-    return posts.filter((p: any) => {
-      if (!p.scheduledFor) return false;
-      const postDate = new Date(p.scheduledFor);
-      return postDate >= monthStart && postDate <= monthEnd;
-    });
-  }, [posts, currentDate]);
-
-  const scheduledCount = useMemo(
-    () => monthPosts.filter((p: any) => p.status === "scheduled").length,
-    [monthPosts]
-  );
-  const publishedCount = useMemo(
-    () => monthPosts.filter((p: any) => p.status === "published").length,
-    [monthPosts]
-  );
-
   // All unique platforms across all loaded posts (for the filter UI)
   const allPlatforms = useMemo(() => {
     const platforms = new Set<string>();
@@ -168,13 +241,41 @@ function CalendarContent() {
     return Array.from(platforms).sort();
   }, [posts]);
 
-  // Posts filtered by selected platforms (empty set = show all)
+  // Posts filtered by selected campaign and platforms
   const filteredPosts = useMemo(() => {
-    if (platformFilter.size === 0) return posts;
-    return posts.filter((p: any) =>
-      p.platforms?.some((pl: any) => platformFilter.has(pl.platform))
-    );
-  }, [posts, platformFilter]);
+    let result = posts;
+    // Campaign filter
+    if (campaignZernioIds) {
+      result = result.filter((p: any) => campaignZernioIds.has(p._id));
+    }
+    // Platform filter
+    if (platformFilter.size > 0) {
+      result = result.filter((p: any) =>
+        p.platforms?.some((pl: any) => platformFilter.has(pl.platform))
+      );
+    }
+    return result;
+  }, [posts, platformFilter, campaignZernioIds]);
+
+  // Stats for the month — reflects campaign + platform filters
+  const monthPosts = useMemo(() => {
+    const monthStart = startOfMonth(currentDate);
+    const monthEnd = endOfMonth(currentDate);
+    return filteredPosts.filter((p: any) => {
+      if (!p.scheduledFor) return false;
+      const postDate = new Date(p.scheduledFor);
+      return postDate >= monthStart && postDate <= monthEnd;
+    });
+  }, [filteredPosts, currentDate]);
+
+  const scheduledCount = useMemo(
+    () => monthPosts.filter((p: any) => p.status === "scheduled").length,
+    [monthPosts]
+  );
+  const publishedCount = useMemo(
+    () => monthPosts.filter((p: any) => p.status === "published").length,
+    [monthPosts]
+  );
 
   // Posts for the selected day in the sheet
   const selectedDayPosts = useMemo(() => {
@@ -285,6 +386,73 @@ function CalendarContent() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
+          {/* Campaign + Platform filter bar */}
+          <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+            {/* Campaign filter — searchable combobox */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Campaign:</span>
+              <Popover open={campaignFilterOpen} onOpenChange={setCampaignFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={campaignFilterOpen}
+                    className="h-8 w-[240px] justify-between text-xs font-normal"
+                  >
+                    <span className="truncate">
+                      {selectedCampaignId === "all"
+                        ? "All campaigns"
+                        : campaigns.find((c) => c.id === selectedCampaignId)?.name || "Select..."}
+                    </span>
+                    <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search campaigns..." className="text-xs h-8" />
+                    <CommandList>
+                      <CommandEmpty>No campaigns found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="all"
+                          onSelect={() => {
+                            setSelectedCampaignId("all");
+                            setCampaignFilterOpen(false);
+                          }}
+                        >
+                          <Check className={cn("mr-2 h-3 w-3", selectedCampaignId === "all" ? "opacity-100" : "opacity-0")} />
+                          All campaigns
+                        </CommandItem>
+                        {campaigns.map((campaign) => {
+                          const TypeIcon = CAMPAIGN_TYPE_ICONS[campaign.type] || Sparkles;
+                          const isCompleted = campaign.status === "Completed" || campaign.status === "Archived";
+                          return (
+                            <CommandItem
+                              key={campaign.id}
+                              value={campaign.name}
+                              onSelect={() => {
+                                setSelectedCampaignId(campaign.id);
+                                setCampaignFilterOpen(false);
+                              }}
+                              className={isCompleted ? "opacity-50" : ""}
+                            >
+                              <Check className={cn("mr-2 h-3 w-3", selectedCampaignId === campaign.id ? "opacity-100" : "opacity-0")} />
+                              <TypeIcon className="mr-1.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                              <span className="truncate text-xs">{campaign.name}</span>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              {isCampaignPostsLoading && selectedCampaignId !== "all" && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              )}
+            </div>
+          </div>
+
           {/* Platform filter bar */}
           {allPlatforms.length > 1 && (
             <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">

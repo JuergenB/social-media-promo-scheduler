@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listRecords, createRecord } from "@/lib/airtable/client";
+import { listRecords, createRecord, getRecord } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess, hasBrandAccess } from "@/lib/brand-access";
-import type { Campaign } from "@/lib/airtable/types";
+import type { Campaign, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
   Name: string;
@@ -22,6 +22,16 @@ interface CampaignFields {
   "Start Date": string;
   "Target Platforms": string;
   "Max Variants Per Platform": number;
+  "Platform Cadence": string;
+}
+
+function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PlatformCadenceConfig;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -100,6 +110,7 @@ export async function GET() {
       startDate: r.fields["Start Date"] || undefined,
       targetPlatforms: r.fields["Target Platforms"] ? r.fields["Target Platforms"].split(",") : undefined,
       maxVariantsPerPlatform: r.fields["Max Variants Per Platform"] ?? undefined,
+      platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
     }));
 
     // Filter by user's allowed brands
@@ -133,6 +144,26 @@ export async function POST(request: NextRequest) {
     // Fetch page metadata (title + og:image) from the URL
     const metadata = await fetchPageMetadata(body.url);
 
+    // Determine campaign cadence: prefer body override, fall back to brand cadence
+    let cadenceJson: string | undefined;
+    if (body.platformCadence && typeof body.platformCadence === "object") {
+      // Client sent a modified cadence (e.g. user toggled platforms off)
+      cadenceJson = JSON.stringify(body.platformCadence);
+    } else if (body.brandId) {
+      // Copy brand's cadence as the campaign's initial cadence
+      try {
+        const brandRecord = await getRecord<{ "Platform Cadence": string }>(
+          "Brands",
+          body.brandId
+        );
+        if (brandRecord.fields["Platform Cadence"]) {
+          cadenceJson = brandRecord.fields["Platform Cadence"];
+        }
+      } catch {
+        // Fall through — campaign will use brand cadence at schedule time
+      }
+    }
+
     const record = await createRecord("Campaigns", {
       Name: body.name || metadata.title || body.url,
       Description: metadata.description || "",
@@ -152,6 +183,7 @@ export async function POST(request: NextRequest) {
       ...(body.startDate ? { "Start Date": body.startDate } : {}),
       ...(body.targetPlatforms ? { "Target Platforms": body.targetPlatforms } : {}),
       ...(body.maxVariantsPerPlatform != null ? { "Max Variants Per Platform": body.maxVariantsPerPlatform } : {}),
+      ...(cadenceJson ? { "Platform Cadence": cadenceJson } : {}),
     });
 
     return NextResponse.json({ campaign: record }, { status: 201 });

@@ -35,7 +35,7 @@ export interface ScheduleInput {
   bias: DistributionBias;
   timezone?: string;
   /** Brand-level per-platform cadence overrides. Merged over global defaults. */
-  brandCadence?: PlatformCadenceConfig | null;
+  cadence?: PlatformCadenceConfig | null;
   /** Per-platform dates that are already taken (avoid scheduling on these days) */
   excludedDates?: Map<string, Set<string>>; // platform → set of "YYYY-MM-DD" strings
 }
@@ -55,9 +55,9 @@ interface ResolvedCadence {
  */
 function resolveCadence(
   platform: string,
-  brandCadence?: PlatformCadenceConfig | null,
+  cadence?: PlatformCadenceConfig | null,
 ): ResolvedCadence {
-  const entry = getEffectiveCadence(platform, brandCadence);
+  const entry = getEffectiveCadence(platform, cadence);
 
   // Convert postsPerWeek → maxPerDay
   // Calculate based on active days per week
@@ -159,7 +159,7 @@ function isDayActive(date: Date, cadence: ResolvedCadence): boolean {
  * 4. Assign specific times using organic variation
  */
 export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
-  const { posts, startDate, durationDays, bias, brandCadence, excludedDates } = input;
+  const { posts, startDate, durationDays, bias, cadence: cadenceConfig, excludedDates } = input;
 
   if (posts.length === 0 || durationDays <= 0) return [];
 
@@ -177,7 +177,7 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
   const slots: ScheduleSlot[] = [];
 
   for (const [platform, platformPosts] of byPlatform) {
-    const cadence = resolveCadence(platform, brandCadence);
+    const cadence = resolveCadence(platform, cadenceConfig);
     const postCount = platformPosts.length;
 
     // Find valid days (active days within duration, excluding already-scheduled)
@@ -258,7 +258,7 @@ export function previewSchedule(input: Omit<ScheduleInput, "posts"> & {
   startDate: string;
   platforms: Record<string, number>;
 }> {
-  const { platformCounts, startDate, durationDays, bias, brandCadence } = input;
+  const { platformCounts, startDate, durationDays, bias, cadence } = input;
 
   // Create dummy posts for each platform
   const posts: Array<{ id: string; platform: string }> = [];
@@ -268,7 +268,7 @@ export function previewSchedule(input: Omit<ScheduleInput, "posts"> & {
     }
   }
 
-  const slots = schedulePostsAlgorithm({ posts, startDate, durationDays, bias, brandCadence });
+  const slots = schedulePostsAlgorithm({ posts, startDate, durationDays, bias, cadence });
 
   // Group into weeks
   const weeks = new Map<number, { startDate: string; platforms: Record<string, number> }>();

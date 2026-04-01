@@ -12,6 +12,8 @@ import {
 } from "@/lib/prompts/blog-post-generator";
 import { composeSystemPrompt, composeUserPrompt } from "@/lib/prompts/compose-prompt";
 import { createPlatformShortLink } from "@/lib/short-io";
+import type { PlatformCadenceConfig } from "@/lib/airtable/types";
+import { getEffectiveCadence } from "@/lib/platform-cadence-defaults";
 
 // ── Image matching helpers ────────────────────────────────────────────
 
@@ -275,6 +277,7 @@ interface CampaignFields {
   "Start Date": string;
   "Target Platforms": string;
   "Max Variants Per Platform": number;
+  "Platform Cadence": string;
 }
 
 interface BrandFields {
@@ -599,25 +602,58 @@ export async function POST(
           catalogImages = contentImages.filter((img) => img.url !== heroUrl).slice(0, 20);
         }
 
-        // Section-aware variant count: one variant per section for multi-section,
-        // duration-based for single-section
-        const autoCount = isMultiSection
-          ? Math.max(contentSections.length, durationBasedCount)
-          : (contentImages.length > 1
-              ? Math.max(contentImages.length, durationBasedCount)
-              : durationBasedCount);
-        const postsPerPlatform = maxPerPlatformOverride
-          ? Math.min(maxPerPlatformOverride, autoCount)
-          : autoCount;
+        // ── Cadence-aware per-platform post counts ──────────────
+        const durationDays = fields["Duration Days"] || 90;
+        const durationWeeks = Math.max(1, durationDays / 7);
+
+        // Parse campaign cadence (if set)
+        let campaignCadence: PlatformCadenceConfig | null = null;
+        if (fields["Platform Cadence"]) {
+          try {
+            campaignCadence = JSON.parse(fields["Platform Cadence"]) as PlatformCadenceConfig;
+          } catch { /* fall through */ }
+        }
+
+        // Compute per-platform post counts based on cadence
+        const perPlatformCounts: Record<string, number> = {};
+        for (const platform of selectedPlatforms) {
+          const cadenceEntry = getEffectiveCadence(platform, campaignCadence);
+          // Cadence-based: postsPerWeek × weeks, capped reasonably
+          const cadenceCount = Math.ceil(cadenceEntry.postsPerWeek * durationWeeks);
+          // Content-based cap: don't exceed available sections/images
+          const contentCap = isMultiSection
+            ? Math.max(contentSections.length, durationBasedCount)
+            : (contentImages.length > 1
+                ? Math.max(contentImages.length, durationBasedCount)
+                : durationBasedCount);
+          // Take the smaller of cadence-based and content-based, but at least 1
+          let count = Math.min(cadenceCount, contentCap);
+          // Apply user override if set
+          if (maxPerPlatformOverride) {
+            count = Math.min(count, maxPerPlatformOverride);
+          }
+          perPlatformCounts[platform] = Math.max(1, count);
+        }
+
+        // For catalog trimming, use the max across all platforms
+        const maxPostsAnyPlatform = Math.max(...Object.values(perPlatformCounts));
+
+        // Trim catalog to match — page order = editorial priority
+        if (catalogImages.length > maxPostsAnyPlatform) {
+          catalogImages = catalogImages.slice(0, maxPostsAnyPlatform);
+        }
 
         const testModeLabel = maxPerPlatformOverride ? ` (test mode: max ${maxPerPlatformOverride})` : "";
         const catalogLabel = isMultiSection
           ? `${sectionCount} sections, ${catalogImages.length} images in catalog`
           : `${catalogImages.length} images in catalog`;
         const filtered = scrapedImageCount - catalogImages.length;
+        const countSummary = selectedPlatforms
+          .map((p) => `${p.charAt(0).toUpperCase() + p.slice(1)}: ${perPlatformCounts[p]}`)
+          .join(", ");
         sendEvent(controller, encoder, {
           step: 5, totalSteps, status: "running",
-          message: `${catalogLabel}${filtered > 0 ? ` (${filtered} filtered)` : ""} — generating ${postsPerPlatform} variants per platform${testModeLabel}`,
+          message: `${catalogLabel}${filtered > 0 ? ` (${filtered} filtered)` : ""} — ${countSummary}${testModeLabel}`,
         });
 
         await sleep(1000);
@@ -625,6 +661,7 @@ export async function POST(
         for (let i = 0; i < selectedPlatforms.length; i++) {
           const platform = selectedPlatforms[i];
           const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+          const postsPerPlatform = perPlatformCounts[platform] || 1;
 
           sendEvent(controller, encoder, {
             step: 5, totalSteps, status: "running",
@@ -663,7 +700,9 @@ export async function POST(
                 imageCount: contentImages.length,
               });
 
-          const result = await generatePosts(systemPrompt, userPrompt, config);
+          // Scale output tokens: ~400 tokens per post (content + JSON structure) + buffer
+          const estimatedTokens = Math.max(8192, postsPerPlatform * 400 + 2000);
+          const result = await generatePosts(systemPrompt, userPrompt, config, { maxTokens: estimatedTokens });
 
           // ── Image assignment via Claude's imageIndex ─────────
           // Claude selects from the numbered catalog (hero excluded).
