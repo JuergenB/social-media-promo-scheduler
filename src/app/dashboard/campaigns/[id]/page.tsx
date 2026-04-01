@@ -851,7 +851,7 @@ export default function CampaignDetailPage() {
                   Max variants per platform
                 </Label>
                 <div className="flex items-center gap-2">
-                  {[1, 2, 3, 5, null].map((val) => (
+                  {[1, 2, 3, 5, 8, 10, null].map((val) => (
                     <Button
                       key={val ?? "auto"}
                       variant={genMaxPerPlatform === val ? "default" : "outline"}
