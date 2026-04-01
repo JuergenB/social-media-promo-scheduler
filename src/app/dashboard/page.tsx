@@ -106,6 +106,21 @@ const STATUS_COLORS: Record<string, string> = {
   Dismissed: "bg-zinc-400",
 };
 
+/** Map Airtable platform names to Platform IDs for PlatformIcon */
+const AIRTABLE_TO_PLATFORM: Record<string, Platform> = {
+  Instagram: "instagram",
+  "X/Twitter": "twitter",
+  LinkedIn: "linkedin",
+  Facebook: "facebook",
+  Threads: "threads",
+  Bluesky: "bluesky",
+  Pinterest: "pinterest",
+  TikTok: "tiktok",
+};
+function toPlatformId(val: string): Platform {
+  return AIRTABLE_TO_PLATFORM[val] || val.toLowerCase() as Platform;
+}
+
 const CAMPAIGN_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   Draft: "outline",
   Scraping: "secondary",
@@ -292,7 +307,7 @@ export default function DashboardPage() {
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <PlatformIcon platform={post.platform.toLowerCase() as Platform} size="sm" />
+                        <PlatformIcon platform={toPlatformId(post.platform)} size="sm" />
                         <span className="text-xs text-muted-foreground truncate">{post.campaignName}</span>
                       </div>
                       <p className="text-sm truncate">{post.content}</p>
@@ -343,7 +358,7 @@ export default function DashboardPage() {
               <CardContent className="pt-0 space-y-2">
                 {data.posts.failedPosts.map((post) => (
                   <div key={post.id} className="flex items-center gap-3 rounded-lg bg-red-50 dark:bg-red-950/30 p-3">
-                    <PlatformIcon platform={post.platform.toLowerCase() as Platform} size="sm" />
+                    <PlatformIcon platform={toPlatformId(post.platform)} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">{post.content}</p>
                       <p className="text-xs text-muted-foreground">{post.campaignName}</p>
