@@ -43,11 +43,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized for this brand" }, { status: 403 });
     }
 
-    // Fetch campaigns for this brand
-    const campaigns = await listRecords<CampaignFields>("Campaigns", {
-      filterByFormula: `FIND("${brandId}", ARRAYJOIN(Brand))`,
+    // Fetch all campaigns and filter by brand ID in memory.
+    // ARRAYJOIN(Brand) returns brand names (not IDs), so we match on the Brand linked record array.
+    const allCampaigns = await listRecords<CampaignFields>("Campaigns", {
       fields: ["Name", "Type", "Status", "Brand", "Duration Days", "Target Platforms", "URL"],
     });
+    const campaigns = allCampaigns.filter((c) =>
+      (c.fields.Brand || []).includes(brandId)
+    );
 
     const campaignIds = new Set(campaigns.map((c) => c.id));
 
