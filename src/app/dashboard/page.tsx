@@ -298,9 +298,10 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 data.posts.pendingReview.map((post) => (
-                  <div
+                  <Link
                     key={post.id}
-                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors"
+                    href={`/dashboard/campaigns/${post.campaignId}`}
+                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors cursor-pointer"
                   >
                     {post.imageUrl && (
                       <img src={post.imageUrl} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
@@ -317,12 +318,12 @@ export default function DashboardPage() {
                         </p>
                       )}
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex gap-1 shrink-0" onClick={(e) => e.preventDefault()}>
                       <Button
                         size="sm"
                         variant="default"
                         className="h-7 px-2 text-xs"
-                        onClick={() => approveMutation.mutate(post.id)}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); approveMutation.mutate(post.id); }}
                         disabled={approveMutation.isPending}
                       >
                         Approve
@@ -331,13 +332,13 @@ export default function DashboardPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2 text-xs text-muted-foreground"
-                        onClick={() => dismissMutation.mutate(post.id)}
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); dismissMutation.mutate(post.id); }}
                         disabled={dismissMutation.isPending}
                       >
                         Dismiss
                       </Button>
                     </div>
-                  </div>
+                  </Link>
                 ))
               )}
             </CardContent>
