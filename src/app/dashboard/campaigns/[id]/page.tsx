@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -210,6 +210,8 @@ const POST_STATUS_CONFIG: Record<
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
   const campaignId = params.id;
+  const searchParams = useSearchParams();
+  const autoOpenPostId = searchParams.get("postId");
   const { data: pageSession } = useSession();
 
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
@@ -252,6 +254,18 @@ export default function CampaignDetailPage() {
 
   const campaign = data?.campaign;
   const posts = data?.posts ?? [];
+
+  // Auto-open a specific post if ?postId= is in the URL (e.g., from dashboard approval queue)
+  const [autoOpened, setAutoOpened] = useState(false);
+  useEffect(() => {
+    if (autoOpenPostId && posts.length > 0 && !autoOpened) {
+      const post = posts.find((p) => p.id === autoOpenPostId);
+      if (post) {
+        setSelectedPost(post);
+        setAutoOpened(true);
+      }
+    }
+  }, [autoOpenPostId, posts, autoOpened]);
 
   // Keep selectedPost in sync with fresh query data (e.g., after regeneration)
   useEffect(() => {
