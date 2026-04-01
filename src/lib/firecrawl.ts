@@ -1066,14 +1066,32 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
 
   // Synthesize sections from newsletter stories so the unified image catalog
   // and multi-section prompt paths work for newsletters too.
-  // Each story becomes a section with heading = storyTitle, image = story image.
+  // Each story becomes a section with heading = storyTitle + excerpt from markdown.
+  // The excerpt helps Claude distinguish between thematically similar stories.
   const sections: ContentSection[] = [];
   if (stories.length > 0) {
     for (const story of stories) {
+      const title = story.storyTitle || story.alt || "";
+      // Extract story content from the markdown by finding text near the story title
+      let storyContent = "";
+      if (title && markdown) {
+        const escapedTitle = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const titleMatch = markdown.match(new RegExp(escapedTitle, "i"));
+        if (titleMatch && titleMatch.index !== undefined) {
+          // Grab up to 400 chars after the title (skip the title line itself)
+          const afterTitle = markdown.slice(titleMatch.index + titleMatch[0].length);
+          const nextLine = afterTitle.indexOf("\n");
+          const contentStart = nextLine >= 0 ? nextLine + 1 : 0;
+          const excerpt = afterTitle.slice(contentStart, contentStart + 400).trim();
+          // Trim at the last complete sentence or paragraph break
+          const sentenceEnd = excerpt.search(/[.!?]\s|\n\n/);
+          storyContent = sentenceEnd > 50 ? excerpt.slice(0, sentenceEnd + 1).trim() : excerpt.split("\n")[0].trim();
+        }
+      }
       sections.push({
-        heading: story.storyTitle || story.alt || "",
+        heading: title,
         level: 2,
-        content: "", // Story content is in the markdown; heading is enough for the catalog
+        content: storyContent,
         images: [story],
       });
     }
