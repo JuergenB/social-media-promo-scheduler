@@ -2475,7 +2475,7 @@ function PostDetailView({
 
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
-        <div className="absolute inset-0 z-[60] bg-black/90 flex flex-col rounded-lg select-none">
+        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg select-none border border-zinc-700/50">
           <div className="flex items-center justify-between px-6 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-white/70" />
@@ -2514,7 +2514,7 @@ function PostDetailView({
             <div className="flex gap-4 h-full items-center">
               {carouselPreviews.map((slide, idx) => (
                 <div key={idx} className="shrink-0 flex flex-col items-center gap-2">
-                  <div className="relative rounded-lg overflow-hidden shadow-2xl" style={{ aspectRatio: platformLower === "linkedin" ? "1/1" : "4/5", height: "min(70vh, 500px)" }}>
+                  <div className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40" style={{ aspectRatio: platformLower === "linkedin" ? "1/1" : "4/5", height: "min(70vh, 500px)" }}>
                     <img
                       src={slide.dataUri}
                       alt={slide.caption || `Slide ${idx + 1}`}
