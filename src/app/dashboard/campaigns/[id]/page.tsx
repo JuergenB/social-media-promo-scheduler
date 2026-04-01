@@ -215,6 +215,7 @@ export default function CampaignDetailPage() {
   const { data: pageSession } = useSession();
 
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
@@ -435,11 +436,13 @@ export default function CampaignDetailPage() {
     return posts.filter((p) => p.status === "Dismissed");
   }, [posts]);
 
-  // Filtered posts (only actionable — Pending/Approved/Modified/Failed)
+  // Filtered posts (actionable statuses, optionally filtered by platform + status)
   const filteredPosts = useMemo(() => {
-    if (platformFilter.size === 0) return actionablePosts;
-    return actionablePosts.filter((p) => platformFilter.has(p.platform));
-  }, [actionablePosts, platformFilter]);
+    let result = actionablePosts;
+    if (statusFilter) result = result.filter((p) => p.status === statusFilter);
+    if (platformFilter.size > 0) result = result.filter((p) => platformFilter.has(p.platform));
+    return result;
+  }, [actionablePosts, platformFilter, statusFilter]);
 
   // Group filtered posts by date
   const postsByDate = useMemo(() => {
@@ -1201,7 +1204,51 @@ export default function CampaignDetailPage() {
                 </div>
               )}
 
-              {/* Posts grouped by date — actionable only (Pending/Approved/Modified/Failed) */}
+              {/* Status filter pills */}
+              {(() => {
+                const statusCounts: Record<string, number> = {};
+                for (const p of actionablePosts) {
+                  statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
+                }
+                const statuses = Object.keys(statusCounts).sort();
+                if (statuses.length <= 1) return null;
+                const STATUS_PILL_COLORS: Record<string, string> = {
+                  Pending: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400",
+                  Approved: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400",
+                  Modified: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400",
+                  Scheduled: "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-400",
+                  Failed: "border-red-300 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400",
+                };
+                return (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground mr-1">Status:</span>
+                    {statuses.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs transition-colors",
+                          statusFilter === s
+                            ? STATUS_PILL_COLORS[s] || "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-background text-muted-foreground hover:bg-accent"
+                        )}
+                      >
+                        {s} ({statusCounts[s]})
+                      </button>
+                    ))}
+                    {statusFilter && (
+                      <button
+                        onClick={() => setStatusFilter(null)}
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Posts grouped by date */}
               {filteredPosts.length > 0 ? (
               <div className="space-y-1">
                 {sortedDateKeys.map((dateKey) => {
