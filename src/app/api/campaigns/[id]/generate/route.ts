@@ -712,6 +712,20 @@ export async function POST(
           const heroFallback = fields["Image URL"] || heroUrl || "";
 
           for (const post of result.posts) {
+            // Deterministic section→image binding for multi-section posts:
+            // If post has a sectionIndex and that section has an image, use it directly.
+            // This bypasses Claude's imageIndex which is unreliable when alt text is poor.
+            if (isMultiSection && post.sectionIndex && post.sectionIndex > 0) {
+              const section = contentSections[post.sectionIndex - 1];
+              if (section?.images?.length > 0) {
+                post.imageUrl = section.images[0].url;
+                // Carry over anchor if present
+                const catalogMatch = catalogImages.find((c) => c.url === section.images[0].url);
+                if (catalogMatch?.anchor) post.anchor = catalogMatch.anchor;
+                continue; // Skip the imageIndex lookup
+              }
+            }
+
             const imgIdx = post.imageIndex ?? 0;
 
             // Unified catalog lookup — works for all campaign types including newsletters.
