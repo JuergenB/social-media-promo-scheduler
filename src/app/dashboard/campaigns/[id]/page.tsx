@@ -1035,7 +1035,8 @@ export default function CampaignDetailPage() {
                           { method: "POST" }
                         );
                         if (!res.ok) {
-                          toast.error("Failed to preview schedule");
+                          const errData = await res.json().catch(() => ({}));
+                          toast.error(`Schedule preview failed: ${errData.error || res.statusText}`);
                           return;
                         }
                         const data = await res.json();
@@ -1059,7 +1060,8 @@ export default function CampaignDetailPage() {
                           queryClient.invalidateQueries({ queryKey: ["campaign"] });
                           toast.success(`${approvedCount} posts scheduled!`);
                         } else {
-                          toast.error("Failed to schedule posts");
+                          const errData = await applyRes.json().catch(() => ({}));
+                          toast.error(`Failed to schedule: ${errData.error || applyRes.statusText}`);
                         }
                       }}
                     >
