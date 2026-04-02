@@ -379,15 +379,16 @@ async function buildCaptionPango(
   const hexColor = isLight ? "#FFFFFFEB" : "#191919E0";
 
   // Use Sharp's text input with Pango markup
-  const fontSize = 28;
+  const fontSize = 18;
   const fontWeight = lines.length === 1 ? "bold" : "normal";
+  const sidePadding = 60;
   const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans ${fontWeight} ${fontSize}">${displayText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
 
   const textImage = await sharp({
     text: {
       text: pangoMarkup,
       rgba: true,
-      width: width - 40, // padding
+      width: width - sidePadding * 2, // padding
       height: height,
       align: "centre",
     },
