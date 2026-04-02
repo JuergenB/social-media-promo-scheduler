@@ -218,6 +218,7 @@ export default function CampaignDetailPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
   const [showGenOptions, setShowGenOptions] = useState(true);
   const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
@@ -1031,8 +1032,10 @@ export default function CampaignDetailPage() {
                   {approvedCount > 0 && (
                     <Button
                       size="sm"
+                      disabled={isScheduling}
                       onClick={async () => {
                         // Preview the schedule first
+                        setIsScheduling(true);
                         const res = await fetch(
                           `/api/campaigns/${campaignId}/schedule?preview=true`,
                           { method: "POST" }
@@ -1040,6 +1043,7 @@ export default function CampaignDetailPage() {
                         if (!res.ok) {
                           const errData = await res.json().catch(() => ({}));
                           toast.error(`Schedule preview failed: ${errData.error || res.statusText}`);
+                          setIsScheduling(false);
                           return;
                         }
                         const data = await res.json();
@@ -1052,7 +1056,7 @@ export default function CampaignDetailPage() {
                         const confirmed = window.confirm(
                           `Schedule ${approvedCount} posts over ${campaign.durationDays} days (${campaign.distributionBias})?\n\n${summary}\n\nThis will assign dates and push all posts to Zernio for publishing.`
                         );
-                        if (!confirmed) return;
+                        if (!confirmed) { setIsScheduling(false); return; }
 
                         // Apply the schedule
                         const applyRes = await fetch(
@@ -1071,10 +1075,15 @@ export default function CampaignDetailPage() {
                           const errData = await applyRes.json().catch(() => ({}));
                           toast.error(`Failed to schedule: ${errData.error || applyRes.statusText}`);
                         }
+                        setIsScheduling(false);
                       }}
                     >
                       <Calendar className="mr-1.5 h-3.5 w-3.5" />
-                      Schedule {approvedCount} Approved Posts
+                      {isScheduling ? (
+                        <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Scheduling on Zernio...</>
+                      ) : (
+                        <><Calendar className="mr-1.5 h-3.5 w-3.5" /> Schedule {approvedCount} Approved Posts</>
+                      )}
                     </Button>
                   )}
                   {queuedCount > 0 && (
