@@ -1,30 +1,31 @@
 import sharp from "sharp";
+import satori from "satori";
 import { readFileSync } from "fs";
 import { join } from "path";
 import type { MediaItem } from "@/lib/media-items";
 
 /**
- * Load and base64-encode the embedded font for SVG text rendering.
- * Sharp's librsvg on Vercel/Lambda has NO system fonts — text renders as Xs
- * without an embedded font. We bundle Noto Sans Regular (28KB) and embed it
- * as a data URI in each SVG.
+ * Load the bundled font file for Satori text rendering.
+ * Satori has its own font engine — no system fonts or librsvg needed.
  */
-let _fontBase64: string | null = null;
-function getEmbeddedFontBase64(): string {
-  if (_fontBase64) return _fontBase64;
+let _fontData: ArrayBuffer | null = null;
+function getFont(): ArrayBuffer {
+  if (_fontData) return _fontData;
   try {
     const fontPath = join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
-    _fontBase64 = readFileSync(fontPath).toString("base64");
+    const buf = readFileSync(fontPath);
+    _fontData = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
   } catch {
-    // Fallback: try node_modules path (dev environment)
     try {
       const altPath = join(process.cwd(), "node_modules", "next", "dist", "compiled", "@vercel", "og", "noto-sans-v27-latin-regular.ttf");
-      _fontBase64 = readFileSync(altPath).toString("base64");
+      const buf = readFileSync(altPath);
+      _fontData = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     } catch {
-      _fontBase64 = "";
+      // Empty font — text won't render but won't crash
+      _fontData = new ArrayBuffer(0);
     }
   }
-  return _fontBase64;
+  return _fontData;
 }
 
 /** Platform-specific slide dimensions. */
@@ -295,17 +296,10 @@ export async function renderCarouselSlide(
     ? await resizedImgPipeline.png().toBuffer()
     : await resizedImgPipeline.flatten({ background: frame }).jpeg({ quality: 95 }).toBuffer();
 
-  // Build caption overlay — try Pango first (reliable on most Linux), fall back to SVG
+  // Build caption overlay using Satori (bundles its own font engine — no system fonts needed).
   let captionOverlay: Buffer | null = null;
   if (caption) {
-    try {
-      captionOverlay = await buildCaptionPango(caption, textColor, slideW, captionAreaH);
-    } catch {
-      // Pango not available (Vercel pre-built Sharp may lack text support)
-      // Fall back to SVG with embedded font
-      const svg = buildCaptionSvg(caption, textColor, slideW, captionAreaH);
-      captionOverlay = await sharp(Buffer.from(svg)).png().toBuffer();
-    }
+    captionOverlay = await buildCaptionOverlay(caption, textColor, slideW, captionAreaH);
   }
 
   // Compose the slide
@@ -337,21 +331,22 @@ export async function renderCarouselSlide(
 }
 
 /**
- * Build a caption overlay using Sharp's Pango text rendering.
- * Pango uses system fontconfig which works reliably on Vercel/Lambda
- * (unlike SVG @font-face which requires librsvg font support).
+ * Build a caption overlay using SVG with embedded font.
+ * Renders text at a large size in SVG, then scales to fit the caption area.
+ * Uses base64-embedded Noto Sans to avoid system font dependency.
  *
  * Returns a PNG buffer with transparent background + text.
  */
-async function buildCaptionPango(
+async function buildCaptionOverlay(
   caption: string,
   textColor: string,
   width: number,
   height: number
 ): Promise<Buffer> {
-  const maxCharsPerLine = 42;
+  const maxCharsPerLine = 55;
+  const maxLines = 3;
 
-  // Word-wrap to max 2 lines
+  // Word-wrap to max lines
   const words = caption.split(/\s+/);
   const lines: string[] = [];
   let currentLine = "";
@@ -360,124 +355,81 @@ async function buildCaptionPango(
     const candidate = currentLine ? `${currentLine} ${word}` : word;
     if (candidate.length > maxCharsPerLine && currentLine) {
       lines.push(currentLine);
-      if (lines.length >= 2) break;
+      if (lines.length >= maxLines) break;
       currentLine = word;
     } else {
       currentLine = candidate;
     }
   }
-  if (currentLine && lines.length < 2) {
+  if (currentLine && lines.length < maxLines) {
     lines.push(currentLine);
   }
 
-  if (lines.length === 2 && words.length > lines.join(" ").split(/\s+/).length) {
-    let last = lines[1];
+  // Ellipsize the last line if text was truncated
+  const allWords = lines.join(" ").split(/\s+/).length;
+  if (allWords < words.length) {
+    let last = lines[lines.length - 1];
     if (last.length > maxCharsPerLine - 1) {
       last = last.slice(0, maxCharsPerLine - 1).replace(/\s+\S*$/, "") + "\u2026";
     } else {
       last += "\u2026";
     }
-    lines[1] = last;
+    lines[lines.length - 1] = last;
   }
 
   const displayText = lines.join("\n");
 
-  // Parse textColor rgba to hex for Pango markup
-  const isLight = textColor.includes("255");
-  const hexColor = isLight ? "#FFFFFFEB" : "#191919E0";
-
-  // Render caption text at a fixed target height relative to the caption area.
-  // Target: text should be ~30% of caption area height — subtle, not dominant.
-  const sidePadding = 60;
-  const maxTextWidth = width - sidePadding * 2;
-  const targetTextHeight = Math.round(height * 0.35);
+  // Render at the exact caption area size using Satori — no post-scaling.
+  // Satori handles text layout natively: wrapping, centering, consistent font size.
+  // Font size 24px at 1080w slide = subtle caption. Satori wraps if text is long.
+  // 80% width (10% padding each side), step down font for longer captions
+  const sidePadding = Math.round(width * 0.10);
   const bottomPad = 16;
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  // Render at a generous size first, then scale to fit
-  const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans 24">${esc(displayText)}</span>`;
+  const captionIsLight = textColor.includes("255");
+  const captionColor = captionIsLight ? "rgba(255,255,255,0.92)" : "rgba(25,25,25,0.88)";
 
-  let textImage = await sharp({
-    text: {
-      text: pangoMarkup,
-      rgba: true,
-      dpi: 72,
+  // Adaptive font: 42px for short (1 line), 32px for longer (2-3 lines)
+  const fontSize = lines.length <= 1 ? 42 : 32;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const element: any = {
+    type: "div",
+    props: {
+      style: {
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        width: "100%",
+        height: "100%",
+        paddingLeft: sidePadding,
+        paddingRight: sidePadding,
+        paddingBottom: bottomPad,
+        color: captionColor,
+        fontSize,
+        fontFamily: "Noto Sans",
+        textAlign: "center",
+        lineHeight: 1.25,
+        overflow: "hidden",
+      },
+      children: displayText,
     },
-  })
-    .png()
-    .toBuffer();
+  };
 
-  const textMeta = await sharp(textImage).metadata();
-  const textW = textMeta.width || 400;
-  const textH = textMeta.height || 40;
+  const satoriSvg = await satori(element, {
+    width,
+    height,
+    fonts: [
+      {
+        name: "Noto Sans",
+        data: getFont(),
+        weight: 400,
+        style: "normal" as const,
+      },
+    ],
+  });
 
-  // Scale to fit: constrain by both width and target height
-  const scale = Math.min(maxTextWidth / textW, targetTextHeight / textH);
-  const finalW = Math.max(1, Math.round(textW * scale));
-  const finalH = Math.max(1, Math.round(textH * scale));
-
-  textImage = await sharp(textImage).resize(finalW, finalH).png().toBuffer();
-
-  const offsetX = Math.round((width - finalW) / 2);
-  const offsetY = height - finalH - bottomPad;
-
-  return sharp({
-    create: {
-      width,
-      height,
-      channels: 4,
-      background: { r: 0, g: 0, b: 0, alpha: 0 },
-    },
-  })
-    .composite([{ input: textImage, left: offsetX, top: offsetY }])
-    .png()
-    .toBuffer();
-}
-
-/**
- * SVG fallback for caption rendering when Pango is not available.
- * Embeds Noto Sans as base64 @font-face for serverless compatibility.
- */
-function buildCaptionSvg(caption: string, textColor: string, width: number, height: number): string {
-  const fontSize = 10;
-  const lineHeight = 16;
-  const maxCharsPerLine = 52;
-  const sidePadding = 60;
-
-  const words = caption.split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = "";
-  for (const word of words) {
-    const candidate = currentLine ? `${currentLine} ${word}` : word;
-    if (candidate.length > maxCharsPerLine && currentLine) {
-      lines.push(currentLine);
-      if (lines.length >= 2) break;
-      currentLine = word;
-    } else {
-      currentLine = candidate;
-    }
-  }
-  if (currentLine && lines.length < 2) lines.push(currentLine);
-  if (lines.length === 2 && words.length > lines.join(" ").split(/\s+/).length) {
-    lines[1] = lines[1].slice(0, maxCharsPerLine - 1).replace(/\s+\S*$/, "") + "\u2026";
-  }
-
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-  const totalTextHeight = lines.length * lineHeight;
-  const startY = (height - totalTextHeight) / 2 + fontSize * 0.8 - 6;
-
-  const fontB64 = getEmbeddedFontBase64();
-  const fontFace = fontB64
-    ? `<defs><style>@font-face{font-family:"CF";src:url("data:font/truetype;base64,${fontB64}")format("truetype")}</style></defs>`
-    : "";
-  const ff = fontB64 ? "CF" : "sans-serif";
-
-  const textEls = lines
-    .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${ff}" font-size="${fontSize}" fill="${esc(textColor)}">${esc(line)}</text>`)
-    .join("");
-
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${fontFace}${textEls}</svg>`;
+  return sharp(Buffer.from(satoriSvg)).png().toBuffer();
 }
 
 /**
