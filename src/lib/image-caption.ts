@@ -1,5 +1,31 @@
 import sharp from "sharp";
+import { readFileSync } from "fs";
+import { join } from "path";
 import type { MediaItem } from "@/lib/media-items";
+
+/**
+ * Load and base64-encode the embedded font for SVG text rendering.
+ * Sharp's librsvg on Vercel/Lambda has NO system fonts — text renders as Xs
+ * without an embedded font. We bundle Noto Sans Regular (28KB) and embed it
+ * as a data URI in each SVG.
+ */
+let _fontBase64: string | null = null;
+function getEmbeddedFontBase64(): string {
+  if (_fontBase64) return _fontBase64;
+  try {
+    const fontPath = join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
+    _fontBase64 = readFileSync(fontPath).toString("base64");
+  } catch {
+    // Fallback: try node_modules path (dev environment)
+    try {
+      const altPath = join(process.cwd(), "node_modules", "next", "dist", "compiled", "@vercel", "og", "noto-sans-v27-latin-regular.ttf");
+      _fontBase64 = readFileSync(altPath).toString("base64");
+    } catch {
+      _fontBase64 = "";
+    }
+  }
+  return _fontBase64;
+}
 
 /** Platform-specific slide dimensions. */
 const SLIDE_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -305,9 +331,8 @@ export async function renderCarouselSlide(
  * Center-aligned, up to 2 lines, proportional to slide width.
  */
 function buildCaptionSvg(caption: string, textColor: string, width: number, height: number): string {
-  // Font: Use "DejaVu Sans" first (available on Vercel/Lambda), then common system fonts.
-  // Helvetica/Arial are NOT available on serverless Linux environments.
-  const fontFamily = '"DejaVu Sans", "Liberation Sans", "Noto Sans", sans-serif';
+  // Font: Use embedded "CaptionFont" (Noto Sans, base64 in SVG), with system fallbacks.
+  const fontFamily = '"CaptionFont", "DejaVu Sans", "Noto Sans", sans-serif';
   const fontSize = 28;
   const lineHeight = 38;
   const maxCharsPerLine = 42;
@@ -350,7 +375,14 @@ function buildCaptionSvg(caption: string, textColor: string, width: number, heig
     .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${esc(fontFamily)}" font-size="${fontSize}" font-weight="${lines.length === 1 ? 'bold' : 'normal'}" fill="${esc(textColor)}">${esc(line)}</text>`)
     .join("\n    ");
 
+  // Embed font as base64 data URI so Sharp's librsvg can render text on Vercel/Lambda
+  const fontB64 = getEmbeddedFontBase64();
+  const fontStyle = fontB64
+    ? `<defs><style>@font-face { font-family: "CaptionFont"; src: url("data:font/truetype;base64,${fontB64}") format("truetype"); }</style></defs>`
+    : "";
+
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" overflow="hidden">
+    ${fontStyle}
     <rect width="${width}" height="${height}" fill="none" />
     ${textElements}
   </svg>`;
