@@ -387,7 +387,7 @@ async function buildCaptionPango(
   const hexColor = isLight ? "#FFFFFFEB" : "#191919E0";
 
   // Use Sharp's text input with Pango markup
-  const fontSize = 14;
+  const fontSize = 10;
   const fontWeight = lines.length === 1 ? "bold" : "normal";
   const sidePadding = 60;
   const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans ${fontWeight} ${fontSize}">${displayText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
@@ -431,8 +431,8 @@ async function buildCaptionPango(
  * Embeds Noto Sans as base64 @font-face for serverless compatibility.
  */
 function buildCaptionSvg(caption: string, textColor: string, width: number, height: number): string {
-  const fontSize = 14;
-  const lineHeight = 22;
+  const fontSize = 10;
+  const lineHeight = 16;
   const maxCharsPerLine = 52;
   const sidePadding = 60;
 
