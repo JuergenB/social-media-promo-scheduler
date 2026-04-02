@@ -379,7 +379,7 @@ async function buildCaptionPango(
   const hexColor = isLight ? "#FFFFFFEB" : "#191919E0";
 
   // Use Sharp's text input with Pango markup
-  const fontSize = 18;
+  const fontSize = 14;
   const fontWeight = lines.length === 1 ? "bold" : "normal";
   const sidePadding = 60;
   const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans ${fontWeight} ${fontSize}">${displayText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
@@ -401,7 +401,8 @@ async function buildCaptionPango(
   const textW = textMeta.width || width;
   const textH = textMeta.height || height;
   const offsetX = Math.max(0, Math.round((width - textW) / 2));
-  const offsetY = Math.max(0, Math.round((height - textH) / 2));
+  const bottomPad = 12;
+  const offsetY = Math.max(0, Math.round((height - textH) / 2) - bottomPad);
 
   // Composite text onto a transparent canvas of the correct caption area size
   return sharp({
