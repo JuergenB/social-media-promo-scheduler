@@ -386,33 +386,41 @@ async function buildCaptionPango(
   const isLight = textColor.includes("255");
   const hexColor = isLight ? "#FFFFFFEB" : "#191919E0";
 
-  // Use Sharp's text input with Pango markup
-  const fontSize = 10;
-  const fontWeight = lines.length === 1 ? "bold" : "normal";
+  // Render caption text at a fixed target height relative to the caption area.
+  // Target: text should be ~30% of caption area height — subtle, not dominant.
   const sidePadding = 60;
-  const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans ${fontWeight} ${fontSize}">${displayText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
+  const maxTextWidth = width - sidePadding * 2;
+  const targetTextHeight = Math.round(height * 0.35);
+  const bottomPad = 16;
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const textImage = await sharp({
+  // Render at a generous size first, then scale to fit
+  const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans 24">${esc(displayText)}</span>`;
+
+  let textImage = await sharp({
     text: {
       text: pangoMarkup,
       rgba: true,
-      width: width - sidePadding * 2, // padding
-      height: height,
-      align: "centre",
+      dpi: 72,
     },
   })
     .png()
     .toBuffer();
 
-  // Get the rendered text dimensions and center it in the caption area
   const textMeta = await sharp(textImage).metadata();
-  const textW = textMeta.width || width;
-  const textH = textMeta.height || height;
-  const offsetX = Math.max(0, Math.round((width - textW) / 2));
-  const bottomPad = 12;
-  const offsetY = Math.max(0, Math.round((height - textH) / 2) - bottomPad);
+  const textW = textMeta.width || 400;
+  const textH = textMeta.height || 40;
 
-  // Composite text onto a transparent canvas of the correct caption area size
+  // Scale to fit: constrain by both width and target height
+  const scale = Math.min(maxTextWidth / textW, targetTextHeight / textH);
+  const finalW = Math.max(1, Math.round(textW * scale));
+  const finalH = Math.max(1, Math.round(textH * scale));
+
+  textImage = await sharp(textImage).resize(finalW, finalH).png().toBuffer();
+
+  const offsetX = Math.round((width - finalW) / 2);
+  const offsetY = height - finalH - bottomPad;
+
   return sharp({
     create: {
       width,
