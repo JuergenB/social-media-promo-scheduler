@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { schedulePostsAlgorithm, previewSchedule } from "@/lib/scheduling";
+import { createBrandClient } from "@/lib/late-api/client";
+import { assembleCarouselPDF } from "@/lib/pdf-carousel";
+import { ensureAspectRatio } from "@/lib/image-crop";
+import { parseMediaItems } from "@/lib/media-items";
 import type { DistributionBias, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -18,8 +22,21 @@ interface CampaignFields {
 interface PostFields {
   Campaign: string[];
   Platform: string;
+  Content: string;
+  "Image URL": string;
+  "Media URLs": string;
+  "Media Captions": string;
   Status: string;
   "Scheduled Date": string;
+  "Short URL": string;
+  "Link URL": string;
+  "First Comment": string;
+  "Zernio Post ID": string;
+}
+
+interface BrandFields {
+  "Zernio API Key Label": string;
+  "Zernio Profile ID": string;
 }
 
 /** Map Airtable platform names to Zernio platform IDs */
@@ -34,20 +51,19 @@ const PLATFORM_MAP: Record<string, string> = {
   TikTok: "tiktok",
   YouTube: "youtube",
   Reddit: "reddit",
-  Telegram: "telegram",
-  Snapchat: "snapchat",
-  "Google Business": "googlebusiness",
 };
 
 /**
  * POST /api/campaigns/[id]/schedule
  *
- * Assigns scheduled dates to all approved posts in a campaign using
- * the tapering algorithm. Does NOT push to Zernio yet — that's a
- * separate step after the user previews and confirms.
+ * Schedule approved posts: assigns dates AND pushes to Zernio in one step.
  *
  * Query params:
- *   ?preview=true — return the schedule without applying it
+ *   ?preview=true — return the schedule preview without applying
+ *
+ * Without preview: assigns dates, pushes each post to Zernio, updates
+ * status to "Scheduled" only after Zernio confirms. This is the single
+ * step that takes posts from Approved → actually scheduled on Zernio.
  */
 export async function POST(
   request: NextRequest,
@@ -103,20 +119,9 @@ export async function POST(
     let startDate: Date;
     if (campaign.fields["Start Date"]) {
       const campaignStart = new Date(campaign.fields["Start Date"] + "T00:00:00");
-      // If the stored start date is in the past, use today instead
       startDate = campaignStart > today ? campaignStart : today;
     } else {
       startDate = today;
-    }
-
-    // For event campaigns, if the event date is set, use it to define the end
-    // and adjust duration accordingly
-    if (campaign.fields["Event Date"]) {
-      const eventDate = new Date(campaign.fields["Event Date"]);
-      const daysUntilEvent = Math.ceil((eventDate.getTime() - startDate.getTime()) / 86400000);
-      if (daysUntilEvent > 0 && daysUntilEvent < durationDays) {
-        // Don't schedule past the event date
-      }
     }
 
     // Fetch all posts for this campaign
@@ -134,10 +139,10 @@ export async function POST(
       );
     }
 
-    // Find already-scheduled dates to avoid collisions (for batch scheduling)
-    const alreadyScheduledDates = new Map<string, Set<string>>(); // platform → set of date strings
+    // Find already-scheduled dates to avoid collisions
+    const alreadyScheduledDates = new Map<string, Set<string>>();
     for (const p of campaignPosts) {
-      if ((p.fields.Status === "Queued" || p.fields.Status === "Scheduled" || p.fields.Status === "Published") && p.fields["Scheduled Date"]) {
+      if ((p.fields.Status === "Scheduled" || p.fields.Status === "Published") && p.fields["Scheduled Date"]) {
         const plat = PLATFORM_MAP[p.fields.Platform] || p.fields.Platform.toLowerCase();
         const dateStr = p.fields["Scheduled Date"].split("T")[0];
         if (!alreadyScheduledDates.has(plat)) alreadyScheduledDates.set(plat, new Set());
@@ -149,6 +154,16 @@ export async function POST(
       id: p.id,
       platform: PLATFORM_MAP[p.fields.Platform] || p.fields.Platform.toLowerCase(),
     }));
+
+    // Generate the schedule
+    const slots = schedulePostsAlgorithm({
+      posts,
+      startDate,
+      durationDays,
+      bias,
+      cadence,
+      excludedDates: alreadyScheduledDates,
+    });
 
     if (isPreview) {
       // Preview mode: return schedule summary without applying
@@ -165,15 +180,6 @@ export async function POST(
         cadence,
       });
 
-      const slots = schedulePostsAlgorithm({
-        posts,
-        startDate,
-        durationDays,
-        bias,
-        cadence,
-        excludedDates: alreadyScheduledDates,
-      });
-
       return NextResponse.json({
         preview: true,
         totalPosts: posts.length,
@@ -188,35 +194,179 @@ export async function POST(
       });
     }
 
-    // Apply mode: assign dates and update Airtable
-    const slots = schedulePostsAlgorithm({
-      posts,
-      startDate,
-      durationDays,
-      bias,
-      cadence,
-      excludedDates: alreadyScheduledDates,
-    });
+    // ── Apply mode: assign dates + push to Zernio ──────────────
 
-    // Update each post with its scheduled date
-    for (const slot of slots) {
-      await updateRecord("Posts", slot.postId, {
-        "Scheduled Date": slot.scheduledDate,
-        Status: "Scheduled",
-      });
+    // Get brand info for Zernio client
+    const brandId = campaign.fields.Brand?.[0];
+    if (!brandId) {
+      return NextResponse.json({ error: "Campaign has no brand assigned" }, { status: 400 });
     }
+
+    const brandRecord = await getRecord<BrandFields>("Brands", brandId);
+    const client = createBrandClient({
+      zernioApiKeyLabel: brandRecord.fields["Zernio API Key Label"] || null,
+    });
+    const profileId = brandRecord.fields["Zernio Profile ID"] || "";
+
+    if (!profileId) {
+      return NextResponse.json({ error: "Brand has no Zernio Profile ID configured" }, { status: 400 });
+    }
+
+    // Get connected accounts
+    const { data: accountsData } = await client.accounts.listAccounts({
+      query: { profileId },
+    });
+    const accounts = accountsData?.accounts || [];
+
+    // Build a map from postId → scheduled date
+    const slotMap = new Map<string, string>();
+    for (const slot of slots) {
+      slotMap.set(slot.postId, slot.scheduledDate);
+    }
+
+    const results: Array<{ postId: string; platform: string; success: boolean; scheduledDate: string; zernioPostId?: string; error?: string }> = [];
+
+    for (const post of approvedPosts) {
+      const scheduledDate = slotMap.get(post.id);
+      if (!scheduledDate) continue;
+
+      const platform = PLATFORM_MAP[post.fields.Platform] || post.fields.Platform.toLowerCase();
+
+      // Find matching Zernio account
+      const account = accounts.find(
+        (a: { platform: string; isActive: boolean }) =>
+          a.platform === platform && a.isActive
+      );
+
+      if (!account) {
+        // No account — still assign the date but mark as failed
+        await updateRecord("Posts", post.id, {
+          "Scheduled Date": scheduledDate,
+        });
+        results.push({
+          postId: post.id,
+          platform,
+          scheduledDate,
+          success: false,
+          error: `No active ${platform} account found`,
+        });
+        continue;
+      }
+
+      try {
+        // Build media items
+        const postMediaItems = parseMediaItems(post.fields);
+        const imageUrls = postMediaItems.map((i) => i.url);
+
+        // Ensure aspect ratios
+        for (let i = 0; i < imageUrls.length; i++) {
+          const cropped = await ensureAspectRatio(imageUrls[i], platform, post.id);
+          if (cropped !== imageUrls[i]) {
+            postMediaItems[i] = { ...postMediaItems[i], url: cropped };
+            imageUrls[i] = cropped;
+          }
+        }
+
+        // LinkedIn carousel: multiple images → PDF
+        let mediaItems: Array<{ type: "image" | "document"; url: string; filename?: string }>;
+        if (platform === "linkedin" && imageUrls.length > 1) {
+          const pdfBuffer = await assembleCarouselPDF(postMediaItems);
+          const { data: presignData } = await client.media.getMediaPresignedUrl({
+            body: {
+              filename: `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`,
+              contentType: "application/pdf",
+              size: pdfBuffer.length,
+            },
+          });
+          if (presignData?.uploadUrl) {
+            await fetch(presignData.uploadUrl, {
+              method: "PUT",
+              body: new Uint8Array(pdfBuffer),
+              headers: { "Content-Type": "application/pdf" },
+            });
+            mediaItems = [{ type: "document", url: presignData.publicUrl!, filename: `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf` }];
+          } else {
+            mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
+          }
+        } else {
+          mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
+        }
+
+        // Create post on Zernio
+        const createBody: Record<string, unknown> = {
+          content: post.fields.Content || "",
+          mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
+          platforms: [{
+            platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
+            accountId: (account as { _id: string })._id,
+          }],
+          scheduledFor: scheduledDate,
+          timezone: "America/New_York",
+        };
+
+        if (post.fields["First Comment"]) {
+          createBody.firstComment = post.fields["First Comment"];
+        }
+
+        const { data: zernioPost, error: zernioError } = await client.posts.createPost({
+          body: createBody as Parameters<typeof client.posts.createPost>[0]["body"],
+        });
+
+        if (zernioError) {
+          console.error(`[schedule] Zernio error for ${platform}:`, JSON.stringify(zernioError));
+          await updateRecord("Posts", post.id, {
+            "Scheduled Date": scheduledDate,
+          });
+          results.push({
+            postId: post.id,
+            platform,
+            scheduledDate,
+            success: false,
+            error: typeof zernioError === "object" ? JSON.stringify(zernioError) : String(zernioError),
+          });
+          continue;
+        }
+
+        // Success — update with Zernio ID and Scheduled status
+        const zernioPostId = (zernioPost as { _id?: string })?._id || "";
+        await updateRecord("Posts", post.id, {
+          "Scheduled Date": scheduledDate,
+          "Zernio Post ID": zernioPostId,
+          Status: "Scheduled",
+        });
+
+        results.push({
+          postId: post.id,
+          platform,
+          scheduledDate,
+          success: true,
+          zernioPostId,
+        });
+      } catch (err) {
+        await updateRecord("Posts", post.id, {
+          "Scheduled Date": scheduledDate,
+        });
+        results.push({
+          postId: post.id,
+          platform,
+          scheduledDate,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
 
     // Update campaign status to Active
     await updateRecord("Campaigns", campaignId, { Status: "Active" });
 
     return NextResponse.json({
-      success: true,
-      scheduledPosts: slots.length,
-      slots: slots.map((s) => ({
-        postId: s.postId,
-        platform: s.platform,
-        scheduledDate: s.scheduledDate,
-      })),
+      success: failCount === 0,
+      scheduledPosts: successCount,
+      failedPosts: failCount,
+      results,
     });
   } catch (error) {
     console.error("Failed to schedule campaign:", error);
