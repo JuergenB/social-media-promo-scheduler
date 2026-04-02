@@ -603,6 +603,17 @@ export interface ScrapedArtwork {
   medium: string | null;
   thumbnailUrl: string;
   detailLink: string | null;
+  highResImageUrl: string | null;
+  artworkDescription: string | null; // Artist's note about this specific piece
+  additionalImages: string[];        // Extra images from the detail page
+}
+
+export interface ScrapedArtistProfile {
+  name: string;
+  bio: string | null;
+  headshot: string | null;
+  website: string | null;
+  instagram: string | null;
 }
 
 export interface ScrapedExhibitionData {
@@ -612,6 +623,7 @@ export interface ScrapedExhibitionData {
   dates: string | null;
   venue: string | null;
   artworks: ScrapedArtwork[];
+  artistProfiles: ScrapedArtistProfile[];
 }
 
 export interface ScrapedExhibitionBlogData extends ScrapedBlogData {
@@ -628,13 +640,22 @@ export interface ScrapedExhibitionBlogData extends ScrapedBlogData {
  */
 function detectAaEmbedUrl(html: string): string | null {
   // Pattern 1: embed_js.js script src
+  // AA embeds use either:
+  //   .../profile/{org}/embed_js.js  (profile-level)
+  //   .../profile/{org}/exhibition/{slug}/embed_js.js  (exhibition-level)
   const scriptMatch = html.match(
-    /artworkarchive\.com\/profile\/([^/"]+)\/embed_js\.js/i
+    /artworkarchive\.com\/profile\/([^/"]+)\/(?:exhibition\/([^/"]+)\/)?embed_js\.js/i
   );
   if (scriptMatch) {
     const org = scriptMatch[1];
-    // The embed_js.js loads the full profile — look for exhibition-specific hints
-    // Check if there's an exhibition slug in the page context
+    const exhibSlug = scriptMatch[2]; // May be undefined for profile-level embeds
+
+    if (exhibSlug) {
+      // Exhibition-specific embed script — use the slug directly
+      return `https://www.artworkarchive.com/profile/${org}/embed/exhibition/${exhibSlug}`;
+    }
+
+    // Profile-level embed — look for exhibition slug elsewhere on the page
     const exhibMatch = html.match(
       /artworkarchive\.com\/profile\/[^/"]+\/embed\/exhibition\/([^/"?#]+)/i
     );
@@ -662,6 +683,181 @@ function detectAaEmbedUrl(html: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Run promises with controlled concurrency.
+ */
+async function runWithConcurrency<T>(
+  tasks: (() => Promise<T>)[],
+  concurrency: number
+): Promise<T[]> {
+  const results: T[] = [];
+  let index = 0;
+
+  async function runNext(): Promise<void> {
+    while (index < tasks.length) {
+      const i = index++;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, tasks.length) }, () => runNext())
+  );
+  return results;
+}
+
+/**
+ * Shallow crawl: enrich exhibition data with artwork detail pages and optionally artist profiles.
+ * Uses markdown-only scrapes (1 credit each) to keep costs low.
+ * Concurrency capped at 5 to respect Firecrawl rate limits.
+ *
+ * Default: artwork-focused (detail pages only, ~20 credits for 20 artworks).
+ * Set includeArtistProfiles=true for artist bios, headshots, website/Instagram links.
+ */
+async function enrichExhibitionData(
+  exhibitionData: ScrapedExhibitionData,
+  embedUrl: string,
+  apiKey: string,
+  includeArtistProfiles = false,
+): Promise<void> {
+  const MAX_PAGES = 25;
+  const CONCURRENCY = 5;
+
+  // ── 1. Optionally scrape artist profile pages ───────────────
+  if (includeArtistProfiles) {
+  // Build unique artist slugs from the embed URL pattern
+  const artistSlugs = new Map<string, string>(); // name → slug
+  for (const artwork of exhibitionData.artworks) {
+    if (artistSlugs.has(artwork.artistName)) continue;
+    // Derive slug from artist name (AA uses lowercase-hyphenated)
+    const slug = artwork.artistName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+    artistSlugs.set(artwork.artistName, slug);
+  }
+
+  // Build the base URL for artist pages: embed URL + /pieces?artist=slug
+  const baseUrl = embedUrl.replace(/\/$/, "");
+
+  const artistTasks = [...artistSlugs.entries()].slice(0, MAX_PAGES).map(
+    ([artistName, slug]) => async (): Promise<ScrapedArtistProfile | null> => {
+      try {
+        const url = `${baseUrl}/pieces?artist=${slug}`;
+        console.log(`[scrapeExhibition] Enriching artist: ${artistName}`);
+        const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url,
+            formats: ["markdown"],
+            waitFor: 3000,
+          }),
+        });
+
+        if (!res.ok) return null;
+        const data = await res.json();
+        const md = data?.data?.markdown || "";
+        const metadata = data?.data?.metadata || {};
+
+        // Parse bio: text block between the artist name heading and the artwork listings
+        // AA artist pages have: heading, links, bio text, then artwork cards
+        let bio: string | null = null;
+        const bioMatch = md.match(/##\s+.+?\n(?:.*?\n)*?\n([\s\S]+?)(?=\n\[!\[|\nCopyright|\n---|\n$)/);
+        if (bioMatch) {
+          // Clean up: remove link lines and get the prose
+          const rawBio = bioMatch[1]
+            .split("\n")
+            .filter((line: string) => !line.startsWith("[") && !line.startsWith("- [") && line.trim().length > 20)
+            .join(" ")
+            .trim();
+          if (rawBio.length > 30) bio = rawBio;
+        }
+
+        // Parse website and Instagram from markdown links
+        let website: string | null = null;
+        let instagram: string | null = null;
+        const websiteMatch = md.match(/\[Artist Website\]\((https?:\/\/[^)]+)\)/);
+        if (websiteMatch) website = websiteMatch[1];
+        const instaMatch = md.match(/\[Instagram\]\(https?:\/\/(?:www\.)?instagram\.com\/([^)"]+)/);
+        if (instaMatch) instagram = instaMatch[1];
+
+        // Headshot: look for artist image in the markdown
+        let headshot: string | null = null;
+        const headshotMatch = md.match(/!\[Artists? Image\]\((https?:\/\/[^)]+)\)/i);
+        if (headshotMatch) headshot = headshotMatch[1];
+
+        return { name: artistName, bio, headshot, website, instagram };
+      } catch (err) {
+        console.warn(`[scrapeExhibition] Failed to enrich artist ${artistName}:`, err);
+        return null;
+      }
+    }
+  );
+
+  console.log(`[scrapeExhibition] Enriching ${artistTasks.length} artist profiles (${CONCURRENCY} concurrent)...`);
+  const artistResults = await runWithConcurrency(artistTasks, CONCURRENCY);
+  for (const profile of artistResults) {
+    if (profile) exhibitionData.artistProfiles.push(profile);
+  }
+  console.log(`[scrapeExhibition] Enriched ${exhibitionData.artistProfiles.length} artist profiles`);
+  } // end includeArtistProfiles
+
+  // ── 2. Scrape artwork detail pages (always on) ──────────────
+  const artworksWithLinks = exhibitionData.artworks.filter((a) => a.detailLink);
+  const artworkTasks = artworksWithLinks.slice(0, MAX_PAGES).map(
+    (artwork) => async (): Promise<void> => {
+      try {
+        console.log(`[scrapeExhibition] Enriching artwork: ${artwork.artworkTitle}`);
+        const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: artwork.detailLink,
+            formats: ["markdown"],
+            waitFor: 3000,
+          }),
+        });
+
+        if (!res.ok) return;
+        const data = await res.json();
+        const md = data?.data?.markdown || "";
+
+        // Extract high-res image URL (profile_2000 or jpg_large links in the markdown)
+        const hiResMatch = md.match(/\(https:\/\/assets\.artworkarchive\.com\/image\/upload\/t_jpg_(?:profile_2000|large)\/[^)]+\)/g);
+        if (hiResMatch && hiResMatch.length > 0) {
+          artwork.highResImageUrl = hiResMatch[0].slice(1, -1); // Remove parens
+          // Additional images beyond the first
+          artwork.additionalImages = hiResMatch.slice(1).map((m: string) => m.slice(1, -1));
+        }
+
+        // Extract artwork description / artist's note
+        // It appears as a quoted block near the bottom, before "— Artist Name"
+        const descMatch = md.match(/\n\n"([^"]+)"\s*\n\n—\s/);
+        if (descMatch) {
+          artwork.artworkDescription = descMatch[1].trim();
+        } else {
+          // Try unquoted block: paragraph between medium line and "— Artist" attribution
+          const altDescMatch = md.match(/\n\n([A-Z][^[\n]{30,})\n\n—\s/);
+          if (altDescMatch) {
+            artwork.artworkDescription = altDescMatch[1].trim();
+          }
+        }
+      } catch (err) {
+        console.warn(`[scrapeExhibition] Failed to enrich artwork ${artwork.artworkTitle}:`, err);
+      }
+    }
+  );
+
+  console.log(`[scrapeExhibition] Enriching ${artworkTasks.length} artwork detail pages (${CONCURRENCY} concurrent)...`);
+  await runWithConcurrency(artworkTasks, CONCURRENCY);
+  const enrichedCount = exhibitionData.artworks.filter((a) => a.highResImageUrl || a.artworkDescription).length;
+  console.log(`[scrapeExhibition] Enriched ${enrichedCount} artworks with detail data`);
 }
 
 /**
@@ -788,6 +984,9 @@ export async function scrapeExhibition(url: string): Promise<ScrapedExhibitionBl
               medium: a.medium ? String(a.medium) : null,
               thumbnailUrl: String(a.artwork_thumbnail_URL || ""),
               detailLink: a.artwork_detail_link ? String(a.artwork_detail_link) : null,
+              highResImageUrl: null,
+              artworkDescription: null,
+              additionalImages: [],
             }));
 
           exhibitionData = {
@@ -797,9 +996,13 @@ export async function scrapeExhibition(url: string): Promise<ScrapedExhibitionBl
             dates: extracted.dates ? String(extracted.dates) : null,
             venue: extracted.venue ? String(extracted.venue) : null,
             artworks,
+            artistProfiles: [],
           };
 
           console.log(`[scrapeExhibition] Extracted ${artworks.length} artworks from AA embed`);
+
+          // ── Shallow crawl: artwork detail pages + artist profiles ──
+          await enrichExhibitionData(exhibitionData, aaEmbedUrl, apiKey);
 
           // Build images and sections from the artworks
           const images: ScrapedImage[] = [];
@@ -813,24 +1016,64 @@ export async function scrapeExhibition(url: string): Promise<ScrapedExhibitionBl
             artistGroups.set(artwork.artistName, group);
           }
 
+          // Build a profile lookup for enriched content
+          const profileMap = new Map<string, ScrapedArtistProfile>();
+          for (const p of exhibitionData.artistProfiles) {
+            profileMap.set(p.name, p);
+          }
+
           for (const [artistName, works] of artistGroups) {
             const sectionImages: ScrapedImage[] = [];
+            const profile = profileMap.get(artistName);
+
+            // Add headshot first if available
+            if (profile?.headshot) {
+              sectionImages.push({ url: profile.headshot, alt: `${artistName} headshot` });
+              images.push({ url: profile.headshot, alt: `${artistName} headshot` });
+            }
+
             for (const work of works) {
-              if (work.thumbnailUrl) {
+              // Prefer high-res image from detail page
+              const imgUrl = work.highResImageUrl || work.thumbnailUrl;
+              if (imgUrl) {
                 const img: ScrapedImage = {
-                  url: work.thumbnailUrl,
+                  url: imgUrl,
                   alt: `${work.artworkTitle} by ${artistName}${work.medium ? ` — ${work.medium}` : ""}`,
                 };
                 images.push(img);
                 sectionImages.push(img);
               }
+              // Add additional images from detail page
+              for (const addUrl of work.additionalImages) {
+                const addImg: ScrapedImage = { url: addUrl, alt: `${work.artworkTitle} by ${artistName}` };
+                images.push(addImg);
+                sectionImages.push(addImg);
+              }
             }
 
-            const contentParts = works.map((w) => {
+            const contentParts: string[] = [];
+
+            // Artist bio from profile
+            if (profile?.bio) {
+              contentParts.push(profile.bio);
+              contentParts.push("");
+            }
+
+            // Artist links
+            const links: string[] = [];
+            if (profile?.website) links.push(`[Website](${profile.website})`);
+            if (profile?.instagram) links.push(`[Instagram](https://instagram.com/${profile.instagram.replace(/^@/, "")})`);
+            if (links.length > 0) contentParts.push(links.join(" · "));
+
+            // Artworks
+            for (const w of works) {
               let line = `**${w.artworkTitle}**`;
               if (w.medium) line += ` — ${w.medium}`;
-              return line;
-            });
+              contentParts.push(line);
+              if (w.artworkDescription) {
+                contentParts.push(`> ${w.artworkDescription}`);
+              }
+            }
 
             sections.push({
               heading: artistName,
@@ -856,7 +1099,7 @@ export async function scrapeExhibition(url: string): Promise<ScrapedExhibitionBl
             : images[0] || null;
 
           // Build a rich content string from exhibition data for the prompt
-          const exhibContent = [
+          const exhibContentParts = [
             exhibitionData.title ? `# ${exhibitionData.title}` : "",
             exhibitionData.venue ? `**Venue:** ${exhibitionData.venue}` : "",
             exhibitionData.dates ? `**Dates:** ${exhibitionData.dates}` : "",
@@ -864,10 +1107,26 @@ export async function scrapeExhibition(url: string): Promise<ScrapedExhibitionBl
             exhibitionData.description || "",
             "",
             `## Featured Artists (${artworks.length} works)`,
-            ...artworks.map((a) =>
-              `- **${a.artworkTitle}** by ${a.artistName}${a.medium ? ` (${a.medium})` : ""}`
-            ),
-          ].filter(Boolean).join("\n");
+          ];
+
+          for (const [artistName, works] of artistGroups) {
+            const profile = profileMap.get(artistName);
+            exhibContentParts.push(`\n### ${artistName}`);
+            if (profile?.bio) exhibContentParts.push(profile.bio);
+            const links: string[] = [];
+            if (profile?.website) links.push(`Website: ${profile.website}`);
+            if (profile?.instagram) links.push(`Instagram: @${profile.instagram.replace(/^@/, "")}`);
+            if (links.length > 0) exhibContentParts.push(links.join(" | "));
+
+            for (const w of works) {
+              let line = `- **${w.artworkTitle}**`;
+              if (w.medium) line += ` (${w.medium})`;
+              exhibContentParts.push(line);
+              if (w.artworkDescription) exhibContentParts.push(`  "${w.artworkDescription}"`);
+            }
+          }
+
+          const exhibContent = exhibContentParts.filter(Boolean).join("\n");
 
           return {
             title: exhibitionData.title || metadata.title || "",
