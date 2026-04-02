@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns/format";
@@ -135,11 +135,12 @@ const CAMPAIGN_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline
 export default function DashboardPage() {
   const { currentBrand } = useBrand();
   const queryClient = useQueryClient();
+  const [pipelineWindow, setPipelineWindow] = useState<"30d" | "90d" | "ytd" | "all">("90d");
 
   const { data, isLoading, error } = useQuery<DashboardStats>({
-    queryKey: ["dashboard-stats", currentBrand?.id],
+    queryKey: ["dashboard-stats", currentBrand?.id, pipelineWindow],
     queryFn: async () => {
-      const res = await fetch(`/api/dashboard?brandId=${currentBrand!.id}`);
+      const res = await fetch(`/api/dashboard?brandId=${currentBrand!.id}&pipelineWindow=${pipelineWindow}`);
       if (!res.ok) throw new Error("Failed to load dashboard");
       return res.json();
     },
@@ -270,6 +271,74 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* ── Publishing Pipeline (full width) ────────────────── */}
+      <Card>
+        <div className="px-5 pt-5 pb-3">
+          <div className="flex items-center justify-between">
+            <Subheading className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Publishing Pipeline
+            </Subheading>
+            <select
+              value={pipelineWindow}
+              onChange={(e) => setPipelineWindow(e.target.value as "30d" | "90d" | "ytd" | "all")}
+              className="text-xs h-7 rounded-md border border-border bg-background px-2 text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            >
+              <option value="30d">30 days</option>
+              <option value="90d">90 days</option>
+              <option value="ytd">Year to date</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+        </div>
+        <CardContent className="pt-0">
+          {pipelineTotal > 0 ? (
+            <>
+              {/* Stacked bar */}
+              <div className="flex h-8 rounded-lg overflow-hidden mb-3">
+                {pipelineStatuses.map((status) => {
+                  const count = data.posts.byStatus[status] || 0;
+                  if (count === 0) return null;
+                  const pct = (count / pipelineTotal) * 100;
+                  return (
+                    <div
+                      key={status}
+                      className={cn("flex items-center justify-center text-white text-xs font-medium transition-all", STATUS_COLORS[status])}
+                      style={{ width: `${pct}%` }}
+                      title={`${status}: ${count}`}
+                    >
+                      {pct > 8 && count}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                {pipelineStatuses.map((status) => {
+                  const count = data.posts.byStatus[status] || 0;
+                  return (
+                    <div key={status} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_COLORS[status])} />
+                      {status} <span className="font-medium text-foreground">{count}</span>
+                    </div>
+                  );
+                })}
+                {(data.posts.byStatus["Failed"] || 0) > 0 && (
+                  <div className="flex items-center gap-1.5 text-xs text-red-600">
+                    <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                    Failed <span className="font-medium">{data.posts.byStatus["Failed"]}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="py-6 text-center">
+              <Text>No posts in the pipeline yet.</Text>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* ── Main Content: 2 columns ──────────────────────────── */}
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left column (span 2) */}
@@ -370,66 +439,23 @@ export default function DashboardPage() {
             </Card>
           )}
 
-          {/* Publishing Pipeline */}
-          <Card>
-            <div className="px-5 pt-5 pb-3">
-              <Subheading className="flex items-center gap-2">
-                <Layers className="h-4 w-4" />
-                Publishing Pipeline
-              </Subheading>
-            </div>
-            <CardContent className="pt-0">
-              {pipelineTotal > 0 ? (
-                <>
-                  {/* Stacked bar */}
-                  <div className="flex h-8 rounded-lg overflow-hidden mb-3">
-                    {pipelineStatuses.map((status) => {
-                      const count = data.posts.byStatus[status] || 0;
-                      if (count === 0) return null;
-                      const pct = (count / pipelineTotal) * 100;
-                      return (
-                        <div
-                          key={status}
-                          className={cn("flex items-center justify-center text-white text-xs font-medium transition-all", STATUS_COLORS[status])}
-                          style={{ width: `${pct}%` }}
-                          title={`${status}: ${count}`}
-                        >
-                          {pct > 8 && count}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Legend */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1">
-                    {pipelineStatuses.map((status) => {
-                      const count = data.posts.byStatus[status] || 0;
-                      return (
-                        <div key={status} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <span className={cn("h-2.5 w-2.5 rounded-full", STATUS_COLORS[status])} />
-                          {status} <span className="font-medium text-foreground">{count}</span>
-                        </div>
-                      );
-                    })}
-                    {(data.posts.byStatus["Failed"] || 0) > 0 && (
-                      <div className="flex items-center gap-1.5 text-xs text-red-600">
-                        <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                        Failed <span className="font-medium">{data.posts.byStatus["Failed"]}</span>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="py-6 text-center">
-                  <Text>No posts in the pipeline yet.</Text>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
         </div>
 
         {/* Right column */}
         <div className="space-y-6">
+
+          {/* Quick Links */}
+          <Card>
+            <div className="px-5 pt-5 pb-3">
+              <Subheading>Quick Actions</Subheading>
+            </div>
+            <CardContent className="pt-0 space-y-1">
+              <QuickLink href="/dashboard/campaigns/new" icon={<Plus className="h-4 w-4" />} label="New Campaign" />
+              <QuickLink href="/dashboard/calendar" icon={<Calendar className="h-4 w-4" />} label="Calendar" />
+              <QuickLink href="/dashboard/queue" icon={<Clock className="h-4 w-4" />} label="Queue" />
+              <QuickLink href="/dashboard/settings/brands" icon={<Megaphone className="h-4 w-4" />} label="Brand Settings" />
+            </CardContent>
+          </Card>
 
           {/* Campaign Status Board */}
           <Card>
@@ -495,19 +521,6 @@ export default function DashboardPage() {
                     );
                   })
               )}
-            </CardContent>
-          </Card>
-
-          {/* Quick Links */}
-          <Card>
-            <div className="px-5 pt-5 pb-3">
-              <Subheading>Quick Actions</Subheading>
-            </div>
-            <CardContent className="pt-0 space-y-1">
-              <QuickLink href="/dashboard/campaigns/new" icon={<Plus className="h-4 w-4" />} label="New Campaign" />
-              <QuickLink href="/dashboard/calendar" icon={<Calendar className="h-4 w-4" />} label="Calendar" />
-              <QuickLink href="/dashboard/queue" icon={<Clock className="h-4 w-4" />} label="Queue" />
-              <QuickLink href="/dashboard/settings/brands" icon={<Megaphone className="h-4 w-4" />} label="Brand Settings" />
             </CardContent>
           </Card>
 

@@ -95,11 +95,40 @@ export async function GET(request: NextRequest) {
         postCounts: campaignPostCounts.get(c.id) || { total: 0, pending: 0, approved: 0, queued: 0, scheduled: 0, published: 0, failed: 0, dismissed: 0 },
       }));
 
-    // Status counts across all posts
+    // Pipeline window: filter posts by scheduled date for the pipeline bar
+    // Values: "30d", "90d" (default), "ytd", "all"
+    const pipelineWindow = request.nextUrl.searchParams.get("pipelineWindow") || "90d";
+    const now = new Date();
+    let pipelineStart: Date | null = null;
+    let pipelineEnd: Date | null = null;
+
+    if (pipelineWindow === "30d") {
+      pipelineStart = new Date(now.getTime() - 30 * 86400000);
+      pipelineEnd = new Date(now.getTime() + 30 * 86400000);
+    } else if (pipelineWindow === "90d") {
+      pipelineStart = new Date(now.getTime() - 30 * 86400000);
+      pipelineEnd = new Date(now.getTime() + 60 * 86400000);
+    } else if (pipelineWindow === "ytd") {
+      pipelineStart = new Date(now.getFullYear(), 0, 1);
+      pipelineEnd = new Date(now.getTime() + 90 * 86400000);
+    }
+    // "all" → no date filter
+
+    const pipelinePosts = (pipelineStart && pipelineEnd)
+      ? posts.filter((p) => {
+          // Posts without a scheduled date (Pending, Approved) are always included
+          const d = p.fields["Scheduled Date"];
+          if (!d) return true;
+          const date = new Date(d);
+          return date >= pipelineStart! && date <= pipelineEnd!;
+        })
+      : posts;
+
+    // Status counts within the pipeline window
     const postsByStatus: Record<string, number> = {
       Pending: 0, Approved: 0, Modified: 0, Queued: 0, Scheduled: 0, Published: 0, Failed: 0, Dismissed: 0,
     };
-    for (const p of posts) {
+    for (const p of pipelinePosts) {
       const s = p.fields.Status || "Pending";
       postsByStatus[s] = (postsByStatus[s] || 0) + 1;
     }
@@ -142,7 +171,6 @@ export async function GET(request: NextRequest) {
       });
 
     // Time-based stats
-    const now = new Date();
     const weekFromNow = new Date(now.getTime() + 7 * 86400000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -184,6 +212,7 @@ export async function GET(request: NextRequest) {
         }, {} as Record<string, number>),
         active: activeCampaigns,
       },
+      pipelineWindow,
       posts: {
         byStatus: postsByStatus,
         pendingReview,
