@@ -295,17 +295,19 @@ export async function renderCarouselSlide(
     ? await resizedImgPipeline.png().toBuffer()
     : await resizedImgPipeline.flatten({ background: frame }).jpeg({ quality: 95 }).toBuffer();
 
-  // Build SVG caption overlay
-  const captionSvg = caption ? buildCaptionSvg(caption, textColor, slideW, captionAreaH) : null;
+  // Build caption overlay using Sharp's text input (Pango) — works on Vercel/Lambda
+  // Unlike SVG @font-face, Pango text rendering uses system fontconfig which
+  // reliably finds at least one sans-serif font on any Linux environment.
+  const captionOverlay = caption ? await buildCaptionPango(caption, textColor, slideW, captionAreaH) : null;
 
   // Compose the slide
   const composites: sharp.OverlayOptions[] = [
     { input: resizedImg, left: imgX, top: imgY },
   ];
 
-  if (captionSvg) {
+  if (captionOverlay) {
     composites.push({
-      input: Buffer.from(captionSvg),
+      input: captionOverlay,
       left: 0,
       top: slideH - captionAreaH,
     });
@@ -327,16 +329,21 @@ export async function renderCarouselSlide(
 }
 
 /**
- * Build an SVG text overlay for the caption area.
- * Center-aligned, up to 2 lines, proportional to slide width.
+ * Build a caption overlay using Sharp's Pango text rendering.
+ * Pango uses system fontconfig which works reliably on Vercel/Lambda
+ * (unlike SVG @font-face which requires librsvg font support).
+ *
+ * Returns a PNG buffer with transparent background + text.
  */
-function buildCaptionSvg(caption: string, textColor: string, width: number, height: number): string {
-  // Font: Use embedded "CaptionFont" (Noto Sans, base64 in SVG), with system fallbacks.
-  const fontFamily = '"CaptionFont", "DejaVu Sans", "Noto Sans", sans-serif';
-  const fontSize = 28;
-  const lineHeight = 38;
+async function buildCaptionPango(
+  caption: string,
+  textColor: string,
+  width: number,
+  height: number
+): Promise<Buffer> {
   const maxCharsPerLine = 42;
 
+  // Word-wrap to max 2 lines
   const words = caption.split(/\s+/);
   const lines: string[] = [];
   let currentLine = "";
@@ -365,27 +372,48 @@ function buildCaptionSvg(caption: string, textColor: string, width: number, heig
     lines[1] = last;
   }
 
-  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const displayText = lines.join("\n");
 
-  const bottomPad = 8; // prevent descenders from touching the slide bottom edge
-  const totalTextHeight = lines.length * lineHeight;
-  const startY = (height - bottomPad - totalTextHeight) / 2 + fontSize * 0.8;
+  // Parse textColor rgba to hex for Pango markup
+  const isLight = textColor.includes("255");
+  const hexColor = isLight ? "#FFFFFFEB" : "#191919E0";
 
-  const textElements = lines
-    .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${esc(fontFamily)}" font-size="${fontSize}" font-weight="${lines.length === 1 ? 'bold' : 'normal'}" fill="${esc(textColor)}">${esc(line)}</text>`)
-    .join("\n    ");
+  // Use Sharp's text input with Pango markup
+  const fontSize = 28;
+  const fontWeight = lines.length === 1 ? "bold" : "normal";
+  const pangoMarkup = `<span foreground="${hexColor}" font_desc="sans ${fontWeight} ${fontSize}">${displayText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</span>`;
 
-  // Embed font as base64 data URI so Sharp's librsvg can render text on Vercel/Lambda
-  const fontB64 = getEmbeddedFontBase64();
-  const fontStyle = fontB64
-    ? `<defs><style>@font-face { font-family: "CaptionFont"; src: url("data:font/truetype;base64,${fontB64}") format("truetype"); }</style></defs>`
-    : "";
+  const textImage = await sharp({
+    text: {
+      text: pangoMarkup,
+      rgba: true,
+      width: width - 40, // padding
+      height: height,
+      align: "centre",
+    },
+  })
+    .png()
+    .toBuffer();
 
-  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" overflow="hidden">
-    ${fontStyle}
-    <rect width="${width}" height="${height}" fill="none" />
-    ${textElements}
-  </svg>`;
+  // Get the rendered text dimensions and center it in the caption area
+  const textMeta = await sharp(textImage).metadata();
+  const textW = textMeta.width || width;
+  const textH = textMeta.height || height;
+  const offsetX = Math.max(0, Math.round((width - textW) / 2));
+  const offsetY = Math.max(0, Math.round((height - textH) / 2));
+
+  // Composite text onto a transparent canvas of the correct caption area size
+  return sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: textImage, left: offsetX, top: offsetY }])
+    .png()
+    .toBuffer();
 }
 
 /**
