@@ -1050,7 +1050,7 @@ export default function CampaignDetailPage() {
                           .join("\n");
 
                         const confirmed = window.confirm(
-                          `Schedule ${approvedCount} posts over ${campaign.durationDays} days (${campaign.distributionBias})?\n\n${summary}\n\nThis will assign dates and mark the campaign as Active.`
+                          `Schedule ${approvedCount} posts over ${campaign.durationDays} days (${campaign.distributionBias})?\n\n${summary}\n\nThis will assign dates and push all posts to Zernio for publishing.`
                         );
                         if (!confirmed) return;
 
@@ -1060,8 +1060,13 @@ export default function CampaignDetailPage() {
                           { method: "POST" }
                         );
                         if (applyRes.ok) {
+                          const result = await applyRes.json();
                           queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                          toast.success(`${approvedCount} posts scheduled!`);
+                          if (result.failedPosts > 0) {
+                            toast.warning(`${result.scheduledPosts} posts scheduled on Zernio, ${result.failedPosts} failed`);
+                          } else {
+                            toast.success(`${result.scheduledPosts} posts scheduled on Zernio!`);
+                          }
                         } else {
                           const errData = await applyRes.json().catch(() => ({}));
                           toast.error(`Failed to schedule: ${errData.error || applyRes.statusText}`);
