@@ -445,6 +445,14 @@ export default function CampaignDetailPage() {
     return result;
   }, [actionablePosts, platformFilter, statusFilter]);
 
+  // Filter-aware approved posts for scheduling
+  const hasActiveFilter = platformFilter.size > 0 || statusFilter !== null;
+  const filteredApprovedPosts = useMemo(() => {
+    return filteredPosts.filter((p) => p.status === "Approved" || p.status === "Modified");
+  }, [filteredPosts]);
+  const scheduleCount = hasActiveFilter ? filteredApprovedPosts.length : approvedCount;
+  const schedulePostIds = hasActiveFilter ? filteredApprovedPosts.map((p) => p.id) : null;
+
   // Group filtered posts by date
   const postsByDate = useMemo(() => {
     const groups: Record<string, Post[]> = {};
@@ -1029,15 +1037,19 @@ export default function CampaignDetailPage() {
                       Approve All Remaining ({reviewCount})
                     </Button>
                   )}
-                  {approvedCount > 0 && (
+                  {scheduleCount > 0 && (
                     <Button
                       size="sm"
                       disabled={isScheduling}
                       onClick={async () => {
+                        // Build query string with optional post ID filter
+                        const qs = new URLSearchParams({ preview: "true" });
+                        if (schedulePostIds) qs.set("postIds", schedulePostIds.join(","));
+
                         // Preview the schedule first
                         setIsScheduling(true);
                         const res = await fetch(
-                          `/api/campaigns/${campaignId}/schedule?preview=true`,
+                          `/api/campaigns/${campaignId}/schedule?${qs}`,
                           { method: "POST" }
                         );
                         if (!res.ok) {
@@ -1053,14 +1065,17 @@ export default function CampaignDetailPage() {
                           )
                           .join("\n");
 
+                        const filterNote = hasActiveFilter ? " (filtered)" : "";
                         const confirmed = window.confirm(
-                          `Schedule ${approvedCount} posts over ${campaign.durationDays} days (${campaign.distributionBias})?\n\n${summary}\n\nThis will assign dates and push all posts to Zernio for publishing.`
+                          `Schedule ${scheduleCount} posts${filterNote} over ${campaign.durationDays} days (${campaign.distributionBias})?\n\n${summary}\n\nThis will assign dates and push posts to Zernio for publishing.`
                         );
                         if (!confirmed) { setIsScheduling(false); return; }
 
-                        // Apply the schedule
+                        // Apply the schedule with same filter
+                        const applyQs = new URLSearchParams();
+                        if (schedulePostIds) applyQs.set("postIds", schedulePostIds.join(","));
                         const applyRes = await fetch(
-                          `/api/campaigns/${campaignId}/schedule`,
+                          `/api/campaigns/${campaignId}/schedule${applyQs.toString() ? `?${applyQs}` : ""}`,
                           { method: "POST" }
                         );
                         if (applyRes.ok) {
@@ -1095,11 +1110,10 @@ export default function CampaignDetailPage() {
                         setIsScheduling(false);
                       }}
                     >
-                      <Calendar className="mr-1.5 h-3.5 w-3.5" />
                       {isScheduling ? (
                         <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Scheduling on Zernio...</>
                       ) : (
-                        <><Calendar className="mr-1.5 h-3.5 w-3.5" /> Schedule {approvedCount} Approved Posts</>
+                        <><Calendar className="mr-1.5 h-3.5 w-3.5" /> Schedule {scheduleCount}{hasActiveFilter ? " Filtered" : ""} Approved Posts</>
                       )}
                     </Button>
                   )}
