@@ -72,6 +72,8 @@ export async function POST(
   try {
     const { id: campaignId } = await params;
     const isPreview = request.nextUrl.searchParams.get("preview") === "true";
+    const postIdsParam = request.nextUrl.searchParams.get("postIds");
+    const scopedPostIds = postIdsParam ? new Set(postIdsParam.split(",")) : null;
 
     // Check brand access
     const access = await getUserBrandAccess();
@@ -130,11 +132,17 @@ export async function POST(
       (p) => p.fields.Campaign?.includes(campaignId)
     );
 
-    const approvedPosts = campaignPosts.filter((p) => p.fields.Status === "Approved");
+    let approvedPosts = campaignPosts.filter((p) => p.fields.Status === "Approved");
+
+    // If specific post IDs were requested, scope to those
+    if (scopedPostIds) {
+      approvedPosts = approvedPosts.filter((p) => scopedPostIds.has(p.id));
+      console.log(`[schedule] Scoped to ${approvedPosts.length} of ${campaignPosts.filter(p => p.fields.Status === "Approved").length} approved posts (${scopedPostIds.size} IDs requested)`);
+    }
 
     if (approvedPosts.length === 0) {
       return NextResponse.json(
-        { error: "No approved posts to schedule" },
+        { error: scopedPostIds ? "No approved posts matching the selected filter" : "No approved posts to schedule" },
         { status: 400 }
       );
     }
