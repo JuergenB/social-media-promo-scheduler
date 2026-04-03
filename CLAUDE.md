@@ -60,11 +60,11 @@ social-media-promo-scheduler/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
-│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset, POST [id]/schedule (?postIds= optional filter), POST [id]/publish, POST/DELETE [id]/image
+│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset, POST [id]/schedule (?postIds= optional filter), POST [id]/publish, POST/DELETE [id]/image, POST [id]/sync (Zernio schedule sync)
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
-│   │   │   ├── posts/           # PATCH [id] update post fields, POST [id]/image upload/swap image, POST [id]/publish single-post publish
+│   │   │   ├── posts/           # PATCH [id] update post fields (clearZernioState flag for retry), DELETE [id] with blob/short.io cleanup, POST [id]/image upload/swap image, POST [id]/publish single-post publish
 │   │   │   ├── webhooks/zernio/ # POST — Zernio webhook receiver (post.published/failed/partial status sync)
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints

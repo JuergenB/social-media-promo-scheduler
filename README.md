@@ -180,6 +180,8 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Zernio webhook status sync (post.published/failed/partial → Airtable)
 - [x] **Phase I:** LinkedIn PDF carousel — auto-assemble multi-image posts into PDF at publish time (#65)
 - [x] **Phase I:** lnk.bio integration — auto-create link-in-bio entry after Instagram publish (#52 partial)
+- [x] **Phase I:** Failed post handling — Retry (reset to Approved, clear Zernio state) and Delete (with blob/short.io cleanup) in list and detail views
+- [x] **Phase I:** Zernio schedule sync — fetch current dates/statuses from Zernio and update Airtable to fix drift
 - [x] **Phase I:** Server-side Sharp image optimization (PNG/WebP→JPEG, re-compress >500KB)
 - [x] **Phase I:** Platform aspect ratio auto-crop (Instagram/Threads 1.91:1 max enforced)
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
