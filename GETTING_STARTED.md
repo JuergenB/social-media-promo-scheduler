@@ -109,6 +109,8 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 | LinkedIn PDF carousel | Done | Auto-assemble multi-image LinkedIn posts into PDF via pdf-lib at publish time (#65) |
 | lnk.bio integration | Done | Auto-create link-in-bio entry after Instagram publish (The Intersect, hardcoded — #68 for per-brand) |
 | Platform aspect crop | Done | Instagram/Threads max 1.91:1 enforced via center-crop to 16:9 |
+| Failed post handling | Done | Retry (reset to Approved, clear Zernio state) and Delete (blob/short.io cleanup) in list + detail views |
+| Zernio schedule sync | Done | Sync button on timeline fetches dates/statuses from Zernio → updates Airtable |
 
 **Campaign types for Phase I:**
 - Newsletter (Curated.co) — primary development target
