@@ -502,6 +502,17 @@ export default function CampaignDetailPage() {
     } catch {}
   };
 
+  const quickUnapprove = async (postId: string) => {
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Pending" }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {}
+  };
+
   const quickRetry = async (postId: string) => {
     try {
       await fetch(`/api/posts/${postId}`, {
@@ -1361,6 +1372,7 @@ export default function CampaignDetailPage() {
                           onClick={() => setSelectedPost(post)}
                           onApprove={() => quickApprove(post.id)}
                           onDismiss={() => quickDismiss(post.id)}
+                          onUnapprove={() => quickUnapprove(post.id)}
                           onRetry={() => quickRetry(post.id)}
                           onDelete={() => quickDelete(post.id)}
                         />
@@ -1591,6 +1603,7 @@ function CampaignPostRow({
   onClick,
   onApprove,
   onDismiss,
+  onUnapprove,
   onRetry,
   onDelete,
 }: {
@@ -1599,6 +1612,7 @@ function CampaignPostRow({
   onClick: () => void;
   onApprove?: () => void;
   onDismiss?: () => void;
+  onUnapprove?: () => void;
   onRetry?: () => void;
   onDelete?: () => void;
 }) {
@@ -1702,6 +1716,20 @@ function CampaignPostRow({
               className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50 hover:text-destructive transition-colors"
             >
               Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Approved post actions — step back to Pending for re-review */}
+        {post.status === "Approved" && (
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={onUnapprove}
+              className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50 hover:text-amber-600 transition-colors"
+              title="Return to Pending for review"
+            >
+              <RotateCcw className="mr-1 h-3 w-3" />
+              Unapprove
             </button>
           </div>
         )}
@@ -2860,6 +2888,24 @@ function PostDetailView({
                   >
                     <Clock className="mr-1 h-3 w-3" />
                     Schedule
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground"
+                    onClick={() => {
+                      fetch(`/api/posts/${post.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ status: "Pending" }),
+                      }).then(() => {
+                        queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                        toast.success("Post returned to Pending");
+                      });
+                    }}
+                  >
+                    <RotateCcw className="mr-1 h-3 w-3" />
+                    Unapprove
                   </Button>
                 </div>
               )}

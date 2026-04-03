@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { deleteShortLinks } from "@/lib/short-io";
+import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
 import type { Campaign, Post, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -250,7 +251,7 @@ export async function DELETE(
     }
 
     // Delete all linked posts first
-    const allPosts = await listRecords<{ Campaign: string[]; "Short URL": string }>("Posts", {});
+    const allPosts = await listRecords<{ Campaign: string[]; "Short URL": string; "Image URL": string; "Media URLs": string }>("Posts", {});
     const linkedPosts = allPosts.filter(
       (r) => r.fields.Campaign && r.fields.Campaign.includes(id)
     );
@@ -262,6 +263,25 @@ export async function DELETE(
     if (shortUrls.length > 0) {
       const deleted = await deleteShortLinks(shortUrls, brand);
       console.log(`[delete] Deleted ${deleted}/${shortUrls.length} Short.io links`);
+    }
+
+    // Clean up Vercel Blob images
+    let blobsDeleted = 0;
+    for (const post of linkedPosts) {
+      const imageUrl = post.fields["Image URL"] || "";
+      const mediaUrls = (post.fields["Media URLs"] || "").split("\n").filter((u) => u.trim());
+      const allUrls = [imageUrl, ...mediaUrls].filter((u) => u && isBlobUrl(u));
+      for (const url of allUrls) {
+        try {
+          await deleteImage(url);
+          blobsDeleted++;
+        } catch (err) {
+          console.warn(`[delete] Failed to delete blob: ${url}`, err);
+        }
+      }
+    }
+    if (blobsDeleted > 0) {
+      console.log(`[delete] Deleted ${blobsDeleted} Vercel Blob images`);
     }
 
     for (const post of linkedPosts) {
