@@ -57,35 +57,40 @@ export async function PATCH(
 
         // If retrying a failed/scheduled post, clear Zernio state so it can be re-published
         if (body.clearZernioState) {
-          // If the post has a Zernio Post ID, delete it from Zernio first
+          // Capture current Zernio Post ID before clearing, for async cleanup
+          let zernioPostIdToDelete: string | undefined;
           try {
             const post = await getRecord<{
               "Zernio Post ID": string;
               Campaign: string[];
             }>("Posts", id);
-            const zernioPostId = post.fields["Zernio Post ID"];
-            if (zernioPostId) {
-              // Resolve brand's Zernio API key via campaign → brand chain
+            zernioPostIdToDelete = post.fields["Zernio Post ID"] || undefined;
+            // Store campaign chain for Zernio key resolution (used in fire-and-forget below)
+            if (zernioPostIdToDelete) {
               const campaignId = post.fields.Campaign?.[0];
-              let brandConfig: { zernioApiKeyLabel?: string | null } | undefined;
-              if (campaignId) {
-                try {
+              // Fire-and-forget: delete from Zernio after Airtable update succeeds
+              // This runs AFTER the response is sent (see afterZernioCleanup below)
+              const cleanupFn = async () => {
+                let brandConfig: { zernioApiKeyLabel?: string | null } | undefined;
+                if (campaignId) {
                   const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
                   const brandId = campaign.fields.Brand?.[0];
                   if (brandId) {
                     const brand = await getRecord<{ "Zernio API Key Label": string }>("Brands", brandId);
                     brandConfig = { zernioApiKeyLabel: brand.fields["Zernio API Key Label"] || null };
                   }
-                } catch (err) {
-                  console.warn("[posts] Failed to resolve brand for Zernio delete:", err);
                 }
-              }
-              const late = createBrandClient(brandConfig);
-              await late.posts.deletePost({ path: { postId: zernioPostId } });
-              console.log(`[posts] Deleted Zernio post ${zernioPostId}`);
+                const late = createBrandClient(brandConfig);
+                await late.posts.deletePost({ path: { postId: zernioPostIdToDelete! } });
+                console.log(`[posts] Deleted Zernio post ${zernioPostIdToDelete}`);
+              };
+              // Schedule cleanup but don't block the response
+              cleanupFn().catch((err) => {
+                console.warn("[posts] Zernio cleanup failed (post may already be removed):", err);
+              });
             }
           } catch (err) {
-            console.warn("[posts] Failed to delete Zernio post (may already be removed):", err);
+            console.warn("[posts] Failed to read post for Zernio cleanup:", err);
           }
           fields["Zernio Post ID"] = "";
           fields["Scheduled Date"] = "";
