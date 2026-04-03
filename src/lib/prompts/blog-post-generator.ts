@@ -149,6 +149,10 @@ export interface UserPromptParams {
   platforms: string[];
   postsPerPlatform: number;
   imageCount: number;
+  /** Offset for variant numbering in batched generation (0-based).
+   *  Batch 1: variantOffset=0, Batch 2: variantOffset=2, etc.
+   *  Controls which sections are assigned to this batch. */
+  variantOffset?: number;
 }
 
 export function buildUserPrompt(params: UserPromptParams): string {
@@ -201,10 +205,14 @@ ${blogData.author ? `Author: ${blogData.author}` : ""}
 ${preamble?.content ? `<hero_content>\n${preamble.content.slice(0, 800)}\n</hero_content>\n\n` : ""}${sectionXml}
 </blog_post_sections>`;
 
-    // Build explicit variant→section assignments to guarantee full coverage
+    // Build explicit variant→section assignments to guarantee full coverage.
+    // variantOffset shifts the starting variant number for batched generation
+    // so each batch covers different sections.
+    const offset = params.variantOffset || 0;
     const sectionAssignments: string[] = [];
     for (let v = 1; v <= postsPerPlatform; v++) {
-      const sectionIdx = ((v - 1) % contentSections.length) + 1;
+      const globalVariant = offset + v;
+      const sectionIdx = ((globalVariant - 1) % contentSections.length) + 1;
       const heading = contentSections[sectionIdx - 1]?.heading?.replace(/\*\*/g, "").replace(/\u200B/g, "").trim() || `Section ${sectionIdx}`;
       sectionAssignments.push(`  Variant ${v} → Section ${sectionIdx}: ${heading}`);
     }

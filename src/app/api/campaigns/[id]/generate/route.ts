@@ -378,6 +378,9 @@ export async function POST(
   const platformsParam = url.searchParams.get("platforms"); // comma-separated
   const maxPerPlatformParam = url.searchParams.get("maxPerPlatform");
 
+  const modeParam = url.searchParams.get("mode"); // "additive" or null
+  const isAdditive = modeParam === "additive";
+
   const selectedPlatforms = platformsParam
     ? platformsParam.split(",").filter((p) => TARGET_PLATFORMS.includes(p))
     : TARGET_PLATFORMS;
@@ -391,6 +394,17 @@ export async function POST(
     async start(controller) {
       const totalSteps = 7;
 
+      // SSE keepalive: send a comment every 15s to prevent connection timeout
+      // during long Claude API calls
+      const keepalive = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          // Stream already closed
+          clearInterval(keepalive);
+        }
+      }, 15_000);
+
       try {
         // ── Step 1: Load campaign ──────────────────────────────────
         sendEvent(controller, encoder, {
@@ -401,17 +415,30 @@ export async function POST(
         const campaign = await getRecord<CampaignFields>("Campaigns", campaignId);
         const fields = campaign.fields;
 
-        if (fields.Status !== "Draft") {
-          sendEvent(controller, encoder, {
-            step: 1, totalSteps, status: "error",
-            message: `Campaign is in "${fields.Status}" status — can only generate from Draft`,
-          });
-          controller.close();
-          return;
+        if (isAdditive) {
+          if (fields.Status !== "Active" && fields.Status !== "Review") {
+            sendEvent(controller, encoder, {
+              step: 1, totalSteps, status: "error",
+              message: `Campaign is in "${fields.Status}" status — additive generation requires Active or Review`,
+            });
+            controller.close();
+            return;
+          }
+        } else {
+          if (fields.Status !== "Draft") {
+            sendEvent(controller, encoder, {
+              step: 1, totalSteps, status: "error",
+              message: `Campaign is in "${fields.Status}" status — can only generate from Draft`,
+            });
+            controller.close();
+            return;
+          }
         }
 
-        // Update status to Scraping
-        await updateRecord("Campaigns", campaignId, { Status: "Scraping" });
+        // Update status to Scraping (skip in additive mode — campaign stays Active/Review)
+        if (!isAdditive) {
+          await updateRecord("Campaigns", campaignId, { Status: "Scraping" });
+        }
 
         sendEvent(controller, encoder, {
           step: 1, totalSteps, status: "success",
@@ -490,64 +517,95 @@ export async function POST(
           message: `Loaded settings for: ${selectedPlatforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")}`,
         });
 
-        // ── Step 4: Scrape content ──────────────────────────────
+        // ── Step 4: Scrape content (or reuse cache in additive mode) ──
         const isNewsletter = fields.Type === "Newsletter";
         const isEventType = fields.Type === "Event" || fields.Type === "Open Call";
         const isExhibition = fields.Type === "Exhibition";
 
-        sendEvent(controller, encoder, {
-          step: 4, totalSteps, status: "running",
-          message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : "blog post"} content...`,
-        });
+        // Always re-scrape to preserve section structure for image-entity matching.
+        // Cached scrape data doesn't include sections, which breaks per-story image assignment.
+        const hasCachedScrape = false;
 
-        const blogData = isExhibition
-          ? await scrapeExhibition(fields.URL)
-          : isEventType
-            ? await scrapeEvent(fields.URL)
-            : isNewsletter
-              ? await scrapeNewsletter(fields.URL)
-              : await scrapeBlogPost(fields.URL);
-
-        // Scrape additional URLs if present
+        let blogData: ScrapedBlogData;
         let supplementalContent = "";
         const additionalUrls = (fields["Additional URLs"] || "").split("\n").filter((u: string) => u.trim());
-        if (additionalUrls.length > 0) {
+
+        if (hasCachedScrape) {
           sendEvent(controller, encoder, {
             step: 4, totalSteps, status: "running",
-            message: `Scraping ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}...`,
+            message: "Using cached content (skipping scrape)...",
           });
 
-          // Build entity set from primary page for supplemental image filtering.
-          // Only supplemental images whose alt text or filename matches an entity
-          // from the primary page are merged — this prevents sponsor headshots,
-          // venue stock photos, etc. from polluting the image pool.
-          const primaryEntities = extractEntitiesFromContent(blogData);
+          let cachedImages: ScrapedImage[] = [];
+          try {
+            cachedImages = JSON.parse(fields["Scraped Images"]);
+          } catch { /* fall through to empty */ }
 
-          for (const addUrl of additionalUrls) {
-            try {
-              const supplemental = await scrapeSupplemental(addUrl.trim());
-              supplementalContent += `\n\n<source url="${addUrl.trim()}" title="${supplemental.title}">\n${supplemental.content}\n</source>`;
+          blogData = {
+            title: fields.Name || "",
+            description: "",
+            content: fields["Scraped Content"],
+            images: cachedImages,
+            sections: [],
+            heroImage: null,
+            ogImage: fields["Image URL"] || null,
+            author: null,
+            publishDate: null,
+            url: fields.URL,
+          };
+        } else {
+          sendEvent(controller, encoder, {
+            step: 4, totalSteps, status: "running",
+            message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : "blog post"} content...`,
+          });
 
-              // Only merge supplemental images that match primary page entities
-              for (const img of supplemental.images) {
-                const isDuplicate = blogData.images.some(
-                  (existing) => existing.url.split("?")[0] === img.url.split("?")[0]
-                );
-                if (isDuplicate) continue;
+          blogData = isExhibition
+            ? await scrapeExhibition(fields.URL)
+            : isEventType
+              ? await scrapeEvent(fields.URL)
+              : isNewsletter
+                ? await scrapeNewsletter(fields.URL)
+                : await scrapeBlogPost(fields.URL);
 
-                if (imageMatchesPrimaryEntities(img, primaryEntities)) {
-                  blogData.images.push(img);
+          // Scrape additional URLs if present
+          if (additionalUrls.length > 0) {
+            sendEvent(controller, encoder, {
+              step: 4, totalSteps, status: "running",
+              message: `Scraping ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}...`,
+            });
+
+            // Build entity set from primary page for supplemental image filtering.
+            // Only supplemental images whose alt text or filename matches an entity
+            // from the primary page are merged — this prevents sponsor headshots,
+            // venue stock photos, etc. from polluting the image pool.
+            const primaryEntities = extractEntitiesFromContent(blogData);
+
+            for (const addUrl of additionalUrls) {
+              try {
+                const supplemental = await scrapeSupplemental(addUrl.trim());
+                supplementalContent += `\n\n<source url="${addUrl.trim()}" title="${supplemental.title}">\n${supplemental.content}\n</source>`;
+
+                // Only merge supplemental images that match primary page entities
+                for (const img of supplemental.images) {
+                  const isDuplicate = blogData.images.some(
+                    (existing) => existing.url.split("?")[0] === img.url.split("?")[0]
+                  );
+                  if (isDuplicate) continue;
+
+                  if (imageMatchesPrimaryEntities(img, primaryEntities)) {
+                    blogData.images.push(img);
+                  }
                 }
+              } catch (err) {
+                console.warn(`[generate] Failed to scrape supplemental URL ${addUrl}:`, err);
               }
-            } catch (err) {
-              console.warn(`[generate] Failed to scrape supplemental URL ${addUrl}:`, err);
             }
           }
         }
 
-        // Store scraped data on campaign record
+        // Store scraped data on campaign record (skip status change in additive mode)
         await updateRecord("Campaigns", campaignId, {
-          Status: "Generating",
+          ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
           "Scraped Images": JSON.stringify(blogData.images),
         });
@@ -669,46 +727,63 @@ export async function POST(
           const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
           const postsPerPlatform = perPlatformCounts[platform] || 1;
 
-          sendEvent(controller, encoder, {
-            step: 5, totalSteps, status: "running",
-            message: `Generating ${postsPerPlatform} ${platformName} post${postsPerPlatform > 1 ? "s" : ""} (${i + 1}/${selectedPlatforms.length})...`,
-            detail: `${allGeneratedPosts.length} posts generated so far`,
-          });
+          // Generate in batches to avoid API timeouts and show progress.
+          // Normal generation: no batching (single call, proven reliable).
+          // Additive generation: batch by 2 to avoid SSE connection timeout.
+          const BATCH_SIZE = isAdditive ? 2 : postsPerPlatform;
+          const totalBatches = Math.ceil(postsPerPlatform / BATCH_SIZE);
+          const platformPosts: import("@/lib/anthropic").GeneratedPost[] = [];
 
-          // Use dynamic prompt composition if Airtable rules are available,
-          // otherwise fall back to hardcoded prompts from blog-post-generator.ts
-          const systemPrompt = generationRules.length > 0
-            ? composeSystemPrompt(generationRules)
-            : SYSTEM_PROMPT;
+          for (let batch = 0; batch < totalBatches; batch++) {
+            const batchCount = Math.min(BATCH_SIZE, postsPerPlatform - platformPosts.length);
 
-          const userPrompt = campaignTypeRule
-            ? composeUserPrompt({
-                blogData,
-                brandVoice,
-                editorialDirection: fields["Editorial Direction"] || "",
-                platformSettings: formattedSettings,
-                platforms: [platform],
-                postsPerPlatform,
-                imageCount: contentImages.length,
-                campaignTypeRule,
-                eventDate: fields["Event Date"] || null,
-                eventDetails: fields["Event Details"] || null,
-                supplementalContent: supplementalContent || null,
-                eventData: eventData as Record<string, string | null> | null,
-              })
-            : buildUserPrompt({
-                blogData,
-                brandVoice,
-                editorialDirection: fields["Editorial Direction"] || "",
-                platformSettings: formattedSettings,
-                platforms: [platform],
-                postsPerPlatform,
-                imageCount: contentImages.length,
-              });
+            sendEvent(controller, encoder, {
+              step: 5, totalSteps, status: "running",
+              message: `Generating ${platformName} posts (${platformPosts.length + 1}–${platformPosts.length + batchCount} of ${postsPerPlatform})${selectedPlatforms.length > 1 ? ` [platform ${i + 1}/${selectedPlatforms.length}]` : ""}...`,
+              detail: `${allGeneratedPosts.length + platformPosts.length} posts generated so far`,
+            });
 
-          // Scale output tokens: ~400 tokens per post (content + JSON structure) + buffer
-          const estimatedTokens = Math.max(8192, postsPerPlatform * 400 + 2000);
-          const result = await generatePosts(systemPrompt, userPrompt, config, { maxTokens: estimatedTokens });
+            // Use dynamic prompt composition if Airtable rules are available,
+            // otherwise fall back to hardcoded prompts from blog-post-generator.ts
+            const systemPrompt = generationRules.length > 0
+              ? composeSystemPrompt(generationRules)
+              : SYSTEM_PROMPT;
+
+            const variantOffset = platformPosts.length; // 0 for batch 1, 2 for batch 2, etc.
+            const userPrompt = campaignTypeRule
+              ? composeUserPrompt({
+                  blogData,
+                  brandVoice,
+                  editorialDirection: fields["Editorial Direction"] || "",
+                  platformSettings: formattedSettings,
+                  platforms: [platform],
+                  postsPerPlatform: batchCount,
+                  imageCount: contentImages.length,
+                  variantOffset,
+                  campaignTypeRule,
+                  eventDate: fields["Event Date"] || null,
+                  eventDetails: fields["Event Details"] || null,
+                  supplementalContent: supplementalContent || null,
+                  eventData: eventData as Record<string, string | null> | null,
+                })
+              : buildUserPrompt({
+                  blogData,
+                  brandVoice,
+                  editorialDirection: fields["Editorial Direction"] || "",
+                  platformSettings: formattedSettings,
+                  platforms: [platform],
+                  postsPerPlatform: batchCount,
+                  imageCount: contentImages.length,
+                  variantOffset,
+                });
+
+            // Scale output tokens: ~400 tokens per post (content + JSON structure) + buffer
+            const estimatedTokens = Math.max(8192, batchCount * 400 + 2000);
+            const batchResult = await generatePosts(systemPrompt, userPrompt, config, { maxTokens: estimatedTokens });
+            platformPosts.push(...batchResult.posts);
+          }
+
+          const result = { posts: platformPosts };
 
           // ── Image assignment via Claude's imageIndex ─────────
           // Claude selects from the numbered catalog (hero excluded).
@@ -841,14 +916,18 @@ export async function POST(
           savedCount++;
         }
 
-        // Update campaign status to Review
-        await updateRecord("Campaigns", campaignId, {
-          Status: "Review",
-        });
+        // Update campaign status to Review (skip in additive mode — campaign stays Active/Review)
+        if (!isAdditive) {
+          await updateRecord("Campaigns", campaignId, {
+            Status: "Review",
+          });
+        }
 
         sendEvent(controller, encoder, {
           step: 7, totalSteps, status: "success",
-          message: `Saved ${savedCount} posts — campaign ready for review!`,
+          message: isAdditive
+            ? `Generated ${savedCount} additional posts — ready for review!`
+            : `Saved ${savedCount} posts — campaign ready for review!`,
         });
 
         // Final complete event
@@ -861,12 +940,14 @@ export async function POST(
       } catch (error) {
         console.error("Generation pipeline error:", error);
 
-        // Revert campaign status to Draft on error
-        try {
-          await updateRecord("Campaigns", campaignId, { Status: "Draft" });
-        } catch {
-          // If even the revert fails, log and continue
-          console.error("Failed to revert campaign status");
+        // Revert campaign status to Draft on error (skip in additive mode — keep existing status)
+        if (!isAdditive) {
+          try {
+            await updateRecord("Campaigns", campaignId, { Status: "Draft" });
+          } catch {
+            // If even the revert fails, log and continue
+            console.error("Failed to revert campaign status");
+          }
         }
 
         sendEvent(controller, encoder, {
@@ -876,6 +957,7 @@ export async function POST(
         });
       }
 
+      clearInterval(keepalive);
       controller.close();
     },
   });

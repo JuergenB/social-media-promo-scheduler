@@ -213,6 +213,7 @@ export default function CampaignDetailPage() {
   const campaignId = params.id;
   const searchParams = useSearchParams();
   const autoOpenPostId = searchParams.get("postId");
+  const generateMore = searchParams.get("generate") === "more";
   const { data: pageSession } = useSession();
 
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
@@ -270,6 +271,14 @@ export default function CampaignDetailPage() {
       }
     }
   }, [autoOpenPostId, posts, autoOpened]);
+
+  // Auto-open generate panel when ?generate=more is in the URL
+  useEffect(() => {
+    if (generateMore && campaign && (campaign.status === "Active" || campaign.status === "Review")) {
+      setShowGenOptions(true);
+      setActiveTab("posts");
+    }
+  }, [generateMore, campaign]);
 
   // Keep selectedPost in sync with fresh query data (e.g., after regeneration)
   useEffect(() => {
@@ -439,6 +448,16 @@ export default function CampaignDetailPage() {
     return posts.filter((p) => p.status === "Dismissed");
   }, [posts]);
 
+  // Post counts by platform (for additive generation UI)
+  const postCountsByPlatform = useMemo(() => {
+    const counts: Record<string, number> = {};
+    posts.forEach((p) => {
+      const key = p.platform?.toLowerCase().replace("x/twitter", "twitter") || "";
+      if (key) counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [posts]);
+
   // Filtered posts (actionable statuses, optionally filtered by platform + status)
   const filteredPosts = useMemo(() => {
     let result = actionablePosts;
@@ -557,6 +576,9 @@ export default function CampaignDetailPage() {
 
     try {
       const genParams = new URLSearchParams();
+      if (campaign && (campaign.status === "Active" || campaign.status === "Review")) {
+        genParams.set("mode", "additive");
+      }
       if (genPlatforms.size > 0) {
         genParams.set("platforms", Array.from(genPlatforms).join(","));
       }
@@ -853,7 +875,7 @@ export default function CampaignDetailPage() {
               onGenerate={handleGenerate}
               isGenerating={isGenerating}
             />
-            {campaign.status === "Draft" && !isGenerating && (
+            {(campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -867,7 +889,7 @@ export default function CampaignDetailPage() {
           </div>
 
           {/* Generation options — platform selection + test mode */}
-          {showGenOptions && campaign.status === "Draft" && !isGenerating && (
+          {showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
             <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
               <div>
                 <Label className="text-xs font-medium text-muted-foreground mb-2 block">
@@ -901,6 +923,9 @@ export default function CampaignDetailPage() {
                           />
                           <PlatformIcon platform={p as Platform} size="xs" showColor />
                           <span className="text-xs">{label}</span>
+                          {postCountsByPlatform[p] > 0 && (
+                            <span className="text-[10px] text-muted-foreground">({postCountsByPlatform[p]})</span>
+                          )}
                         </label>
                       );
                     })
@@ -944,6 +969,19 @@ export default function CampaignDetailPage() {
                     disabled={savingGenOptions}
                   >
                     {savingGenOptions ? "Saving..." : "Save Options"}
+                  </Button>
+                </div>
+              )}
+
+              {/* Generate More button — for Active/Review campaigns */}
+              {campaign && (campaign.status === "Active" || campaign.status === "Review") && (
+                <div className="pt-2 border-t border-border/50">
+                  <Button
+                    onClick={handleGenerate}
+                    disabled={isGenerating || genPlatforms.size === 0}
+                  >
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                    Generate More Posts
                   </Button>
                 </div>
               )}
@@ -1252,8 +1290,8 @@ export default function CampaignDetailPage() {
                       size="sm"
                       className="h-7 text-xs shrink-0"
                       onClick={() => {
-                        // Navigate to generate with append mode
-                        window.location.href = `/dashboard/campaigns/${campaignId}?tab=posts&generate=more`;
+                        setShowGenOptions(true);
+                        setActiveTab("posts");
                       }}
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
