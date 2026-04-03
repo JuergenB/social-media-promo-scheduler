@@ -10,7 +10,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "lucide-react";
+import { Calendar, RefreshCw } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { PLATFORM_COLORS } from "@/lib/late-api/types";
 import type { Post } from "@/lib/airtable/types";
 
@@ -19,6 +20,8 @@ interface CampaignTimelineProps {
   campaignStartDate: Date;
   durationDays: number;
   campaignId: string;
+  onSync?: () => void;
+  isSyncing?: boolean;
 }
 
 /** Map Airtable platform names to Zernio platform IDs for color lookup */
@@ -39,6 +42,8 @@ export function CampaignTimeline({
   campaignStartDate,
   durationDays,
   campaignId,
+  onSync,
+  isSyncing,
 }: CampaignTimelineProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [trackWidth, setTrackWidth] = useState(600);
@@ -135,12 +140,26 @@ export function CampaignTimeline({
               {scheduledPosts.length} post{scheduledPosts.length !== 1 ? "s" : ""} across {durationDays} days
             </span>
           </div>
-          <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
-            <Link href={`/dashboard/calendar?date=${scheduledPosts[0]?.scheduledDate?.split("T")[0] || ""}`}>
-              <Calendar className="h-3 w-3 mr-1" />
-              Calendar
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1">
+            {onSync && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground"
+                onClick={onSync}
+                disabled={isSyncing}
+                title="Sync schedule dates from Zernio"
+              >
+                <RefreshCw className={cn("h-3 w-3", isSyncing && "animate-spin")} />
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" className="h-6 text-xs" asChild>
+              <Link href={`/dashboard/calendar?date=${scheduledPosts[0]?.scheduledDate?.split("T")[0] || ""}`}>
+                <Calendar className="h-3 w-3 mr-1" />
+                Calendar
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Timeline track */}

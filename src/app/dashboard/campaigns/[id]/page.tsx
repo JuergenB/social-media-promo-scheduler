@@ -97,6 +97,7 @@ import {
   ArrowLeftRight,
   Layers,
   Link2Off,
+  RefreshCw,
   Send,
   Pipette,
   Eraser,
@@ -219,6 +220,7 @@ export default function CampaignDetailPage() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
   const [showGenOptions, setShowGenOptions] = useState(true);
   const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
@@ -498,6 +500,43 @@ export default function CampaignDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
     } catch {}
+  };
+
+  const quickRetry = async (postId: string) => {
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Approved", clearZernioState: true }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {}
+  };
+
+  const quickDelete = async (postId: string) => {
+    try {
+      await fetch(`/api/posts/${postId}`, { method: "DELETE" });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {}
+  };
+
+  const syncWithZernio = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/sync`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      await queryClient.refetchQueries({ queryKey: ["campaign", campaignId] });
+      if (data.updated > 0) {
+        toast.success(`Synced ${data.updated} post${data.updated === 1 ? "" : "s"} with Zernio`);
+      } else {
+        toast.success("All posts are in sync with Zernio");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // ── Generate posts handler (SSE) ─────────────────────────────────────
@@ -1130,6 +1169,8 @@ export default function CampaignDetailPage() {
                   campaignStartDate={campaign.startDate ? new Date(campaign.startDate + "T00:00:00") : new Date()}
                   durationDays={campaign.durationDays}
                   campaignId={campaignId}
+                  onSync={syncWithZernio}
+                  isSyncing={isSyncing}
                 />
               )}
 
@@ -1320,6 +1361,8 @@ export default function CampaignDetailPage() {
                           onClick={() => setSelectedPost(post)}
                           onApprove={() => quickApprove(post.id)}
                           onDismiss={() => quickDismiss(post.id)}
+                          onRetry={() => quickRetry(post.id)}
+                          onDelete={() => quickDelete(post.id)}
                         />
                       ))}
                     </div>
@@ -1548,12 +1591,16 @@ function CampaignPostRow({
   onClick,
   onApprove,
   onDismiss,
+  onRetry,
+  onDelete,
 }: {
   post: Post;
   campaignStatus: CampaignStatus;
   onClick: () => void;
   onApprove?: () => void;
   onDismiss?: () => void;
+  onRetry?: () => void;
+  onDelete?: () => void;
 }) {
   const [thumbLightbox, setThumbLightbox] = useState(false);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
@@ -1655,6 +1702,26 @@ function CampaignPostRow({
               className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50 hover:text-destructive transition-colors"
             >
               Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Failed post actions */}
+        {post.status === "Failed" && (
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={onRetry}
+              className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors"
+            >
+              <RotateCcw className="mr-1 h-3 w-3" />
+              Retry
+            </button>
+            <button
+              onClick={onDelete}
+              className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50 hover:text-destructive transition-colors"
+            >
+              <Trash2 className="mr-1 h-3 w-3" />
+              Delete
             </button>
           </div>
         )}
@@ -2803,6 +2870,44 @@ function PostDetailView({
               <Send className="mr-1 h-3 w-3" />
               Scheduled
             </Badge>
+          )}
+          {post.status === "Failed" && (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  fetch(`/api/posts/${post.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ status: "Approved", clearZernioState: true }),
+                  }).then(() => {
+                    queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                    toast.success("Post reset to Approved — ready to re-publish");
+                  });
+                }}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                Retry
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  if (confirm("Delete this failed post?")) {
+                    fetch(`/api/posts/${post.id}`, { method: "DELETE" }).then(() => {
+                      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                      toast.success("Post deleted");
+                      onClose();
+                    });
+                  }
+                }}
+              >
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </div>
           )}
           {post.status === "Dismissed" && (
             <Button
