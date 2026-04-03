@@ -18,6 +18,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { Logo, ErrorBoundary } from "@/components/shared";
 import {
@@ -37,6 +44,7 @@ import {
   ChevronRight,
   Check,
   ExternalLink,
+  MoreHorizontal,
 } from "lucide-react";
 
 const campaignNav = [
@@ -158,6 +166,7 @@ export default function DashboardLayout({
   const { currentBrand, brands, switchBrand } = useBrand();
   const isOnSettingsPage = pathname.startsWith("/dashboard/settings");
   const [settingsExpanded, setSettingsExpanded] = useState(isOnSettingsPage);
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
   // Auto-expand when navigating to a settings page
   useEffect(() => {
     if (isOnSettingsPage) setSettingsExpanded(true);
@@ -426,6 +435,62 @@ export default function DashboardLayout({
               </Link>
             );
           })}
+
+          {/* More tab — opens sheet with Accounts + Settings */}
+          <Sheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen}>
+            <SheetTrigger asChild>
+              <button
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 px-3 py-2 transition-colors",
+                  (pathname.startsWith("/dashboard/accounts") || pathname.startsWith("/dashboard/settings"))
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                )}
+              >
+                <MoreHorizontal className="h-5 w-5" />
+                <span className="text-[10px] font-medium">More</span>
+              </button>
+            </SheetTrigger>
+            <SheetContent side="bottom" className="rounded-t-xl pb-safe">
+              <SheetHeader className="pb-2">
+                <SheetTitle className="text-sm">More</SheetTitle>
+              </SheetHeader>
+              <div className="space-y-1">
+                <Link
+                  href="/dashboard/accounts"
+                  onClick={() => setMoreSheetOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                    pathname.startsWith("/dashboard/accounts")
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                >
+                  <Users className="h-4 w-4" />
+                  Accounts
+                </Link>
+                <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  Settings
+                </div>
+                {settingsSubNav.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMoreSheetOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
+                      (pathname === item.href || pathname.startsWith(item.href + "/"))
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
       </nav>
     </div>
