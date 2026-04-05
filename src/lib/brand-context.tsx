@@ -48,12 +48,19 @@ export function BrandProvider({ children }: { children: ReactNode }) {
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
 
-  const { data: session } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  const isSessionReady = sessionStatus === "authenticated";
   const allowedBrandIds = session?.user?.allowedBrandIds as string[] | undefined;
   const defaultBrandId = session?.user?.defaultBrandId as string | null | undefined;
   const isSuperAdmin = session?.user?.role === "super-admin";
 
-  const { data, isLoading } = useQuery<{ brands: Brand[] }>({
+  // Only fetch brands once the session is authenticated — the /api/brands
+  // endpoint requires a valid session cookie, which isn't available on the
+  // first render after login.  Without this gate the query fires before the
+  // cookie is set, gets an empty/error response, and the dashboard shows
+  // "Select a brand" for up to a minute until a window refocus triggers a
+  // refetch.
+  const { data, isLoading: isBrandsLoading } = useQuery<{ brands: Brand[] }>({
     queryKey: ["brands"],
     queryFn: async () => {
       const res = await fetch("/api/brands");
@@ -61,6 +68,7 @@ export function BrandProvider({ children }: { children: ReactNode }) {
       return res.json();
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: isSessionReady,
   });
 
   const allBrands = data?.brands ?? [];
@@ -94,6 +102,11 @@ export function BrandProvider({ children }: { children: ReactNode }) {
 
   const currentBrand =
     brands.find((b) => b.id === selectedBrandId) ?? brands[0] ?? null;
+
+  // isLoading = true while session is loading OR brands are being fetched for
+  // the first time.  This prevents consumers from rendering "no brand" states
+  // while the data is still in flight.
+  const isLoading = sessionStatus === "loading" || (isSessionReady && isBrandsLoading);
 
   const queryClient = useQueryClient();
   const { setDefaultProfileId } = useAppStore();

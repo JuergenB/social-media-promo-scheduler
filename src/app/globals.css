@@ -213,3 +213,79 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
 }
+
+/* Lightbox — rendered inside Radix Dialog, uses fixed positioning */
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  user-select: none;
+}
+
+.lightbox-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 90vw;
+  max-height: 90vh;
+}
+
+.lightbox-img {
+  max-width: 80vw;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.lightbox-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10001;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 9999px;
+  padding: 8px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.lightbox-close:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.lightbox-nav {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10001;
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  border-radius: 9999px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.lightbox-nav:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+.lightbox-prev { left: 16px; }
+.lightbox-next { right: 16px; }
+
+/* Dark scrollbar for carousel preview on dark background */
+.carousel-dark-scroll::-webkit-scrollbar-thumb {
+  background: #52525b;
+  border-radius: 9999px;
+}
+.carousel-dark-scroll::-webkit-scrollbar-thumb:hover {
+  background: #71717a;
+}

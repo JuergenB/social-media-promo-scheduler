@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
@@ -167,15 +167,15 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   Custom: "Create a custom campaign with manual configuration for content types not covered by other presets. (Coming soon)",
 };
 
-const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  Draft: "secondary",
-  Scraping: "outline",
-  Generating: "outline",
-  Review: "default",
-  Active: "default",
-  Completed: "secondary",
-  Archived: "secondary",
-  Failed: "destructive",
+const STATUS_STYLES: Record<string, string> = {
+  Draft: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  Scraping: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  Generating: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  Review: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  Active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  Completed: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  Archived: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500",
+  Failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 const POST_STATUS_CONFIG: Record<
@@ -839,8 +839,8 @@ export default function CampaignDetailPage() {
               </a>
             </div>
             <Badge
-              variant={STATUS_VARIANTS[campaign.status] || "secondary"}
-              className="shrink-0"
+              variant="outline"
+              className={`shrink-0 border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
             >
               {campaign.status}
             </Badge>
@@ -1677,7 +1677,6 @@ function CampaignPostRow({
   onDelete?: () => void;
   onUnschedule?: () => void;
 }) {
-  const [thumbLightbox, setThumbLightbox] = useState(false);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const platformLower = toPlatformId(post.platform);
 
@@ -1694,20 +1693,16 @@ function CampaignPostRow({
       className="w-full text-left hover:bg-accent/50 transition-colors cursor-pointer"
     >
       <div className="px-4 py-3 flex items-start gap-3">
-        {/* Image thumbnail — click to preview full image */}
+        {/* Image thumbnail — clicking opens post detail (same as clicking anywhere on the row) */}
         {post.imageUrl ? (
           <div
-            className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-muted relative group cursor-zoom-in"
-            onClick={(e) => { e.stopPropagation(); setThumbLightbox(true); }}
+            className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-muted relative group"
           >
             <img
               src={post.imageUrl}
               alt=""
               className="h-full w-full object-cover"
             />
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-              <Maximize2 className="h-3 w-3 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
-            </div>
             {/* Multi-image count badge */}
             {totalImages > 1 && (
               <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-medium px-1 py-0.5 rounded flex items-center gap-0.5">
@@ -1722,25 +1717,6 @@ function CampaignPostRow({
           </div>
         )}
 
-        {/* Thumbnail lightbox */}
-        {post.imageUrl && thumbLightbox && (
-          <div
-            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
-            onClick={(e) => { e.stopPropagation(); setThumbLightbox(false); }}
-          >
-            <button
-              onClick={(e) => { e.stopPropagation(); setThumbLightbox(false); }}
-              className="absolute top-4 right-4 text-white/80 hover:text-white z-[101]"
-            >
-              <X className="h-6 w-6" />
-            </button>
-            <img
-              src={post.imageUrl}
-              alt=""
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-pointer"
-            />
-          </div>
-        )}
 
         {/* Content */}
         <div className="flex-1 min-w-0">
@@ -1833,6 +1809,32 @@ function CampaignPostRow({
   );
 }
 
+/** Debounced wheel handler — one trackpad swipe = one image change */
+let _wheelCooldown = false;
+function wheelNav(delta: number, onPrev: () => void, onNext: () => void) {
+  if (_wheelCooldown) return;
+  if (delta > 0) onNext(); else onPrev();
+  _wheelCooldown = true;
+  setTimeout(() => { _wheelCooldown = false; }, 300);
+}
+
+/** Keyboard handler for lightbox — uses window listener to bypass Radix focus trap */
+function LightboxKeyHandler({ imageCount, onPrev, onNext, onClose }: {
+  imageCount: number; onPrev: () => void; onNext: () => void; onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { onClose(); return; }
+      if (imageCount <= 1) return;
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); onPrev(); }
+      else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); onNext(); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+  return null;
+}
+
 function PostDetailView({
   post,
   posts,
@@ -1864,6 +1866,9 @@ function PostDetailView({
   // Derived URL array for backward-compatible consumers
   const mediaImages = mediaItems.map((i) => i.url);
 
+  // Track slide state locally (so UI updates immediately before query refetch)
+  const [slidesLocalState, setSlidesLocalState] = useState<"applied" | "reset" | null>(null);
+
   // Reset state when navigating between posts
   const [prevPostId, setPrevPostId] = useState(post.id);
   if (prevPostId !== post.id) {
@@ -1872,6 +1877,7 @@ function PostDetailView({
     setImageUrlInput("");
     setMediaItems(buildMediaItems(post));
     setIsDragging(false);
+    setSlidesLocalState(null);
   }
 
   const platformLower = toPlatformId(post.platform);
@@ -1982,7 +1988,13 @@ function PostDetailView({
   const [carouselPreviews, setCarouselPreviews] = useState<Array<{ dataUri: string; caption: string; frameColor: { r: number; g: number; b: number } }> | null>(null);
   const [perSlideOptions, setPerSlideOptions] = useState<(SlideOpt | undefined)[]>([]);
   const [eyedropperMode, setEyedropperMode] = useState<{ slideIndex: number; mode: "frame" | "removeBg" } | null>(null);
-  const canGenerateSlides = (platformLower === "instagram" || platformLower === "linkedin") && mediaImages.length >= 2 && mediaItems.some((m) => m.caption);
+  const slidePlatforms = ["instagram", "threads", "linkedin", "bluesky"];
+  const slidesApplied = slidesLocalState === "applied" ? true
+    : slidesLocalState === "reset" ? false
+    : !!post.originalMedia;
+  const canGenerateSlides = slidePlatforms.includes(platformLower) && mediaImages.length >= 2
+    && !slidesApplied
+    && (platformLower === "bluesky" || mediaItems.some((m) => m.caption));
 
   // Get pixel color from a click on the rendered preview image
   const getPixelColor = (e: React.MouseEvent<HTMLImageElement>): { r: number; g: number; b: number } | null => {
@@ -2058,10 +2070,32 @@ function PostDetailView({
       setCarouselPreviews(null);
       setPerSlideOptions([]);
       setEyedropperMode(null);
+      setSlidesLocalState("applied");
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
       toast.success(`${newItems.length} carousel slides applied`);
     },
     onError: (err) => toast.error(`Apply failed: ${err.message}`),
+  });
+
+  const carouselResetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/carousel-preview`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to reset slides");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const restoredItems: MediaItem[] = data.mediaItems;
+      setMediaItems(restoredItems);
+      setCarouselPreviews(null);
+      setPerSlideOptions([]);
+      setEyedropperMode(null);
+      setSlidesLocalState("reset");
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Original images restored");
+    },
+    onError: (err) => toast.error(`Reset failed: ${err.message}`),
   });
 
   const addImageUrl = (url: string) => {
@@ -2356,10 +2390,11 @@ function PostDetailView({
                   {mediaImages.map((imgUrl, idx) => (
                     <div key={idx} className="shrink-0 snap-start flex flex-col gap-1">
                     <div
-                      className="relative group cursor-pointer rounded-lg overflow-hidden bg-muted w-40 h-40"
+                      className={cn("relative group cursor-pointer rounded-lg overflow-hidden bg-muted", slidesApplied ? "w-40" : "w-40 h-40")}
+                      style={slidesApplied ? { aspectRatio: platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5" } : undefined}
                       onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
                     >
-                      <img src={imgUrl} alt="" className="w-40 h-40 object-cover" />
+                      <img src={imgUrl} alt="" className={cn(slidesApplied ? "w-full h-full object-contain" : "w-40 h-40 object-cover")} />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
                       {/* Reorder buttons */}
                       {!isPublished && (
@@ -2414,7 +2449,8 @@ function PostDetailView({
                         {idx + 1}/{mediaImages.length}
                       </span>
                     </div>
-                    {/* Caption input */}
+                    {/* Caption input — hidden for Bluesky and when slides are applied (captions baked in) */}
+                    {platformLower !== "bluesky" && !slidesApplied && (
                     <input
                       type="text"
                       placeholder="Caption..."
@@ -2426,6 +2462,7 @@ function PostDetailView({
                       readOnly={isPublished}
                       className={cn("w-40 text-[11px] px-1.5 py-1 border border-border rounded bg-background text-foreground truncate", isPublished && "opacity-60 cursor-default")}
                     />
+                    )}
                   </div>
                 ))}
                 </div>
@@ -2443,6 +2480,7 @@ function PostDetailView({
           {/* Always-visible action bar — hidden for published posts */}
           {!isPublished && (
           <div className="flex flex-wrap items-center gap-1.5">
+            {!slidesApplied && (
             <Button
               variant="outline"
               size="sm"
@@ -2453,7 +2491,8 @@ function PostDetailView({
               <Plus className="h-3 w-3 mr-1" />
               Add
             </Button>
-            {mediaImages.length === 1 && (
+            )}
+            {!slidesApplied && mediaImages.length === 1 && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -2467,7 +2506,7 @@ function PostDetailView({
                 Replace
               </Button>
             )}
-            {mediaImages.length >= 1 && optimizeTarget && (
+            {!slidesApplied && mediaImages.length >= 1 && optimizeTarget && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -2490,12 +2529,28 @@ function PostDetailView({
                 className="text-xs text-muted-foreground h-7 px-2"
                 onClick={() => { setPerSlideOptions([]); carouselPreviewMutation.mutate(undefined); }}
                 disabled={carouselPreviewMutation.isPending}
-                title="Generate framed carousel slides with captions (4:5 portrait)"
+                title={`Generate framed carousel slides${platformLower === "bluesky" ? "" : " with captions"} (${platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})`}
               >
                 {carouselPreviewMutation.isPending ? (
                   <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Generating...</>
                 ) : (
                   <><Layers className="h-3 w-3 mr-1" /> Slides</>
+                )}
+              </Button>
+            )}
+            {slidesApplied && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7 px-2"
+                onClick={() => carouselResetMutation.mutate()}
+                disabled={carouselResetMutation.isPending}
+                title="Reset to original images (undo slide generation)"
+              >
+                {carouselResetMutation.isPending ? (
+                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Resetting...</>
+                ) : (
+                  <><RotateCcw className="h-3 w-3 mr-1" /> Reset Slides</>
                 )}
               </Button>
             )}
@@ -2661,35 +2716,29 @@ function PostDetailView({
         </div>
       </div>
 
-      {/* Image lightbox — inside dialog but outside scroll area */}
-      {mediaImages.length > 0 && lightboxOpen && (
-        <div
-          className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center rounded-lg select-none"
-          tabIndex={0}
-          ref={(el) => el?.focus()}
-          onClick={() => setLightboxOpen(false)}
-          onKeyDown={(e) => {
+      {/* Image lightbox — portaled to body to escape dialog transform containing block */}
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent
+          showCloseButton={false}
+          className="!max-w-none !w-screen !h-screen !p-0 !border-none !bg-black/92 !rounded-none flex flex-col items-center justify-center gap-0 !translate-x-0 !translate-y-0 !top-0 !left-0"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onWheel={(e: React.WheelEvent) => {
             if (mediaImages.length <= 1) return;
-            if (e.key === "ArrowLeft") {
-              e.stopPropagation();
-              setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
-            } else if (e.key === "ArrowRight") {
-              e.stopPropagation();
-              setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
-            } else if (e.key === "Escape") {
-              setLightboxOpen(false);
-            }
+            const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            if (Math.abs(delta) < 20) return;
+            wheelNav(
+              delta,
+              () => setLightboxIndex((i) => Math.max(i - 1, 0)),
+              () => setLightboxIndex((i) => Math.min(i + 1, mediaImages.length - 1))
+            );
           }}
-          onTouchStart={(e) => {
-            const touch = e.touches[0];
-            (e.currentTarget as HTMLElement).dataset.touchX = String(touch.clientX);
+          onTouchStart={(e: React.TouchEvent) => {
+            (e.currentTarget as HTMLElement).dataset.touchX = String(e.touches[0].clientX);
           }}
-          onTouchEnd={(e) => {
+          onTouchEnd={(e: React.TouchEvent) => {
             const startX = Number((e.currentTarget as HTMLElement).dataset.touchX);
-            const endX = e.changedTouches[0].clientX;
-            const diff = startX - endX;
+            const diff = startX - e.changedTouches[0].clientX;
             if (Math.abs(diff) < 50 || mediaImages.length <= 1) return;
-            e.stopPropagation();
             if (diff > 0) {
               setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
             } else {
@@ -2697,67 +2746,78 @@ function PostDetailView({
             }
           }}
         >
-          {/* Close */}
+          <DialogTitle className="sr-only">Image Preview</DialogTitle>
+          <LightboxKeyHandler
+            imageCount={mediaImages.length}
+            onPrev={() => setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1))}
+            onNext={() => setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0))}
+            onClose={() => setLightboxOpen(false)}
+          />
+
+          {/* Close button — top right */}
           <button
             onClick={() => setLightboxOpen(false)}
-            className="absolute top-3 right-3 text-white/70 hover:text-white bg-black/40 rounded-full p-1.5"
+            className="absolute top-4 right-4 z-10 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-colors"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
 
-          {/* Nav arrows */}
-          {mediaImages.length > 1 && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
-                }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5 rotate-180" />
-              </button>
-            </>
-          )}
+          {/* Image */}
+          <img
+            src={mediaImages[lightboxIndex]}
+            alt={mediaItems[lightboxIndex]?.caption || `Image ${lightboxIndex + 1}`}
+            className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+            draggable={false}
+          />
 
-          {/* Image + caption + counter */}
-          <div className="flex flex-col items-center max-w-[90%] max-h-[85%] gap-2 overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={mediaImages[lightboxIndex]}
-              alt=""
-              className="max-h-[75vh] object-contain rounded-lg shadow-2xl shrink-0"
-              draggable={false}
-            />
-            {mediaItems[lightboxIndex]?.caption && (
-              <p className="text-white/90 text-sm text-center bg-black/50 px-4 py-1.5 rounded-full max-w-full truncate shrink-0">
+          {/* Bottom bar — caption, arrows, dots */}
+          <div className="flex flex-col items-center gap-2 mt-4">
+            {mediaItems[lightboxIndex]?.caption && !slidesApplied && (
+              <p className="text-white/70 text-sm text-center max-w-md truncate">
                 {mediaItems[lightboxIndex].caption}
               </p>
             )}
             {mediaImages.length > 1 && (
-              <span className="text-white text-sm font-medium bg-black/50 px-3 py-1 rounded-full">
-                {lightboxIndex + 1} / {mediaImages.length}
-              </span>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1))}
+                  className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2.5 transition-colors"
+                >
+                  <ArrowLeft className="h-5 w-5" />
+                </button>
+                <div className="flex items-center gap-2">
+                  {mediaImages.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setLightboxIndex(i)}
+                      className={cn(
+                        "rounded-full transition-all",
+                        i === lightboxIndex
+                          ? "w-2.5 h-2.5 bg-white"
+                          : "w-2 h-2 bg-white/30 hover:bg-white/50"
+                      )}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0))}
+                  className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2.5 transition-colors"
+                >
+                  <ArrowLeft className="h-5 w-5 rotate-180" />
+                </button>
+              </div>
             )}
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
-        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg select-none border border-zinc-700/50">
+        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg select-none border border-zinc-700/50 min-h-[520px]">
           <div className="flex items-center justify-between px-6 py-3 shrink-0">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-white/70" />
-              <span className="text-white font-medium text-sm">Carousel Preview — {carouselPreviews.length} slides ({platformLower === "linkedin" ? "1:1" : "4:5"})</span>
+              <span className="text-white font-medium text-sm">Carousel Preview — {carouselPreviews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})</span>
               {eyedropperMode && (
                 <span className="text-amber-400 text-xs animate-pulse ml-2">
                   {eyedropperMode.mode === "frame" ? "Click slide to pick frame color" : "Click background color to remove"}
@@ -2788,11 +2848,11 @@ function PostDetailView({
               </Button>
             </div>
           </div>
-          <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 pb-4">
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-6 pb-4 carousel-dark-scroll">
             <div className="flex gap-4 h-full items-center">
               {carouselPreviews.map((slide, idx) => (
                 <div key={idx} className="shrink-0 flex flex-col items-center gap-2">
-                  <div className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40" style={{ aspectRatio: platformLower === "linkedin" ? "1/1" : "4/5", height: "min(70vh, 500px)" }}>
+                  <div className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40" style={{ aspectRatio: platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5", height: "min(65vh, 460px)" }}>
                     <img
                       src={slide.dataUri}
                       alt={slide.caption || `Slide ${idx + 1}`}
@@ -2805,7 +2865,7 @@ function PostDetailView({
                       onClick={(e) => handleSlideClick(e, idx)}
                     />
                     {/* Eyedropper tools */}
-                    <div className="absolute top-2 right-2 flex gap-1">
+                    <div className="absolute top-2 right-2 flex gap-1 z-10">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2866,7 +2926,7 @@ function PostDetailView({
                     {/* Frame color swatch */}
                     {slide.frameColor && (
                       <div
-                        className="absolute bottom-2 left-2 w-4 h-4 rounded-full border-2 border-white/50 shadow"
+                        className="absolute bottom-2 left-2 w-4 h-4 rounded-full border-2 border-white/50 shadow z-10"
                         style={{ backgroundColor: `rgb(${slide.frameColor.r},${slide.frameColor.g},${slide.frameColor.b})` }}
                         title={`Frame: rgb(${slide.frameColor.r}, ${slide.frameColor.g}, ${slide.frameColor.b})`}
                       />
@@ -2874,7 +2934,6 @@ function PostDetailView({
                   </div>
                   <span className="text-white/60 text-xs">
                     {idx + 1}/{carouselPreviews.length}
-                    {slide.caption && ` — ${slide.caption.length > 40 ? slide.caption.slice(0, 40) + "…" : slide.caption}`}
                   </span>
                 </div>
               ))}
@@ -3608,7 +3667,7 @@ function CampaignSettingsReadOnly({ campaign }: { campaign: Campaign }) {
             </span>
           </SettingsField>
           <SettingsField label="Status">
-            <Badge variant={STATUS_VARIANTS[campaign.status] || "secondary"}>
+            <Badge variant="outline" className={`border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}>
               {campaign.status}
             </Badge>
           </SettingsField>

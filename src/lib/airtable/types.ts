@@ -138,6 +138,7 @@ export interface Post {
   approvedAt: string;
   zernioPostId: string;
   notes: string;
+  originalMedia: string;
 }
 
 export interface PlatformSetting {

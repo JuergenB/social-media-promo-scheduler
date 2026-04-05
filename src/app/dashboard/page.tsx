@@ -133,7 +133,7 @@ const CAMPAIGN_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline
 // ── Page ───────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { currentBrand } = useBrand();
+  const { currentBrand, isLoading: isBrandLoading } = useBrand();
   const queryClient = useQueryClient();
   const [pipelineWindow, setPipelineWindow] = useState<"30d" | "90d" | "ytd" | "all">("90d");
 
@@ -185,10 +185,20 @@ export default function DashboardPage() {
     },
   });
 
+  // Show loading spinner while session/brands are still loading
+  if (isBrandLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Text className="text-muted-foreground">Loading brands...</Text>
+      </div>
+    );
+  }
+
   if (!currentBrand) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Text>Select a brand to view the dashboard.</Text>
+        <Text>No brands available. Check your account settings.</Text>
       </div>
     );
   }

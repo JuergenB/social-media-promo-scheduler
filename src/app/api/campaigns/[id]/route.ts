@@ -53,6 +53,7 @@ interface PostFields {
   "Approved At": string;
   "Zernio Post ID": string;
   Notes: string;
+  "Original Media": string;
 }
 
 export async function GET(
@@ -134,6 +135,7 @@ export async function GET(
       approvedAt: r.fields["Approved At"] || "",
       zernioPostId: r.fields["Zernio Post ID"] || "",
       notes: r.fields.Notes || "",
+      originalMedia: r.fields["Original Media"] || "",
     }));
 
     return NextResponse.json({ campaign, posts });

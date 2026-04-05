@@ -30,6 +30,7 @@ export async function PATCH(
       fields["Image URL"] = "";
       fields["Media URLs"] = "";
       fields["Image Upload"] = [];
+      fields["Original Media"] = ""; // Clear slide backup when images removed
     } else {
       if (body.imageUrl !== undefined) {
         fields["Image URL"] = body.imageUrl;
@@ -39,6 +40,9 @@ export async function PATCH(
       }
       if (body.mediaCaptions !== undefined) {
         fields["Media Captions"] = body.mediaCaptions;
+      }
+      if (body.originalMedia !== undefined) {
+        fields["Original Media"] = body.originalMedia;
       }
     }
 

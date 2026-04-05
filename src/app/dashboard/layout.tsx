@@ -163,10 +163,12 @@ export default function DashboardLayout({
   const { defaultProfileId, setDefaultProfileId } = useAppStore();
   const { theme, setTheme } = useTheme();
   const { data: profilesData } = useProfiles();
-  const { currentBrand, brands, switchBrand } = useBrand();
+  const { currentBrand, brands, isLoading: isBrandLoading, switchBrand } = useBrand();
   const isOnSettingsPage = pathname.startsWith("/dashboard/settings");
   const [settingsExpanded, setSettingsExpanded] = useState(isOnSettingsPage);
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   // Auto-expand when navigating to a settings page
   useEffect(() => {
     if (isOnSettingsPage) setSettingsExpanded(true);
@@ -266,7 +268,12 @@ export default function DashboardLayout({
             </div>
 
             {/* Brand Switcher */}
-            {brands.length > 0 && (
+            {isBrandLoading ? (
+              <div className="flex items-center gap-2 h-8 px-3 rounded-md border border-border bg-muted/50 animate-pulse">
+                <div className="h-4 w-4 rounded-sm bg-muted-foreground/20" />
+                <div className="hidden sm:block h-3 w-20 rounded bg-muted-foreground/20" />
+              </div>
+            ) : brands.length > 0 && mounted ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2">
@@ -311,12 +318,12 @@ export default function DashboardLayout({
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2">
             {/* Profile Selector */}
-            {profiles.length > 1 && (
+            {profiles.length > 1 && mounted && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="gap-2">
@@ -362,14 +369,14 @@ export default function DashboardLayout({
               aria-label="Toggle theme"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
-              {theme === "dark" ? (
+              {mounted && theme === "dark" ? (
                 <Sun className="h-4 w-4" />
               ) : (
                 <Moon className="h-4 w-4" />
               )}
             </Button>
 
-            <DropdownMenu>
+            {mounted && <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-2">
                   <span className="hidden sm:inline text-sm">{session?.user?.name || "User"}</span>
@@ -402,7 +409,7 @@ export default function DashboardLayout({
                   Sign Out
                 </DropdownMenuItem>
               </DropdownMenuContent>
-            </DropdownMenu>
+            </DropdownMenu>}
           </div>
         </header>
 
@@ -437,7 +444,7 @@ export default function DashboardLayout({
           })}
 
           {/* More tab — opens sheet with Accounts + Settings */}
-          <Sheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen}>
+          {mounted && <Sheet open={moreSheetOpen} onOpenChange={setMoreSheetOpen}>
             <SheetTrigger asChild>
               <button
                 className={cn(
@@ -490,7 +497,7 @@ export default function DashboardLayout({
                 ))}
               </div>
             </SheetContent>
-          </Sheet>
+          </Sheet>}
         </div>
       </nav>
     </div>

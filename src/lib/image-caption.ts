@@ -31,7 +31,9 @@ function getFont(): ArrayBuffer {
 /** Platform-specific slide dimensions. */
 const SLIDE_DIMENSIONS: Record<string, { width: number; height: number }> = {
   instagram: { width: 1080, height: 1350 }, // 4:5 portrait
+  threads:   { width: 1080, height: 1350 }, // 4:5 portrait (same as Instagram)
   linkedin:  { width: 1080, height: 1080 }, // 1:1 square
+  bluesky:   { width: 1080, height: 1080 }, // 1:1 square
 };
 const DEFAULT_DIMENSIONS = SLIDE_DIMENSIONS.instagram;
 
@@ -242,7 +244,9 @@ export async function renderCarouselSlide(
   const dims = SLIDE_DIMENSIONS[platform || "instagram"] || DEFAULT_DIMENSIONS;
   const slideW = dims.width;
   const slideH = dims.height;
-  const captionAreaH = Math.round(slideH * CAPTION_AREA_FRAC);
+  // Bluesky: no caption area — give full slide height to the image
+  const skipCaption = (platform || "").toLowerCase() === "bluesky";
+  const captionAreaH = skipCaption ? 0 : Math.round(slideH * CAPTION_AREA_FRAC);
 
   // Fetch the source image
   const response = await fetch(imageUrl);
@@ -297,8 +301,9 @@ export async function renderCarouselSlide(
     : await resizedImgPipeline.flatten({ background: frame }).jpeg({ quality: 95 }).toBuffer();
 
   // Build caption overlay using Satori (bundles its own font engine — no system fonts needed).
+  // Bluesky doesn't support image captions — skip caption rendering entirely.
   let captionOverlay: Buffer | null = null;
-  if (caption) {
+  if (caption && !skipCaption) {
     captionOverlay = await buildCaptionOverlay(caption, textColor, slideW, captionAreaH);
   }
 

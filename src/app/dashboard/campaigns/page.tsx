@@ -42,15 +42,15 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Custom: Sparkles,
 };
 
-const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  Draft: "secondary",
-  Scraping: "outline",
-  Generating: "outline",
-  Review: "default",
-  Active: "default",
-  Completed: "secondary",
-  Archived: "secondary",
-  Failed: "destructive",
+const STATUS_STYLES: Record<string, string> = {
+  Draft: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  Scraping: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  Generating: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  Review: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  Active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+  Completed: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  Archived: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500",
+  Failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
 function getActionLabel(status: CampaignStatus): { label: string; icon: React.ElementType } | null {
@@ -188,8 +188,8 @@ export default function CampaignsPage() {
                           {displayName}
                         </h3>
                         <Badge
-                          variant={STATUS_VARIANTS[campaign.status] || "secondary"}
-                          className="shrink-0 text-[11px]"
+                          variant="outline"
+                          className={`shrink-0 text-[11px] border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
                         >
                           {campaign.status}
                         </Badge>
