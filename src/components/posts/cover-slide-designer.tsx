@@ -263,7 +263,7 @@ export function CoverSlideDesigner({
     savedData?.fontSizeDeltas || {}
   );
   const [showLogo, setShowLogo] = useState(true);
-  const [showLinkInBio, setShowLinkInBio] = useState(false);
+  const [showLinkInBio, setShowLinkInBio] = useState(platform.toLowerCase() === "instagram");
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
