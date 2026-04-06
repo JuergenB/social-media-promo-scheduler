@@ -84,11 +84,9 @@ function FontSizeControls({
       >
         <Minus className="h-2.5 w-2.5" />
       </button>
-      {current !== 0 && (
-        <span className="text-[9px] text-white/30 min-w-[16px] text-center">
-          {current > 0 ? `+${current}` : current}
-        </span>
-      )}
+      <span className={cn("text-[9px] w-[20px] text-center tabular-nums", current !== 0 ? "text-white/30" : "text-transparent")}>
+        {current > 0 ? `+${current}` : current || "0"}
+      </span>
       <button
         onClick={() => adjust(2)}
         className="text-white/40 hover:text-white/80 p-0.5 rounded hover:bg-zinc-700 transition-colors"
