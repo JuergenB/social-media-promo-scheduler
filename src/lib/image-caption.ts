@@ -1,32 +1,7 @@
 import sharp from "sharp";
 import satori from "satori";
-import { readFileSync } from "fs";
-import { join } from "path";
 import type { MediaItem } from "@/lib/media-items";
-
-/**
- * Load the bundled font file for Satori text rendering.
- * Satori has its own font engine — no system fonts or librsvg needed.
- */
-let _fontData: ArrayBuffer | null = null;
-function getFont(): ArrayBuffer {
-  if (_fontData) return _fontData;
-  try {
-    const fontPath = join(process.cwd(), "public", "fonts", "NotoSans-Regular.ttf");
-    const buf = readFileSync(fontPath);
-    _fontData = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-  } catch {
-    try {
-      const altPath = join(process.cwd(), "node_modules", "next", "dist", "compiled", "@vercel", "og", "noto-sans-v27-latin-regular.ttf");
-      const buf = readFileSync(altPath);
-      _fontData = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
-    } catch {
-      // Empty font — text won't render but won't crash
-      _fontData = new ArrayBuffer(0);
-    }
-  }
-  return _fontData;
-}
+import { getFont } from "@/lib/fonts";
 
 /** Platform-specific slide dimensions. */
 const SLIDE_DIMENSIONS: Record<string, { width: number; height: number }> = {
@@ -105,7 +80,7 @@ function hslToRgb(hsl: HSL): RGB {
 /**
  * Sample the dominant color from the edges of an image buffer.
  */
-async function sampleEdgeColor(imgBuffer: Buffer): Promise<RGB> {
+export async function sampleEdgeColor(imgBuffer: Buffer): Promise<RGB> {
   const meta = await sharp(imgBuffer).metadata();
   const w = meta.width || 100;
   const h = meta.height || 100;

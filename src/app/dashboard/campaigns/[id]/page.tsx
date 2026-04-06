@@ -61,6 +61,8 @@ import {
 import { toast } from "sonner";
 import { compressImage, validateImage } from "@/lib/image-compression";
 import { parseMediaItems, serializeMediaItems, type MediaItem } from "@/lib/media-items";
+import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
+import type { CoverSlideData } from "@/lib/cover-slide-types";
 import {
   ArrowLeft,
   Calendar,
@@ -102,6 +104,7 @@ import {
   Pipette,
   Eraser,
   CalendarX2,
+  LayoutTemplate,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -1848,6 +1851,7 @@ function PostDetailView({
   onClose: () => void;
   onNavigate: (post: Post) => void;
 }) {
+  const { currentBrand } = useBrand();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
@@ -1996,6 +2000,21 @@ function PostDetailView({
     && !slidesApplied
     && (platformLower === "bluesky" || mediaItems.some((m) => m.caption));
 
+  // Cover slide designer state
+  const [showCoverSlideDesigner, setShowCoverSlideDesigner] = useState(false);
+  const [coverSlideKey, setCoverSlideKey] = useState(0);
+  const canAddCoverSlide = slidePlatforms.includes(platformLower) && mediaImages.length >= 1 && post.status !== "Published";
+  const savedCoverSlideData: CoverSlideData | null = (() => {
+    try {
+      if (!post.coverSlideData) return null;
+      const data: CoverSlideData = JSON.parse(post.coverSlideData);
+      // Only treat as "saved" if the applied cover URL is actually the first media item.
+      // Prevents stale data from a previous session that was reset/undone.
+      if (data.appliedUrl && mediaItems[0]?.url !== data.appliedUrl) return null;
+      return data;
+    } catch { return null; }
+  })();
+
   // Get pixel color from a click on the rendered preview image
   const getPixelColor = (e: React.MouseEvent<HTMLImageElement>): { r: number; g: number; b: number } | null => {
     const img = e.currentTarget;
@@ -2013,7 +2032,7 @@ function PostDetailView({
   };
 
   const handleSlideClick = (e: React.MouseEvent<HTMLImageElement>, slideIndex: number) => {
-    if (!eyedropperMode || eyedropperMode.slideIndex !== slideIndex) return;
+    if (!eyedropperMode) return;
     e.stopPropagation();
     const color = getPixelColor(e);
     if (!color) return;
@@ -2301,7 +2320,7 @@ function PostDetailView({
   const nextPost = currentIndex < posts.length - 1 ? posts[currentIndex + 1] : null;
 
   return (
-    <div className="flex flex-col max-h-[90vh] relative">
+    <div className="flex flex-col max-h-[90vh] min-h-[80vh] relative">
       {/* Sticky header — platform + navigation combined */}
       <div className="border-b border-border shrink-0 pr-10">
         <div className="flex items-center gap-2 px-4 py-2.5">
@@ -2520,6 +2539,17 @@ function PostDetailView({
                 ) : (
                   <><Sparkles className="h-3 w-3 mr-1" /> {optimizeTarget.label}</>
                 )}
+              </Button>
+            )}
+            {canAddCoverSlide && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7 px-2"
+                onClick={() => { setCoverSlideKey((k) => k + 1); setShowCoverSlideDesigner(true); }}
+                title="Design a cover slide for this carousel"
+              >
+                <LayoutTemplate className="h-3 w-3 mr-1" /> Cover
               </Button>
             )}
             {canGenerateSlides && (
@@ -2811,30 +2841,90 @@ function PostDetailView({
         </DialogContent>
       </Dialog>
 
+      {/* Cover slide designer modal */}
+      {showCoverSlideDesigner && (
+        <CoverSlideDesigner
+          key={coverSlideKey}
+          postId={post.id}
+          platform={platformLower}
+          brandId={campaign?.brandIds?.[0]}
+          brandHandle={currentBrand?.instagramHandle || ""}
+          brandLogoUrl={currentBrand?.logoTransparentDark || currentBrand?.logoTransparentLight || null}
+          brandLogoLightUrl={currentBrand?.logoTransparentLight || null}
+          brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}
+          brandWebsiteUrl={currentBrand?.websiteUrl || null}
+          savedData={savedCoverSlideData}
+          onApply={(newMediaItems) => {
+            setMediaItems(newMediaItems);
+            setShowCoverSlideDesigner(false);
+            queryClient.invalidateQueries({ queryKey: ["campaign"] });
+          }}
+          onRemove={(restoredItems) => {
+            setMediaItems(restoredItems);
+            setShowCoverSlideDesigner(false);
+            queryClient.invalidateQueries({ queryKey: ["campaign"] });
+          }}
+          onClose={() => setShowCoverSlideDesigner(false)}
+        />
+      )}
+
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
-        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 min-h-[520px]">
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 shrink-0">
+        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden">
+          {/* Header — tools in toolbar, not on slides */}
+          <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-zinc-700/50">
             <div className="flex items-center gap-2 min-w-0">
               <Layers className="h-4 w-4 text-white/70 shrink-0" />
               <span className="text-white font-medium text-sm truncate">{carouselPreviews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})</span>
-              {eyedropperMode && (
-                <span className="text-amber-400 text-xs animate-pulse ml-2 hidden sm:inline">
-                  {eyedropperMode.mode === "frame" ? "Pick frame color" : "Pick BG to remove"}
-                </span>
-              )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Eyedropper tools — apply to whichever slide user clicks */}
               <button
-                className="text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                onClick={() => setEyedropperMode(
+                  eyedropperMode?.mode === "frame" ? null : { slideIndex: -1, mode: "frame" }
+                )}
+                disabled={carouselPreviewMutation.isPending}
+                className={cn(
+                  "flex items-center gap-1 text-white text-[10px] px-2 py-1.5 rounded-full transition-colors",
+                  eyedropperMode?.mode === "frame" ? "bg-amber-500/90" : "bg-zinc-700 hover:bg-zinc-600"
+                )}
+                title="Pick frame color from any slide"
+              >
+                <Pipette className="h-3 w-3" /> <span className="hidden sm:inline">Color</span>
+              </button>
+              <button
+                onClick={() => setEyedropperMode(
+                  eyedropperMode?.mode === "removeBg" ? null : { slideIndex: -1, mode: "removeBg" }
+                )}
+                disabled={carouselPreviewMutation.isPending}
+                className={cn(
+                  "flex items-center gap-1 text-white text-[10px] px-2 py-1.5 rounded-full transition-colors",
+                  eyedropperMode?.mode === "removeBg" ? "bg-amber-500/90" : "bg-zinc-700 hover:bg-zinc-600"
+                )}
+                title="Click background color on any slide to remove it"
+              >
+                <Eraser className="h-3 w-3" /> <span className="hidden sm:inline">Remove BG</span>
+              </button>
+              {perSlideOptions.some(Boolean) && (
+                <button
+                  onClick={() => { setPerSlideOptions([]); carouselPreviewMutation.mutate([]); }}
+                  disabled={carouselPreviewMutation.isPending}
+                  className="flex items-center gap-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] px-2 py-1.5 rounded-full transition-colors"
+                  title="Reset all to auto-detected colors"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                </button>
+              )}
+              <button
+                className="text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors"
                 onClick={() => { setCarouselPreviews(null); setEyedropperMode(null); setPerSlideOptions([]); }}
                 disabled={carouselApplyMutation.isPending}
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
               <Button
                 size="sm"
-                className="bg-white text-black hover:bg-white/90"
+                className="bg-white text-black hover:bg-white/90 text-xs h-7"
                 onClick={() => carouselApplyMutation.mutate()}
                 disabled={carouselApplyMutation.isPending || carouselPreviewMutation.isPending}
               >
@@ -2846,11 +2936,22 @@ function PostDetailView({
               </Button>
             </div>
           </div>
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-6 pb-4 carousel-dark-scroll">
+          {eyedropperMode && (
+            <div className="bg-amber-500/20 text-amber-400 text-xs text-center py-1 shrink-0">
+              {eyedropperMode.mode === "frame" ? "Click any slide to pick a frame color" : "Click a background color on any slide to remove it"}
+            </div>
+          )}
+          {/* Slides — constrained to correct aspect ratio */}
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-3 carousel-dark-scroll">
             <div className="flex gap-4 h-full items-center">
-              {carouselPreviews.map((slide, idx) => (
-                <div key={idx} className="shrink-0 flex flex-col items-center gap-2">
-                  <div className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40" style={{ aspectRatio: platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5", height: "min(65vh, 460px)" }}>
+              {carouselPreviews.map((slide, idx) => {
+                const ar = platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5";
+                return (
+                <div key={idx} className="shrink-0 flex flex-col items-center gap-1.5 h-full">
+                  <div
+                    className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40 h-[calc(100%-24px)]"
+                    style={{ aspectRatio: ar }}
+                  >
                     <img
                       src={slide.dataUri}
                       alt={slide.caption || `Slide ${idx + 1}`}
@@ -2858,69 +2959,14 @@ function PostDetailView({
                       className={cn(
                         "h-full w-full object-contain",
                         carouselPreviewMutation.isPending && "opacity-50",
-                        eyedropperMode?.slideIndex === idx && "cursor-crosshair"
+                        eyedropperMode && "cursor-crosshair"
                       )}
-                      onClick={(e) => handleSlideClick(e, idx)}
+                      onClick={(e) => {
+                        if (eyedropperMode) {
+                          handleSlideClick(e, idx);
+                        }
+                      }}
                     />
-                    {/* Eyedropper tools */}
-                    <div className="absolute top-2 right-2 flex gap-1 z-10">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEyedropperMode(
-                            eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "frame"
-                              ? null
-                              : { slideIndex: idx, mode: "frame" }
-                          );
-                        }}
-                        disabled={carouselPreviewMutation.isPending}
-                        className={cn(
-                          "flex items-center gap-1 text-white text-[10px] px-2 py-1 rounded-full transition-colors",
-                          eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "frame"
-                            ? "bg-amber-500/90"
-                            : "bg-black/60 hover:bg-black/80"
-                        )}
-                        title="Pick frame color from image"
-                      >
-                        <Pipette className="h-3 w-3" /> Color
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEyedropperMode(
-                            eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "removeBg"
-                              ? null
-                              : { slideIndex: idx, mode: "removeBg" }
-                          );
-                        }}
-                        disabled={carouselPreviewMutation.isPending}
-                        className={cn(
-                          "flex items-center gap-1 text-white text-[10px] px-2 py-1 rounded-full transition-colors",
-                          eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "removeBg"
-                            ? "bg-amber-500/90"
-                            : "bg-black/60 hover:bg-black/80"
-                        )}
-                        title="Click background color to remove it"
-                      >
-                        <Eraser className="h-3 w-3" /> Remove BG
-                      </button>
-                      {perSlideOptions[idx] && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const newOptions = [...perSlideOptions];
-                            newOptions[idx] = undefined;
-                            setPerSlideOptions(newOptions);
-                            carouselPreviewMutation.mutate(newOptions);
-                          }}
-                          disabled={carouselPreviewMutation.isPending}
-                          className="flex items-center gap-1 bg-black/60 hover:bg-black/80 text-white text-[10px] px-2 py-1 rounded-full transition-colors"
-                          title="Reset to auto-detected colors"
-                        >
-                          <RotateCcw className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
                     {/* Frame color swatch */}
                     {slide.frameColor && (
                       <div
@@ -2930,11 +2976,12 @@ function PostDetailView({
                       />
                     )}
                   </div>
-                  <span className="text-white/60 text-xs">
+                  <span className="text-white/60 text-xs shrink-0">
                     {idx + 1}/{carouselPreviews.length}
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

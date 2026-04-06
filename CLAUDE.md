@@ -64,7 +64,8 @@ social-media-promo-scheduler/
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
-│   │   │   ├── posts/           # PATCH [id] update post fields (clearZernioState flag for retry), DELETE [id] with blob/short.io cleanup, POST [id]/image upload/swap image, POST [id]/publish single-post publish
+│   │   │   ├── posts/           # PATCH [id] update post fields, DELETE [id], POST [id]/image, POST [id]/publish, POST [id]/cover-slide (preview/apply/delete), POST [id]/cover-slide-content (AI text gen)
+│   │   │   ├── cover-slide-templates/ # GET active templates (filtered by brand)
 │   │   │   ├── webhooks/zernio/ # POST — Zernio webhook receiver (post.published/failed/partial status sync)
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
 │   │   │   ├── auth/           # NextAuth endpoints
@@ -95,6 +96,9 @@ social-media-promo-scheduler/
 │   │   ├── image-crop.ts       # Platform aspect ratio auto-crop (center-crop to 16:9 for Instagram/Threads)
 │   │   ├── lnk-bio.ts          # lnk.bio OAuth2 client — auto-create link-in-bio entries after Instagram publish
 │   │   ├── pdf-carousel.ts     # LinkedIn PDF carousel — assemble multi-image posts into PDF via pdf-lib
+│   │   ├── cover-slide-renderer.ts # Cover slide band layout engine (Satori + Sharp)
+│   │   ├── cover-slide-types.ts # TypeScript types for band specs, templates, content, render options
+│   │   ├── fonts.ts            # Shared font registry for Satori (6 Noto Sans/Serif variants)
 │   │   ├── brand-access.ts     # Server-side brand access helpers (user-brand mapping)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── scheduling.ts       # Tapering schedule algorithm, date assignment with collision avoidance
@@ -146,6 +150,7 @@ social-media-promo-scheduler/
 | Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 11 records: type definitions, descriptions, icons, status, scraper strategy (includes "Open Call" — Coming Soon) |
 | Generation Rules | `tbliTMGAEuaU9CLBf` | Editorial rules per campaign type, composed into prompt fragments |
 | Feedback Log | `tblZWSKDdVYUcHX5J` | Structured feedback on generated posts, linked to posts/campaigns/types |
+| Cover Slide Templates | `tblk0l8nE9SDP0lca` | Band-based layout templates for carousel cover slides (JSON spec, color scheme, fonts, brand/type associations) |
 | Users | `tblyUmt78haC25nPZ` | User-to-brand access mapping: email, role, allowed brands, default brand |
 
 ### Source base (read-only reference)
@@ -170,6 +175,7 @@ social-media-promo-scheduler/
 - **lnk.bio integration:** After Instagram posts are published, a lnk.bio entry is auto-created with the campaign's source URL. Currently hardcoded for The Intersect brand (group ID 68052). Per-brand config tracked in #68.
 - **Zernio webhook:** `POST /api/webhooks/zernio` receives post lifecycle events and syncs status to Airtable. Auth middleware bypassed for `/api/webhooks` path. Currently registered via ngrok; permanent URL tracked in #67.
 - **LinkedIn PDF carousel:** Posts with 2+ images targeting LinkedIn are auto-assembled into a PDF at publish time using `pdf-lib`. PDF uploaded to Zernio as document media type.
+- **Cover slide designer:** Optional editorial cover slide prepended to carousel posts. Uses a horizontal band layout engine (Satori + Sharp) with Airtable-driven templates. AI generates text from post/campaign context. User can adjust font sizes, pick background colors via eyedropper, reposition the background image. Templates in Cover Slide Templates table (`tblk0l8nE9SDP0lca`). Cover slide uses the original raw image (from Original Media backup), not rendered slides.
 
 ## Session Rules
 

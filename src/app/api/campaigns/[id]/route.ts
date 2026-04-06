@@ -54,6 +54,7 @@ interface PostFields {
   "Zernio Post ID": string;
   Notes: string;
   "Original Media": string;
+  "Cover Slide Data": string;
 }
 
 export async function GET(
@@ -136,6 +137,7 @@ export async function GET(
       zernioPostId: r.fields["Zernio Post ID"] || "",
       notes: r.fields.Notes || "",
       originalMedia: r.fields["Original Media"] || "",
+      coverSlideData: r.fields["Cover Slide Data"] || "",
     }));
 
     return NextResponse.json({ campaign, posts });

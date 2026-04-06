@@ -11,6 +11,7 @@ interface PostFields {
   "Media URLs": string;
   "Media Captions": string;
   "Original Media": string;
+  "Cover Slide Data": string;
 }
 
 /**
@@ -42,10 +43,22 @@ export async function POST(
     // Use platform from request body, fall back to post's platform
     const resolvedPlatform = platform || (post.fields.Platform || "instagram").toLowerCase();
 
-    const mediaItems = parseMediaItems(post.fields);
+    let mediaItems = parseMediaItems(post.fields);
+
+    // If a cover slide is applied, exclude it from carousel slide generation.
+    // The cover slide is always the first item — don't frame a cover inside another slide.
+    if (post.fields["Cover Slide Data"]) {
+      try {
+        const coverData = JSON.parse(post.fields["Cover Slide Data"]);
+        if (coverData.appliedUrl && mediaItems[0]?.url === coverData.appliedUrl) {
+          mediaItems = mediaItems.slice(1);
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
     if (mediaItems.length < 2) {
       return NextResponse.json(
-        { error: "Carousel requires at least 2 images" },
+        { error: "Carousel requires at least 2 images (excluding cover slide)" },
         { status: 400 }
       );
     }
@@ -77,15 +90,28 @@ export async function POST(
     }
 
     // Upload rendered slides to Vercel Blob
-    const newMediaItems: MediaItem[] = [];
+    const renderedSlides: MediaItem[] = [];
     for (let i = 0; i < slideResults.length; i++) {
       const url = await uploadImage("posts", id, slideResults[i].buffer, "image/jpeg");
-      newMediaItems.push({
+      renderedSlides.push({
         url,
         caption: mediaItems[i]?.caption || "",
       });
     }
 
+    // If a cover slide exists, keep it as the first item
+    let coverItem: MediaItem | null = null;
+    if (post.fields["Cover Slide Data"]) {
+      try {
+        const allItems = parseMediaItems(post.fields);
+        const coverData = JSON.parse(post.fields["Cover Slide Data"]);
+        if (coverData.appliedUrl && allItems[0]?.url === coverData.appliedUrl) {
+          coverItem = allItems[0];
+        }
+      } catch { /* ignore */ }
+    }
+
+    const newMediaItems = coverItem ? [coverItem, ...renderedSlides] : renderedSlides;
     const serialized = serializeMediaItems(newMediaItems);
     await updateRecord("Posts", id, {
       "Image URL": serialized["Image URL"],
@@ -148,8 +174,20 @@ export async function DELETE(
       .map((item) => item.url)
       .filter((url) => isBlobUrl(url));
 
-    // Restore original media
-    const serialized = serializeMediaItems(originalItems);
+    // If a cover slide exists, preserve it as the first item
+    let coverItem: MediaItem | null = null;
+    if (post.fields["Cover Slide Data"]) {
+      try {
+        const coverData = JSON.parse(post.fields["Cover Slide Data"]);
+        const allItems = parseMediaItems(post.fields);
+        if (coverData.appliedUrl && allItems[0]?.url === coverData.appliedUrl) {
+          coverItem = allItems[0];
+        }
+      } catch { /* ignore */ }
+    }
+
+    const restoredItems = coverItem ? [coverItem, ...originalItems] : originalItems;
+    const serialized = serializeMediaItems(restoredItems);
     await updateRecord("Posts", id, {
       "Image URL": serialized["Image URL"],
       "Media URLs": serialized["Media URLs"],
@@ -157,8 +195,10 @@ export async function DELETE(
       "Original Media": "",
     });
 
-    // Fire-and-forget: clean up orphaned slide blobs
+    // Fire-and-forget: clean up orphaned slide blobs (but NOT the cover slide blob)
+    const coverUrl = coverItem?.url;
     for (const url of blobUrlsToDelete) {
+      if (url === coverUrl) continue; // Don't delete the cover slide
       deleteImage(url).catch((err) =>
         console.warn("[carousel-reset] Failed to delete blob:", url, err)
       );
@@ -166,7 +206,7 @@ export async function DELETE(
 
     return NextResponse.json({
       reset: true,
-      mediaItems: originalItems,
+      mediaItems: restoredItems,
     });
   } catch (err) {
     console.error("[carousel-reset] Error:", err);
