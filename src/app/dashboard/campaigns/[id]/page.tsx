@@ -2319,7 +2319,7 @@ function PostDetailView({
   const nextPost = currentIndex < posts.length - 1 ? posts[currentIndex + 1] : null;
 
   return (
-    <div className="flex flex-col max-h-[90vh] relative">
+    <div className="flex flex-col max-h-[90vh] min-h-[80vh] relative">
       {/* Sticky header — platform + navigation combined */}
       <div className="border-b border-border shrink-0 pr-10">
         <div className="flex items-center gap-2 px-4 py-2.5">
@@ -2866,7 +2866,7 @@ function PostDetailView({
 
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
-        <div className="absolute inset-x-0 top-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden" style={{ minHeight: "min(85vh, 700px)", height: "100%" }}>
+        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden">
           {/* Header — tools in toolbar, not on slides */}
           <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-zinc-700/50">
             <div className="flex items-center gap-2 min-w-0">
@@ -2953,7 +2953,7 @@ function PostDetailView({
                       alt={slide.caption || `Slide ${idx + 1}`}
                       crossOrigin="anonymous"
                       className={cn(
-                        "h-full w-full object-cover",
+                        "h-full w-full object-contain",
                         carouselPreviewMutation.isPending && "opacity-50",
                         eyedropperMode && "cursor-crosshair"
                       )}
