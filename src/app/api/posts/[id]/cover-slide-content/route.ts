@@ -96,15 +96,28 @@ export async function POST(
     const postSubject = post.fields.subject || "";
     const platform = post.fields.Platform || "instagram";
 
+    // Determine template variant for prompt customization
+    const isQuotable = (template.slug || "").includes("quotable");
+
     // Generate content with Claude
     const config = resolveAnthropicConfig();
     const client = new Anthropic({ apiKey: config.apiKey });
 
-    const response = await client.messages.create({
-      model: config.model,
-      max_tokens: 1024,
-      temperature: 0.4,
-      system: `<role>You are an editorial copywriter specializing in social media cover cards for carousel posts. You write compelling, concise text that fits within strict character limits.</role>
+    const systemPrompt = isQuotable
+      ? `<role>You are an editorial copywriter specializing in social media quote cards. You extract the most striking, shareable quote from article content and present it with clean attribution.</role>
+
+<constraints>
+- Every field MUST respect its character budget exactly — do not exceed the limit
+- Write for ${platform} audience expectations
+- Category labels should be short, punchy identifiers (e.g., "Q+ART INTERVIEW", "ARTIST PROFILE", "EXHIBITION")
+- The headline field MUST be an actual quote extracted verbatim from the post content — a striking phrase someone said, enclosed in quotation marks
+- Do NOT write an article headline — extract a real quote from the text
+- The description field MUST be attribution only — just the person's name with an em dash prefix (e.g., "— Erin Keane")
+- Do NOT write a sentence description — only the name of the person being quoted
+- Do not fabricate quotes or attribute words to someone who did not say them
+- If no direct quote exists in the content, extract the most quotable declarative statement
+</constraints>`
+      : `<role>You are an editorial copywriter specializing in social media cover cards for carousel posts. You write compelling, concise text that fits within strict character limits.</role>
 
 <constraints>
 - Every field MUST respect its character budget exactly — do not exceed the limit
@@ -114,7 +127,40 @@ export async function POST(
 - Descriptions should provide just enough context to entice the reader to swipe through
 - Match the brand's editorial voice: professional yet approachable
 - Do not fabricate facts, names, or details not present in the source content
-</constraints>`,
+</constraints>`;
+
+    const instructionsBlock = isQuotable
+      ? `<instructions>
+Generate text fields for a quotable card. Return ONLY a JSON object with these fields:
+
+1. "campaignTypeLabel" — A short category label (max ${charBudgets.campaignTypeLabel || 30} characters)
+   Based on the campaign type "${campaignType}", create a punchy label.
+
+2. "headline" — An actual QUOTE from the post content (max ${charBudgets.headline || 100} characters)
+   Extract the most striking, shareable phrase someone said in the article. Enclose in quotation marks.
+   This must be a real quote from the text, NOT a headline you wrote.
+
+3. "description" — Attribution only (max ${charBudgets.description || 180} characters)
+   Just the quoted person's name with an em dash prefix, e.g., "— Erin Keane". Nothing else.
+</instructions>`
+      : `<instructions>
+Generate text fields for a cover slide card. Return ONLY a JSON object with these fields:
+
+1. "campaignTypeLabel" — A short category label (max ${charBudgets.campaignTypeLabel || 30} characters)
+   Based on the campaign type "${campaignType}", create a punchy label.
+
+2. "headline" — An attention-grabbing headline (max ${charBudgets.headline || 100} characters)
+   Should capture the essence of this specific post/article. Use the subject and campaign name for inspiration.
+
+3. "description" — A brief teaser description (max ${charBudgets.description || 180} characters)
+   Summarize what the reader will learn or see. One to two sentences max.
+</instructions>`;
+
+    const response = await client.messages.create({
+      model: config.model,
+      max_tokens: 1024,
+      temperature: 0.4,
+      system: systemPrompt,
       messages: [
         {
           role: "user",
@@ -128,18 +174,7 @@ ${editorialDirection ? `<editorial_direction>${editorialDirection}</editorial_di
 <post_content>${postContent.slice(0, 1500)}</post_content>
 </context>
 
-<instructions>
-Generate text fields for a cover slide card. Return ONLY a JSON object with these fields:
-
-1. "campaignTypeLabel" — A short category label (max ${charBudgets.campaignTypeLabel || 30} characters)
-   Based on the campaign type "${campaignType}", create a punchy label.
-
-2. "headline" — An attention-grabbing headline (max ${charBudgets.headline || 100} characters)
-   Should capture the essence of this specific post/article. Use the subject and campaign name for inspiration.
-
-3. "description" — A brief teaser description (max ${charBudgets.description || 180} characters)
-   Summarize what the reader will learn or see. One to two sentences max.
-</instructions>
+${instructionsBlock}
 
 <output_format>
 Return ONLY valid JSON, no markdown, no explanation:
