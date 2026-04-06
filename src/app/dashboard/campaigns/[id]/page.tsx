@@ -2486,10 +2486,10 @@ function PostDetailView({
               size="sm"
               className="text-xs h-7 px-2"
               onClick={() => setShowAddImage(!showAddImage)}
-              title={mediaImages.length === 0 ? "Add image" : "Add more images"}
+              title={mediaImages.length === 0 ? "Add image" : "Add images for carousel"}
             >
               <Plus className="h-3 w-3 mr-1" />
-              Add
+              {mediaImages.length >= 1 ? "Add for Carousel" : "Add"}
             </Button>
             )}
             {!slidesApplied && mediaImages.length === 1 && (
@@ -2813,27 +2813,25 @@ function PostDetailView({
 
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
-        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg select-none border border-zinc-700/50 min-h-[520px]">
-          <div className="flex items-center justify-between px-6 py-3 shrink-0">
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-white/70" />
-              <span className="text-white font-medium text-sm">Carousel Preview — {carouselPreviews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})</span>
+        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 min-h-[520px]">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <Layers className="h-4 w-4 text-white/70 shrink-0" />
+              <span className="text-white font-medium text-sm truncate">{carouselPreviews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})</span>
               {eyedropperMode && (
-                <span className="text-amber-400 text-xs animate-pulse ml-2">
-                  {eyedropperMode.mode === "frame" ? "Click slide to pick frame color" : "Click background color to remove"}
+                <span className="text-amber-400 text-xs animate-pulse ml-2 hidden sm:inline">
+                  {eyedropperMode.mode === "frame" ? "Pick frame color" : "Pick BG to remove"}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-white/70 hover:text-white hover:bg-white/10"
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                className="text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                 onClick={() => { setCarouselPreviews(null); setEyedropperMode(null); setPerSlideOptions([]); }}
                 disabled={carouselApplyMutation.isPending}
               >
-                Cancel
-              </Button>
+                <X className="h-5 w-5" />
+              </button>
               <Button
                 size="sm"
                 className="bg-white text-black hover:bg-white/90"
