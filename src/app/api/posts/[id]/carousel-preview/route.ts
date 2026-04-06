@@ -174,8 +174,20 @@ export async function DELETE(
       .map((item) => item.url)
       .filter((url) => isBlobUrl(url));
 
-    // Restore original media
-    const serialized = serializeMediaItems(originalItems);
+    // If a cover slide exists, preserve it as the first item
+    let coverItem: MediaItem | null = null;
+    if (post.fields["Cover Slide Data"]) {
+      try {
+        const coverData = JSON.parse(post.fields["Cover Slide Data"]);
+        const allItems = parseMediaItems(post.fields);
+        if (coverData.appliedUrl && allItems[0]?.url === coverData.appliedUrl) {
+          coverItem = allItems[0];
+        }
+      } catch { /* ignore */ }
+    }
+
+    const restoredItems = coverItem ? [coverItem, ...originalItems] : originalItems;
+    const serialized = serializeMediaItems(restoredItems);
     await updateRecord("Posts", id, {
       "Image URL": serialized["Image URL"],
       "Media URLs": serialized["Media URLs"],
@@ -183,8 +195,10 @@ export async function DELETE(
       "Original Media": "",
     });
 
-    // Fire-and-forget: clean up orphaned slide blobs
+    // Fire-and-forget: clean up orphaned slide blobs (but NOT the cover slide blob)
+    const coverUrl = coverItem?.url;
     for (const url of blobUrlsToDelete) {
+      if (url === coverUrl) continue; // Don't delete the cover slide
       deleteImage(url).catch((err) =>
         console.warn("[carousel-reset] Failed to delete blob:", url, err)
       );
@@ -192,7 +206,7 @@ export async function DELETE(
 
     return NextResponse.json({
       reset: true,
-      mediaItems: originalItems,
+      mediaItems: restoredItems,
     });
   } catch (err) {
     console.error("[carousel-reset] Error:", err);
