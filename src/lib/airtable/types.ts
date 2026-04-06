@@ -19,6 +19,8 @@ export interface Brand {
   timezone: string | null;
   /** JSON: per-platform posting cadence preferences. */
   platformCadence: PlatformCadenceConfig | null;
+  /** Instagram handle including @ (e.g., "@notrealartworld"). */
+  instagramHandle: string | null;
   status: "Active" | "Inactive";
 }
 

@@ -30,6 +30,7 @@ interface BrandFields {
   "Anthropic API Key Label": string;
   Timezone: string;
   "Platform Cadence": string;
+  "Instagram Handle": string;
   Status: "Active" | "Inactive";
 }
 
@@ -58,6 +59,7 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     anthropicApiKeyLabel: r.fields["Anthropic API Key Label"] || null,
     timezone: r.fields.Timezone || null,
     platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
+    instagramHandle: r.fields["Instagram Handle"] || null,
     status: r.fields.Status || "Active",
   };
 }

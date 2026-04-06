@@ -1851,6 +1851,7 @@ function PostDetailView({
   onClose: () => void;
   onNavigate: (post: Post) => void;
 }) {
+  const { currentBrand } = useBrand();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
@@ -2847,7 +2848,7 @@ function PostDetailView({
           postId={post.id}
           platform={platformLower}
           brandId={campaign?.brandIds?.[0]}
-          brandHandle=""
+          brandHandle={currentBrand?.instagramHandle || ""}
           brandLogoUrl={null}
           savedData={savedCoverSlideData}
           onApply={(newMediaItems) => {
