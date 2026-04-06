@@ -38,6 +38,7 @@ interface CoverSlideDesignerProps {
   brandLogoUrl?: string | null;
   brandLogoLightUrl?: string | null;
   brandLogoDarkUrl?: string | null;
+  brandWebsiteUrl?: string | null;
   /** Previously saved cover slide data (for re-editing) */
   savedData?: CoverSlideData | null;
   /** Called when cover slide is applied or removed */
@@ -227,6 +228,7 @@ export function CoverSlideDesigner({
   brandLogoUrl,
   brandLogoLightUrl,
   brandLogoDarkUrl,
+  brandWebsiteUrl,
   savedData,
   onApply,
   onRemove,
@@ -235,11 +237,24 @@ export function CoverSlideDesigner({
   // State — always start at gallery unless there's persisted (applied) cover slide data
   const [step, setStep] = useState<"gallery" | "editor">(savedData?.appliedUrl ? "editor" : "gallery");
   const [selectedTemplate, setSelectedTemplate] = useState<CoverSlideTemplate | null>(null);
+  // Platform-aware default: Instagram → @handle, others → clean domain from brand website
+  const defaultHandleOrWebsite = (() => {
+    if (platform.toLowerCase() === "instagram" && brandHandle) return brandHandle;
+    // For non-Instagram: extract clean domain (no https://, no www., no path)
+    if (brandWebsiteUrl) {
+      return brandWebsiteUrl
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\./, "")
+        .replace(/\/.*$/, "");
+    }
+    return brandHandle || "";
+  })();
+
   const [fields, setFields] = useState<ContentFields>({
     campaignTypeLabel: savedData?.fields.campaignTypeLabel || "",
     headline: savedData?.fields.headline || "",
     description: savedData?.fields.description || "",
-    handle: savedData?.fields.handle || brandHandle || "",
+    handle: savedData?.fields.handle || defaultHandleOrWebsite,
   });
   const [imageOffset, setImageOffset] = useState(savedData?.imageOffset ?? 30);
   const [previewDataUri, setPreviewDataUri] = useState<string | null>(null);
@@ -291,7 +306,7 @@ export function CoverSlideDesigner({
         campaignTypeLabel: data.fields.campaignTypeLabel || "",
         headline: data.fields.headline || "",
         description: data.fields.description || "",
-        handle: data.fields.handle || brandHandle || "",
+        handle: data.fields.handle || defaultHandleOrWebsite,
       };
       setFields(newFields);
       setCharBudgets(data.charBudgets || {});
@@ -534,7 +549,7 @@ export function CoverSlideDesigner({
               setStep("gallery");
               setPreviewDataUri(null);
               setSelectedTemplate(null);
-              setFields({ campaignTypeLabel: "", headline: "", description: "", handle: brandHandle || "" });
+              setFields({ campaignTypeLabel: "", headline: "", description: "", handle: defaultHandleOrWebsite });
               setFontSizeDeltas({});
               setBackgroundColor(undefined);
               setCharBudgets({});
@@ -763,7 +778,7 @@ export function CoverSlideDesigner({
           {/* Handle — inline */}
           <div>
             <div className="flex items-center justify-between mb-0.5">
-              <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Handle</span>
+              <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">{platform.toLowerCase() === "instagram" ? "Handle" : "Website"}</span>
             </div>
             <Input
               value={fields.handle}

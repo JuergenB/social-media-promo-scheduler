@@ -2852,6 +2852,7 @@ function PostDetailView({
           brandLogoUrl={currentBrand?.logoTransparentDark || currentBrand?.logoTransparentLight || null}
           brandLogoLightUrl={currentBrand?.logoTransparentLight || null}
           brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}
+          brandWebsiteUrl={currentBrand?.websiteUrl || null}
           savedData={savedCoverSlideData}
           onApply={(newMediaItems) => {
             setMediaItems(newMediaItems);
