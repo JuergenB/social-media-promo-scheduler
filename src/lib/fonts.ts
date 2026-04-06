@@ -32,6 +32,7 @@ const FONT_FILES: Record<string, string> = {
   "Noto Serif-400-normal":  "NotoSerif-Regular.ttf",
   "Noto Serif-400-italic":  "NotoSerif-Italic.ttf",
   "Noto Serif-700-normal":  "NotoSerif-Bold.ttf",
+  "Noto Serif-700-italic":  "NotoSerif-BoldItalic.ttf",
 };
 
 /** Cached font data by key */
