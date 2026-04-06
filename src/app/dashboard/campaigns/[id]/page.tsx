@@ -2866,28 +2866,29 @@ function PostDetailView({
 
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
-        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 min-h-[520px]">
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 shrink-0">
+        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden">
+          {/* Compact header with tools */}
+          <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-zinc-700/50">
             <div className="flex items-center gap-2 min-w-0">
               <Layers className="h-4 w-4 text-white/70 shrink-0" />
               <span className="text-white font-medium text-sm truncate">{carouselPreviews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
               {eyedropperMode && (
-                <span className="text-amber-400 text-xs animate-pulse ml-2 hidden sm:inline">
+                <span className="text-amber-400 text-xs animate-pulse">
                   {eyedropperMode.mode === "frame" ? "Pick frame color" : "Pick BG to remove"}
                 </span>
               )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
               <button
-                className="text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
+                className="text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors"
                 onClick={() => { setCarouselPreviews(null); setEyedropperMode(null); setPerSlideOptions([]); }}
                 disabled={carouselApplyMutation.isPending}
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
               <Button
                 size="sm"
-                className="bg-white text-black hover:bg-white/90"
+                className="bg-white text-black hover:bg-white/90 text-xs h-7"
                 onClick={() => carouselApplyMutation.mutate()}
                 disabled={carouselApplyMutation.isPending || carouselPreviewMutation.isPending}
               >
@@ -2899,11 +2900,12 @@ function PostDetailView({
               </Button>
             </div>
           </div>
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-6 pb-4 carousel-dark-scroll">
+          {/* Slides — maximize vertical space */}
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-3 carousel-dark-scroll">
             <div className="flex gap-4 h-full items-center">
               {carouselPreviews.map((slide, idx) => (
-                <div key={idx} className="shrink-0 flex flex-col items-center gap-2">
-                  <div className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40" style={{ aspectRatio: platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5", height: "min(65vh, 460px)" }}>
+                <div key={idx} className="shrink-0 flex flex-col items-center gap-1.5 h-full">
+                  <div className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40 flex-1 min-h-0" style={{ aspectRatio: platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5" }}>
                     <img
                       src={slide.dataUri}
                       alt={slide.caption || `Slide ${idx + 1}`}
@@ -2915,8 +2917,8 @@ function PostDetailView({
                       )}
                       onClick={(e) => handleSlideClick(e, idx)}
                     />
-                    {/* Eyedropper tools */}
-                    <div className="absolute top-2 right-2 flex gap-1 z-10">
+                    {/* Eyedropper tools — bottom overlay to avoid top clipping */}
+                    <div className="absolute bottom-8 right-2 flex flex-col gap-1 z-10">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -2983,7 +2985,7 @@ function PostDetailView({
                       />
                     )}
                   </div>
-                  <span className="text-white/60 text-xs">
+                  <span className="text-white/60 text-xs shrink-0">
                     {idx + 1}/{carouselPreviews.length}
                   </span>
                 </div>
