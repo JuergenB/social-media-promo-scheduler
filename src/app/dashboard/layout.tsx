@@ -56,8 +56,8 @@ const campaignNav = [
 
 const schedulingNav = [
   {
-    label: "Compose",
-    href: "/dashboard/compose",
+    label: "Quick Post",
+    href: "/dashboard/quick-post",
     icon: PenSquare,
   },
   {
@@ -99,7 +99,7 @@ const settingsSubNav = [
 const mobileNav = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
-  { label: "Compose", href: "/dashboard/compose", icon: PenSquare },
+  { label: "Quick Post", href: "/dashboard/quick-post", icon: PenSquare },
   { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
 ];
 

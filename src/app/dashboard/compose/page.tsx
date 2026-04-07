@@ -101,6 +101,17 @@ export default function ComposePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
+      {/* Migration banner */}
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 text-sm">
+        <p className="font-medium text-amber-800 dark:text-amber-200">This page has moved</p>
+        <p className="text-amber-700 dark:text-amber-300 mt-1">
+          The Compose page has been replaced by{" "}
+          <a href="/dashboard/quick-post" className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">
+            Quick Post
+          </a>
+          , which supports AI generation, image editing, and carousel creation.
+        </p>
+      </div>
       {/* Page header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">Create Post</h1>
