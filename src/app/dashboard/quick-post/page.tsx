@@ -33,6 +33,7 @@ import { Lightbox } from "@/components/posts/lightbox";
 import { CarouselPreviewOverlay } from "@/components/posts/carousel-preview-overlay";
 import { OptimizePreviewDialog } from "@/components/posts/optimize-preview-dialog";
 import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
+import { ImagePicker, type ScrapedImageItem } from "@/components/posts/image-picker";
 import { getToneLabel } from "@/lib/prompts/tone-guidance";
 import { toast } from "sonner";
 import type { Campaign, Post } from "@/lib/airtable/types";
@@ -139,6 +140,15 @@ export default function QuickPostPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
 
+  // ── Image picker state ────────────────────────────────────────────────
+  const [isScraping, setIsScraping] = useState(false);
+  const [scrapedImages, setScrapedImages] = useState<ScrapedImageItem[] | null>(null);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [selectedImageUrls, setSelectedImageUrls] = useState<string[]>([]);
+  // Refs to hold campaign/post during the async scrape → pick → generate flow
+  const pendingCampaignRef = useRef<Campaign | null>(null);
+  const pendingPostRef = useRef<Post | null>(null);
+
   // ── Create phantom campaign + post ────────────────────────────────────
 
   const createPhantomPost = useCallback(
@@ -193,15 +203,18 @@ export default function QuickPostPage() {
     [post, campaign, selectedPlatform, createPhantomPost]
   );
 
-  // ── Handle generate ────────────────────────────────────────────────────
+  // ── Handle generate (two-phase: scrape → pick images → generate) ─────
 
+  /** Phase 1: Scrape the URL and show image picker */
   const handleGenerate = async () => {
     if (!selectedPlatform || !currentBrand) return;
 
+    const hasUrl = url.trim().length > 0;
+
+    // Create phantom campaign if needed (lazy — only when user commits to generating)
     let targetCampaign = campaign;
     let targetPost = post;
 
-    // Create phantom campaign if needed (lazy — only when user commits to generating)
     if (!targetCampaign) {
       const result = await ensurePost({
         url,
@@ -231,12 +244,104 @@ export default function QuickPostPage() {
 
     if (!targetCampaign) return;
 
+    // Save refs for the async flow
+    pendingCampaignRef.current = targetCampaign;
+    pendingPostRef.current = targetPost;
+
+    // If there's a URL, scrape first and show image picker
+    if (hasUrl) {
+      setIsScraping(true);
+      setProgressLog([{
+        step: 0,
+        totalSteps: 1,
+        status: "running",
+        message: "Scraping URL for images...",
+      }]);
+
+      try {
+        const scrapeRes = await fetch("/api/quick-post/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: url.trim() }),
+        });
+
+        if (!scrapeRes.ok) {
+          const errData = await scrapeRes.json().catch(() => ({}));
+          throw new Error(errData.error || "Scrape failed");
+        }
+
+        const scrapeData = await scrapeRes.json();
+        const images = (scrapeData.images || []) as ScrapedImageItem[];
+
+        setIsScraping(false);
+        setProgressLog([{
+          step: 0,
+          totalSteps: 1,
+          status: "success",
+          message: `Found ${images.length} image${images.length !== 1 ? "s" : ""}`,
+        }]);
+
+        if (images.length > 0) {
+          // Show image picker
+          setScrapedImages(images);
+          setShowImagePicker(true);
+          return; // Wait for user selection — generation continues in handleImageSelect/handleImageSkip
+        }
+
+        // No images found — go straight to generation
+        await runGeneration(targetCampaign, targetPost, []);
+      } catch (err) {
+        setIsScraping(false);
+        setProgressLog([{
+          step: 0,
+          totalSteps: 1,
+          status: "error",
+          message: "Scrape failed",
+          detail: err instanceof Error ? err.message : "Unknown error",
+        }]);
+        // Fall through to generate without images
+        await runGeneration(targetCampaign, targetPost, []);
+      }
+    } else {
+      // No URL — generate directly (custom post)
+      await runGeneration(targetCampaign, targetPost, []);
+    }
+  };
+
+  /** Image picker callbacks */
+  const handleImageSelect = async (urls: string[]) => {
+    setShowImagePicker(false);
+    setSelectedImageUrls(urls);
+    setScrapedImages(null);
+    const targetCampaign = pendingCampaignRef.current;
+    const targetPost = pendingPostRef.current;
+    if (!targetCampaign) return;
+    await runGeneration(targetCampaign, targetPost, urls);
+  };
+
+  const handleImageSkip = async () => {
+    setShowImagePicker(false);
+    setScrapedImages(null);
+    // "Skip" means use the featured/og image (the generate endpoint's default behavior)
+    setSelectedImageUrls([]);
+    const targetCampaign = pendingCampaignRef.current;
+    const targetPost = pendingPostRef.current;
+    if (!targetCampaign) return;
+    await runGeneration(targetCampaign, targetPost, []);
+  };
+
+  /** Phase 2: Run the AI generation via SSE, then override images with user selection */
+  const runGeneration = async (
+    targetCampaign: Campaign,
+    targetPost: Post | null,
+    userSelectedImages: string[]
+  ) => {
     setIsGenerating(true);
     setProgressLog([]);
 
     try {
       const genParams = new URLSearchParams();
-      genParams.set("platforms", selectedPlatform);
+      genParams.set("platforms", selectedPlatform!);
       genParams.set("maxPerPlatform", "1");
 
       const res = await fetch(
@@ -312,6 +417,29 @@ export default function QuickPostPage() {
               fetch(`/api/posts/${targetPost.id}`, { method: "DELETE" }).catch(() => {});
             }
 
+            // Override images with user's selection (if any)
+            if (userSelectedImages.length > 0) {
+              try {
+                await fetch(`/api/posts/${platformPost.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    imageUrl: userSelectedImages[0],
+                    mediaUrls: userSelectedImages.length > 1
+                      ? userSelectedImages.slice(1).join("\n")
+                      : "",
+                  }),
+                });
+                // Update local state to reflect overridden images
+                platformPost.imageUrl = userSelectedImages[0];
+                platformPost.mediaUrls = userSelectedImages.length > 1
+                  ? userSelectedImages.slice(1).join("\n")
+                  : "";
+              } catch {
+                // Non-critical — user can still change images in editor
+              }
+            }
+
             setPost(platformPost);
             setCampaign(data.campaign);
           }
@@ -320,6 +448,10 @@ export default function QuickPostPage() {
         // Non-critical
       }
     }
+
+    // Clear refs
+    pendingCampaignRef.current = null;
+    pendingPostRef.current = null;
 
     setGenerateSectionOpen(false);
   };
@@ -443,10 +575,12 @@ export default function QuickPostPage() {
 
                   <Button
                     onClick={handleGenerate}
-                    disabled={isGenerating || isCreating}
+                    disabled={isGenerating || isCreating || isScraping}
                     className="w-full"
                   >
-                    {isGenerating ? (
+                    {isScraping ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Scraping URL...</>
+                    ) : isGenerating ? (
                       <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Generating...</>
                     ) : (
                       <><Sparkles className="h-4 w-4 mr-2" /> Generate Draft</>
@@ -579,6 +713,16 @@ export default function QuickPostPage() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Image picker modal */}
+      {showImagePicker && scrapedImages && (
+        <ImagePicker
+          images={scrapedImages}
+          onSelect={handleImageSelect}
+          onSkip={handleImageSkip}
+          isOpen={showImagePicker}
+        />
       )}
     </div>
   );
