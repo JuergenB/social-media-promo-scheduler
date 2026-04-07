@@ -31,14 +31,17 @@ interface AirtableRecord {
   };
 }
 
-// Very short sample content to avoid text overflow
+// Generic brand-neutral sample content
+const LOGO_DARK = "https://njhagrdezivhku5m.public.blob.vercel-storage.com/template-previews/your-logo-dark.png";
+const LOGO_LIGHT = "https://njhagrdezivhku5m.public.blob.vercel-storage.com/template-previews/your-logo-light.png";
+
 const COVER_CONTENT: CoverSlideContent = {
   primaryImage: "https://images.unsplash.com/photo-1547891654-e66ed7ebb968?w=1080&q=80",
   campaignTypeLabel: "YOUR BRAND",
   headline: "Your Story, Amplified",
   description: "Swipe to discover what's next.",
-  handle: "@yourbrand",
-  brandLogoUrl: null,
+  handle: "@yourhandle",
+  brandLogoUrl: null, // set per-template below
 };
 
 const QUOTE_CONTENT: CoverSlideContent = {
@@ -46,8 +49,8 @@ const QUOTE_CONTENT: CoverSlideContent = {
   campaignTypeLabel: "FEATURED",
   headline: '"Ideas worth sharing."',
   description: "— Your Name",
-  handle: "@yourbrand",
-  brandLogoUrl: null,
+  handle: "@yourhandle",
+  brandLogoUrl: null, // set per-template below
 };
 
 // Font size adjustments for quote templates — the default [40,64] range
@@ -94,7 +97,10 @@ async function main() {
   for (const record of records) {
     const template = parseTemplate(record);
     const isQuotable = template.slug.includes("quotable") || template.slug.includes("quote");
+    const isDark = template.slug.includes("dark");
     const content = isQuotable ? { ...QUOTE_CONTENT } : { ...COVER_CONTENT };
+    // Dark templates get light logo, light templates get dark logo
+    content.brandLogoUrl = isDark ? LOGO_LIGHT : LOGO_DARK;
 
     console.log(`Rendering: ${template.name} (${template.slug})`);
 
