@@ -909,7 +909,7 @@ export function CoverSlideDesigner({
                   <ChevronLeft className="h-3 w-3" />
                 </button>
                 <div className="flex-1 flex items-center justify-center">
-                  <div className="w-7 h-7 rounded overflow-hidden border border-zinc-600/50">
+                  <div className="w-12 h-12 rounded overflow-hidden border border-zinc-600/50">
                     <img src={sourceImages[sourceImageIndex]?.url} alt="" className="w-full h-full object-cover" />
                   </div>
                   <span className="text-white/25 text-[9px] ml-1.5 tabular-nums">{sourceImageIndex + 1}/{sourceImages.length}</span>
