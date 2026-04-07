@@ -2,7 +2,8 @@
 
 import React, { useState, useMemo, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ import {
   LayoutTemplate,
   Layers,
   Loader2,
+  PenSquare,
   Plus,
   RotateCcw,
   Send,
@@ -101,6 +103,25 @@ export default function QuickPostPage() {
     }
     return platforms;
   }, [connectedAccounts]);
+
+  // ── Existing quick posts ────────────────────────────────────────────────
+  const { data: campaignsData } = useQuery<{ campaigns: Campaign[] }>({
+    queryKey: ["campaigns", currentBrand?.id],
+    queryFn: async () => {
+      const res = await fetch("/api/campaigns");
+      if (!res.ok) throw new Error("Failed to fetch campaigns");
+      return res.json();
+    },
+  });
+
+  const quickPostCampaigns = useMemo(() => {
+    const all = campaignsData?.campaigns ?? [];
+    return (currentBrand
+      ? all.filter((c) => c.brandIds?.includes(currentBrand.id))
+      : all
+    ).filter((c) => c.name?.startsWith("Quick Post:"))
+     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+  }, [campaignsData, currentBrand]);
 
   // ── Form state ────────────────────────────────────────────────────────
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
@@ -309,6 +330,42 @@ export default function QuickPostPage() {
           Create a single post for {currentBrand?.name || "your brand"}
         </p>
       </div>
+
+      {/* Existing quick posts */}
+      {quickPostCampaigns.length > 0 && (
+        <Card>
+          <CardContent className="pt-5 pb-4">
+            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 block">
+              Recent Quick Posts
+            </Label>
+            <div className="divide-y divide-border">
+              {quickPostCampaigns.slice(0, 5).map((qp) => (
+                <Link
+                  key={qp.id}
+                  href={`/dashboard/campaigns/${qp.id}`}
+                  className="flex items-center gap-3 py-2.5 hover:bg-muted/50 -mx-2 px-2 rounded transition-colors"
+                >
+                  {qp.imageUrl ? (
+                    <img src={qp.imageUrl} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
+                  ) : (
+                    <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
+                      <PenSquare className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {qp.name?.replace("Quick Post: ", "") || "Untitled"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {qp.status} · {qp.targetPlatforms?.join(", ") || ""}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Platform selector */}
       <Card>
