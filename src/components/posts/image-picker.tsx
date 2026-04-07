@@ -18,9 +18,14 @@ export interface ScrapedImageItem {
   featured?: boolean;
 }
 
+export interface SelectedImage {
+  url: string;
+  caption: string;
+}
+
 interface ImagePickerProps {
   images: ScrapedImageItem[];
-  onSelect: (selectedUrls: string[]) => void;
+  onSelect: (selected: SelectedImage[]) => void;
   onSkip: () => void;
   isOpen: boolean;
 }
@@ -39,7 +44,12 @@ export function ImagePicker({ images, onSelect, onSkip, isOpen }: ImagePickerPro
 
   const handleContinue = () => {
     if (selected.length > 0) {
-      onSelect(selected);
+      // Map selected URLs to { url, caption } using alt text from scraped images
+      const result: SelectedImage[] = selected.map((url) => {
+        const img = images.find((i) => i.url === url);
+        return { url, caption: img?.alt || "" };
+      });
+      onSelect(result);
     }
   };
 
