@@ -85,11 +85,12 @@ export default function CampaignsPage() {
     },
   });
 
-  // Filter campaigns by current brand
+  // Filter campaigns by current brand, exclude Quick Posts
   const allCampaigns = data?.campaigns ?? [];
-  const campaigns = currentBrand
+  const campaigns = (currentBrand
     ? allCampaigns.filter((c) => c.brandIds?.includes(currentBrand.id))
-    : allCampaigns;
+    : allCampaigns
+  ).filter((c) => !c.name?.startsWith("Quick Post:"));
 
   return (
     <div className="space-y-6">
