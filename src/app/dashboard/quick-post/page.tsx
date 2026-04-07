@@ -1106,6 +1106,10 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}
           brandWebsiteUrl={currentBrand?.websiteUrl || null}
           savedData={savedCoverSlideData}
+          availableImages={mediaItems.filter((_, i) => {
+            if (savedCoverSlideData?.appliedUrl && i === 0 && mediaItems[0]?.url === savedCoverSlideData.appliedUrl) return false;
+            return true;
+          })}
           onApply={(newMediaItems) => {
             setMediaItems(newMediaItems);
             setShowCoverSlideDesigner(false);

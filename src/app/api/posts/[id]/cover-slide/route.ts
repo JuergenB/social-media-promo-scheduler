@@ -57,6 +57,7 @@ export async function POST(
     const fontSizeDeltas: Record<string, number> | undefined = body.fontSizeDeltas;
     const showLinkInBio: boolean = body.showLinkInBio === true;
     const platform: string = body.platform || "instagram";
+    const sourceImageUrl: string | undefined = typeof body.sourceImageUrl === "string" ? body.sourceImageUrl : undefined;
 
     if (!templateId) {
       return NextResponse.json({ error: "templateId is required" }, { status: 400 });
@@ -81,14 +82,25 @@ export async function POST(
     //    — these stay untouched when we prepend the cover
     const currentMediaItems = parseMediaItems(post.fields);
 
-    let primaryImage = currentMediaItems[0]?.url;
-    if (post.fields["Original Media"]) {
-      try {
-        const originalItems: MediaItem[] = JSON.parse(post.fields["Original Media"]);
-        if (originalItems[0]?.url) {
-          primaryImage = originalItems[0].url;
-        }
-      } catch { /* fall through to current first image */ }
+    // Determine which image to use as the background.
+    // If sourceImageUrl is provided, use that exact URL.
+    // Otherwise, fall back to the first raw/original image.
+    const rawItems: MediaItem[] = (() => {
+      if (post.fields["Original Media"]) {
+        try {
+          const items: MediaItem[] = JSON.parse(post.fields["Original Media"]);
+          if (items.length > 0) return items;
+        } catch { /* fall through */ }
+      }
+      return currentMediaItems;
+    })();
+
+    let primaryImage: string | undefined;
+    if (sourceImageUrl) {
+      // Use the exact URL the client specified (avoids index mismatch issues)
+      primaryImage = sourceImageUrl;
+    } else {
+      primaryImage = rawItems[0]?.url;
     }
 
     if (!primaryImage) {

@@ -18,6 +18,7 @@ import {
   ImageIcon,
   LayoutTemplate,
   ChevronLeft,
+  ChevronRight,
   Maximize2,
   Minus,
   Plus,
@@ -41,6 +42,8 @@ interface CoverSlideDesignerProps {
   brandWebsiteUrl?: string | null;
   /** Previously saved cover slide data (for re-editing) */
   savedData?: CoverSlideData | null;
+  /** Available source images for background selection (raw images, no rendered slides) */
+  availableImages?: Array<{ url: string; caption?: string }>;
   /** Called when cover slide is applied or removed */
   onApply: (mediaItems: MediaItem[]) => void;
   onRemove: (mediaItems: MediaItem[]) => void;
@@ -116,7 +119,7 @@ function FontSizeControls({
 function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
   const scheme = template.colorScheme;
   const bands = template.bands;
-  const hasImage = bands.some((b) => b.type === "image");
+  const isQuotable = template.slug.includes("quotable");
   const bgColor = scheme.background || "#FFFFFF";
   const primaryColor = scheme.primary || "#1A1A1A";
   const secondaryColor = scheme.secondary || "rgba(30,30,30,0.72)";
@@ -132,7 +135,7 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
   };
 
   return (
-    <div className="h-full w-full flex flex-col" style={{ backgroundColor: bgColor }}>
+    <div className="h-full w-full flex flex-col relative" style={{ backgroundColor: bgColor }}>
       {bands.map((band, i) => {
         const h = typeof band.height === "string" && band.height.endsWith("%")
           ? band.height
@@ -159,11 +162,82 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
           const isLabel = band.contentSource === "campaignTypeLabel";
           const isHeadline = band.contentSource === "headline";
           const isHandle = band.contentSource === "handle";
+          const isDescription = band.contentSource === "description";
 
-          // Bar-style placeholder: width and height represent text prominence
+          if (isQuotable) {
+            // Quotable templates: centered, wider lines resembling quote text
+            if (isLabel) {
+              return (
+                <div
+                  key={i}
+                  className="flex justify-center px-4"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 6),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 4),
+                  }}
+                >
+                  <div className="rounded-full" style={{ height: 3, width: "35%", backgroundColor: color, opacity: 0.3 }} />
+                </div>
+              );
+            }
+            if (isHeadline) {
+              // Wide, prominent italic-style lines — the quote itself
+              return (
+                <div
+                  key={i}
+                  className="flex flex-col items-center gap-1.5 px-3"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 4),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 6),
+                  }}
+                >
+                  {/* Opening quote mark */}
+                  <div style={{ fontSize: 14, lineHeight: 1, color, opacity: 0.25, fontFamily: "Georgia, serif" }}>&ldquo;</div>
+                  {[92, 88, 70].map((w, li) => (
+                    <div
+                      key={li}
+                      className="rounded-full"
+                      style={{ height: 5, width: `${w}%`, backgroundColor: color, opacity: 0.3 }}
+                    />
+                  ))}
+                </div>
+              );
+            }
+            if (isDescription) {
+              return (
+                <div
+                  key={i}
+                  className="flex flex-col items-center gap-1 px-4"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 4),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 4),
+                  }}
+                >
+                  <div className="rounded-full" style={{ height: 4, width: "55%", backgroundColor: color, opacity: 0.25 }} />
+                  <div className="rounded-full" style={{ height: 4, width: "40%", backgroundColor: color, opacity: 0.25 }} />
+                </div>
+              );
+            }
+            if (isHandle) {
+              return (
+                <div
+                  key={i}
+                  className="flex justify-center px-4"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 4),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 6),
+                  }}
+                >
+                  <div className="rounded-full" style={{ height: 3, width: "30%", backgroundColor: color, opacity: 0.25 }} />
+                </div>
+              );
+            }
+          }
+
+          // Editorial / default templates: bar-style placeholders
           const barH = isLabel ? 4 : isHeadline ? 6 : 4;
           const barW = isLabel ? "40%" : isHeadline ? "75%" : isHandle ? "35%" : "65%";
-          const lines = isHeadline ? 3 : band.contentSource === "description" ? 2 : 1;
+          const lines = isHeadline ? 3 : isDescription ? 2 : 1;
 
           return (
             <div
@@ -239,6 +313,7 @@ export function CoverSlideDesigner({
   brandLogoDarkUrl,
   brandWebsiteUrl,
   savedData,
+  availableImages,
   onApply,
   onRemove,
   onClose,
@@ -275,6 +350,8 @@ export function CoverSlideDesigner({
   );
   const [showLogo, setShowLogo] = useState(true);
   const [showLinkInBio, setShowLinkInBio] = useState(platform.toLowerCase() === "instagram");
+  const [sourceImageIndex, setSourceImageIndex] = useState(0);
+  const sourceImages = availableImages || [];
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,6 +426,7 @@ export function CoverSlideDesigner({
           fontSizeDeltas,
           showLinkInBio,
           platform,
+          sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to generate preview");
@@ -380,6 +458,7 @@ export function CoverSlideDesigner({
           fontSizeDeltas,
           showLinkInBio,
           platform,
+          sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to apply cover slide");
@@ -402,7 +481,7 @@ export function CoverSlideDesigner({
     if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current);
     previewTimeoutRef.current = setTimeout(() => {
       previewMutation.mutate(fieldsOverride);
-    }, 600);
+    }, 750);
   };
 
   // Re-preview when fields or offset change
@@ -411,7 +490,7 @@ export function CoverSlideDesigner({
       requestPreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio]);
+  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio, sourceImageIndex]);
 
   // Handle template selection
   const handleTemplateSelect = (template: CoverSlideTemplate) => {
@@ -817,6 +896,33 @@ export function CoverSlideDesigner({
               <span className="text-white/20 text-[10px]">Btm</span>
             </div>
           </div>
+
+          {/* Background image selector — compact: single preview + arrows */}
+          {sourceImages.length > 1 && (
+            <div>
+              <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Background</span>
+              <div className="flex items-center gap-1.5 mt-1">
+                <button
+                  onClick={() => setSourceImageIndex((sourceImageIndex - 1 + sourceImages.length) % sourceImages.length)}
+                  className="text-white/30 hover:text-white/70 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </button>
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="w-7 h-7 rounded overflow-hidden border border-zinc-600/50">
+                    <img src={sourceImages[sourceImageIndex]?.url} alt="" className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-white/25 text-[9px] ml-1.5 tabular-nums">{sourceImageIndex + 1}/{sourceImages.length}</span>
+                </div>
+                <button
+                  onClick={() => setSourceImageIndex((sourceImageIndex + 1) % sourceImages.length)}
+                  className="text-white/30 hover:text-white/70 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Show logo toggle */}
           {(brandLogoLightUrl || brandLogoDarkUrl || brandLogoUrl) && (
