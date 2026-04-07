@@ -2517,6 +2517,7 @@ function DeleteCampaignSection({
   postCount: number;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -2532,6 +2533,8 @@ function DeleteCampaignSection({
         return;
       }
       toast.success("Campaign deleted");
+      // Invalidate the campaigns list so it refreshes on navigation
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
       router.push("/dashboard/campaigns");
     } catch {
       toast.error("Failed to delete campaign");
