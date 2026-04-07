@@ -1559,6 +1559,7 @@ export default function CampaignDetailPage() {
               campaignName={campaign.name}
               status={campaign.status}
               postCount={posts.length}
+              isQuickPost={isQuickPost}
             />
           )}
         </TabsContent>
@@ -2512,11 +2513,13 @@ function DeleteCampaignSection({
   campaignName,
   status,
   postCount,
+  isQuickPost = false,
 }: {
   campaignId: string;
   campaignName: string;
   status: CampaignStatus;
   postCount: number;
+  isQuickPost?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -2534,10 +2537,9 @@ function DeleteCampaignSection({
         setIsDeleting(false);
         return;
       }
-      toast.success("Campaign deleted");
-      // Invalidate the campaigns list so it refreshes on navigation
+      toast.success(isQuickPost ? "Quick post deleted" : "Campaign deleted");
       queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-      router.push("/dashboard/campaigns");
+      router.push(isQuickPost ? "/dashboard/quick-post" : "/dashboard/campaigns");
     } catch {
       toast.error("Failed to delete campaign");
       setIsDeleting(false);
