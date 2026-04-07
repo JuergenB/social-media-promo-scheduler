@@ -890,8 +890,11 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
                   size="sm"
                   className="text-xs text-muted-foreground"
                   onClick={() => {
+                    if (content.editedContent !== (post.content || "")) {
+                      content.saveContent();
+                    }
                     toast.success("Draft saved");
-                    router.push("/dashboard/campaigns");
+                    router.push("/dashboard/quick-post");
                   }}
                 >
                   Save Draft

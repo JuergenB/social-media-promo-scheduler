@@ -46,7 +46,7 @@ const TONE_TIERS: ToneTier[] = [
       "Equal parts information and personality. The brand voice is present throughout but doesn't overshadow the content. Natural, conversational, like a knowledgeable friend who genuinely cares about the subject.",
   },
   {
-    label: "Wry",
+    label: "Bold",
     min: 61,
     max: 80,
     description:

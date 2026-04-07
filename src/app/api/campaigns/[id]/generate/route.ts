@@ -817,7 +817,16 @@ export async function POST(
           // User-uploaded hero (in campaign "Image URL") takes precedence over scraped og:image
           const heroFallback = fields["Image URL"] || heroUrl || "";
 
+          // For Quick Post campaigns (maxPerPlatform=1 with a URL), always use the
+          // og:image/hero as the post image. The user can swap in the editor.
+          const isQuickPost = fields.Name?.startsWith("Quick Post:") && maxPerPlatformOverride === 1;
+
           for (const post of result.posts) {
+            if (isQuickPost && heroFallback) {
+              post.imageUrl = heroFallback;
+              continue;
+            }
+
             // Deterministic section→image binding for multi-section posts:
             // If post has a sectionIndex and that section has an image, use it directly.
             // This bypasses Claude's imageIndex which is unreliable when alt text is poor.
