@@ -1201,7 +1201,7 @@ export default function CampaignDetailPage() {
                       Approve All Remaining ({reviewCount})
                     </Button>
                   )}
-                  {scheduleCount > 0 && (
+                  {scheduleCount > 0 && !isQuickPost && (
                     <Button
                       size="sm"
                       disabled={isScheduling}
