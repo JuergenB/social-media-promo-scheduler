@@ -12,7 +12,7 @@ import { endOfMonth } from "date-fns/endOfMonth";
 import { addDays } from "date-fns/addDays";
 import { subDays } from "date-fns/subDays";
 import { useQuery } from "@tanstack/react-query";
-import { useCalendarPosts, useDeletePost, useRetryPost } from "@/hooks";
+import { useCalendarPosts } from "@/hooks";
 import { useBrand } from "@/lib/brand-context";
 import { useAppStore } from "@/stores";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -30,16 +29,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import {
   Command,
   CommandEmpty,
@@ -54,10 +43,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { PostCard, PostStatusBadge, PlatformIcons } from "@/components/posts";
+import { PostStatusBadge } from "@/components/posts";
+import { CampaignPostDetail } from "@/components/posts/campaign-post-detail";
 import { PlatformIcon } from "@/components/shared/platform-icon";
 import { cn } from "@/lib/utils";
-import { type Platform, PLATFORM_NAMES } from "@/lib/late-api";
+import { type Platform } from "@/lib/late-api";
 import { PlatformBadge } from "@/components/shared/platform-icon";
 import { CalendarGrid } from "./_components/calendar-grid";
 import { CalendarList } from "./_components/calendar-list";
@@ -70,10 +60,8 @@ import {
   Calendar,
   List,
   Grid3X3,
-  RefreshCw,
   Clock,
   FileText,
-  ExternalLink,
   Mail,
   Frame,
   User,
@@ -87,7 +75,6 @@ import {
   ChevronsUpDown,
   Check,
 } from "lucide-react";
-import { toast } from "sonner";
 
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Newsletter: Mail,
@@ -130,7 +117,6 @@ function CalendarContent() {
     }
     return null;
   });
-  const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [platformFilter, setPlatformFilter] = useState<Set<string>>(new Set());
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>(
@@ -145,9 +131,6 @@ function CalendarContent() {
     const isMobile = window.innerWidth < 768;
     setViewMode(isMobile ? "list" : "grid");
   }, []);
-
-  const deleteMutation = useDeletePost();
-  const retryMutation = useRetryPost();
 
   // Fetch posts for the current month (with buffer for edge days)
   const dateFrom = format(subMonths(startOfMonth(currentDate), 1), "yyyy-MM-dd");
@@ -202,35 +185,57 @@ function CalendarContent() {
     return ids;
   }, [selectedCampaignId, campaignPostsData]);
 
+  // Map zernioPostId → Airtable Post for full editing support
+  const airtablePostsMap = useMemo(() => {
+    if (!campaignPostsData?.posts) return null;
+    const map = new Map<string, Post>();
+    for (const post of campaignPostsData.posts) {
+      if (post.zernioPostId) map.set(post.zernioPostId, post);
+    }
+    return map;
+  }, [campaignPostsData]);
+
   const selectedPost = useMemo(
     () => posts.find((p: any) => p._id === selectedPostId),
     [posts, selectedPostId]
   );
 
+  // When a campaign is selected, resolve the Airtable post for full editing (fast path)
+  const selectedAirtablePostFromCampaign = useMemo(
+    () => selectedPostId && airtablePostsMap ? airtablePostsMap.get(selectedPostId) ?? null : null,
+    [selectedPostId, airtablePostsMap]
+  );
+
+  // All Airtable posts for the selected campaign (for navigation in CampaignPostDetail)
+  const campaignAirtablePosts = useMemo(
+    () => campaignPostsData?.posts ?? [],
+    [campaignPostsData]
+  );
+
+  // Lookup Airtable post by Zernio Post ID when no campaign filter is active (or post not in campaign)
+  const needsLookup = !!selectedPostId && !selectedAirtablePostFromCampaign;
+  const { data: lookupData, isLoading: isLookupLoading } = useQuery({
+    queryKey: ["post-lookup", selectedPostId],
+    queryFn: async () => {
+      const res = await fetch(`/api/posts/lookup/${selectedPostId}`);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error("Failed to look up post");
+      return res.json() as Promise<{ post: Post; campaign: Campaign | null; siblingPosts: Post[] }>;
+    },
+    enabled: needsLookup,
+    staleTime: 30_000, // Cache for 30s to avoid re-fetching on rapid clicks
+  });
+
+  // Resolve the final Airtable post + campaign + siblings for the dialog
+  const resolvedPost = selectedAirtablePostFromCampaign ?? lookupData?.post ?? null;
+  const resolvedCampaign = campaignPostsData?.campaign ?? lookupData?.campaign ?? null;
+  const resolvedSiblingPosts = selectedAirtablePostFromCampaign
+    ? campaignAirtablePosts
+    : lookupData?.siblingPosts ?? (resolvedPost ? [resolvedPost] : []);
+
   const handlePrevMonth = () => setCurrentDate((d) => subMonths(d, 1));
   const handleNextMonth = () => setCurrentDate((d) => addMonths(d, 1));
   const handleToday = () => setCurrentDate(new Date());
-
-  const handleDelete = async () => {
-    if (!postToDelete) return;
-    try {
-      await deleteMutation.mutateAsync(postToDelete);
-      toast.success("Post deleted");
-      setPostToDelete(null);
-      setSelectedPostId(null);
-    } catch {
-      toast.error("Failed to delete post");
-    }
-  };
-
-  const handleRetry = async (postId: string) => {
-    try {
-      await retryMutation.mutateAsync(postId);
-      toast.success("Post queued for retry");
-    } catch {
-      toast.error("Failed to retry post");
-    }
-  };
 
   // All unique platforms across all loaded posts (for the filter UI)
   const allPlatforms = useMemo(() => {
@@ -629,237 +634,45 @@ function CalendarContent() {
         </SheetContent>
       </Sheet>
 
-      {/* Post detail dialog — with platform header, retry, expandable text */}
+      {/* Post detail dialog — full editing via shared CampaignPostDetail */}
       <Dialog
         open={!!selectedPostId}
         onOpenChange={() => setSelectedPostId(null)}
       >
-        <DialogContent className="max-w-lg p-0 overflow-hidden" aria-describedby={undefined}>
+        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[90vh] flex flex-col" aria-describedby={undefined}>
           <DialogTitle className="sr-only">Post Detail</DialogTitle>
-          {selectedPost && (
-            <PostDetailView
-              post={selectedPost}
-              onRetry={handleRetry}
-              isRetrying={retryMutation.isPending}
-              onEdit={() => setSelectedPostId(null)}
-              onDelete={(id) => setPostToDelete(id)}
+          {selectedPost && resolvedPost && resolvedCampaign ? (
+            <CampaignPostDetail
+              post={resolvedPost}
+              posts={resolvedSiblingPosts}
+              campaign={resolvedCampaign}
+              onClose={() => setSelectedPostId(null)}
+              onNavigate={(p) => {
+                if (p.zernioPostId) setSelectedPostId(p.zernioPostId);
+              }}
             />
-          )}
+          ) : selectedPost && isLookupLoading ? (
+            /* Loading state while fetching Airtable record */
+            <div className="flex flex-col items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground">Loading post details...</p>
+            </div>
+          ) : selectedPost && !resolvedPost ? (
+            /* Fallback for posts with no Airtable record (e.g., created via Compose) */
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <Calendar className="h-10 w-10 text-muted-foreground mb-3 opacity-40" />
+              <p className="text-sm font-medium mb-1">Post not managed by campaigns</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                This post was created outside the campaign system and cannot be edited here.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setSelectedPostId(null)}>
+                Close
+              </Button>
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!postToDelete} onOpenChange={() => setPostToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Post</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this post? This action cannot be
-              undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
-
-/** Render text with clickable URLs */
-function LinkifiedText({ text }: { text: string }) {
-  const urlRegex = /(https?:\/\/[^\s)]+)/g;
-  const parts = text.split(urlRegex);
-
-  return (
-    <>
-      {parts.map((part, i) =>
-        urlRegex.test(part) ? (
-          <a
-            key={i}
-            href={part}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-primary hover:underline break-all"
-          >
-            {part}
-          </a>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </>
-  );
-}
-
-/** Post detail view with platform header, retry button, expandable text */
-function PostDetailView({
-  post,
-  onRetry,
-  isRetrying,
-  onEdit,
-  onDelete,
-}: {
-  post: any;
-  onRetry: (id: string) => void;
-  isRetrying: boolean;
-  onEdit: () => void;
-  onDelete: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const platform = post.platforms?.[0]?.platform as Platform | undefined;
-  const platformName = platform ? PLATFORM_NAMES[platform] || platform : "Post";
-  const hasMedia = post.mediaItems?.length > 0;
-  const firstMedia = post.mediaItems?.[0];
-  const isPdf = firstMedia?.url && /\.pdf(\?|$)/i.test(firstMedia.url);
-
-  return (
-    <div>
-      {/* Platform header bar */}
-      <div className="flex items-center gap-3 px-6 pt-6 pb-4">
-        {platform && (
-          <PlatformBadge platform={platform} className="h-10 w-10" />
-        )}
-        <div className="flex-1">
-          <h3 className="font-semibold text-base">{platformName} Post</h3>
-          {post.scheduledFor && (
-            <p className="text-sm text-muted-foreground">
-              {format(parseISO(post.scheduledFor), "MMM d, yyyy 'at' h:mm a")}
-            </p>
-          )}
-        </div>
-        <PostStatusBadge status={post.status} />
-      </div>
-
-      {/* Media */}
-      {hasMedia && (
-        <div className="px-6 pb-3">
-          {isPdf ? (
-            <div className="flex items-center justify-center rounded-lg bg-muted py-8">
-              <div className="text-center">
-                <FileText className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm font-medium text-muted-foreground mb-1">PDF Carousel</p>
-                <a
-                  href={firstMedia.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-primary hover:underline"
-                >
-                  Open PDF
-                </a>
-              </div>
-            </div>
-          ) : (
-            <div className="relative rounded-lg overflow-hidden bg-muted">
-              <img
-                src={firstMedia.url}
-                alt=""
-                className="w-full max-h-72 object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-              {post.mediaItems.length > 1 && (
-                <div className="absolute bottom-2 right-2 rounded bg-black/70 px-2 py-1 text-xs text-white">
-                  +{post.mediaItems.length - 1} more
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Content — expandable */}
-      <div className="px-6 pb-4">
-        <p
-          className={cn(
-            "text-sm whitespace-pre-wrap",
-            !expanded && "line-clamp-4"
-          )}
-        >
-          {post.content ? <LinkifiedText text={post.content} /> : "(No content)"}
-        </p>
-        {post.content && post.content.length > 200 && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-xs text-primary hover:underline mt-1"
-          >
-            {expanded ? "Show less" : "Show more"}
-          </button>
-        )}
-      </div>
-
-      {/* Multi-platform list (if posting to multiple platforms) */}
-      {post.platforms?.length > 1 && (
-        <div className="px-6 pb-4">
-          <p className="text-xs text-muted-foreground mb-2">Posting to:</p>
-          <div className="flex flex-wrap gap-2">
-            {post.platforms.map((p: any, i: number) => (
-              <div key={i} className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs">
-                <PlatformIcon platform={p.platform as Platform} size="xs" showColor />
-                <span>{PLATFORM_NAMES[p.platform as Platform] || p.platform}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center justify-between border-t border-border px-6 py-4">
-        <div className="flex gap-2">
-          {post.status === "failed" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onRetry(post._id)}
-              disabled={isRetrying}
-            >
-              {isRetrying ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              Retry
-            </Button>
-          )}
-          {post.status !== "published" && (
-            <Button variant="outline" size="sm" onClick={() => onEdit()}>
-              Edit
-            </Button>
-          )}
-          {post.status === "published" && post.platforms?.[0]?.platformPostUrl && (
-            <Button variant="outline" size="sm" asChild>
-              <a
-                href={post.platforms[0].platformPostUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                View on {platformName}
-              </a>
-            </Button>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onDelete(post._id)}
-          className="text-destructive hover:text-destructive"
-        >
-          Delete
-        </Button>
-      </div>
     </div>
   );
 }

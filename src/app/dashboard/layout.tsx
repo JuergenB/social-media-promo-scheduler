@@ -32,7 +32,6 @@ import {
   PenSquare,
   Calendar,
   Users,
-  ListOrdered,
   Megaphone,
   Settings,
   Layers,
@@ -66,16 +65,6 @@ const schedulingNav = [
     href: "/dashboard/calendar",
     icon: Calendar,
   },
-  {
-    label: "Queue",
-    href: "/dashboard/queue",
-    icon: ListOrdered,
-  },
-  {
-    label: "Accounts",
-    href: "/dashboard/accounts",
-    icon: Users,
-  },
 ];
 
 const settingsSubNav = [
@@ -95,6 +84,11 @@ const settingsSubNav = [
     icon: Megaphone,
   },
   {
+    label: "Accounts",
+    href: "/dashboard/accounts",
+    icon: Users,
+  },
+  {
     label: "Platforms",
     href: "/dashboard/settings/platforms",
     icon: Layers,
@@ -107,7 +101,6 @@ const mobileNav = [
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
   { label: "Compose", href: "/dashboard/compose", icon: PenSquare },
   { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-  { label: "Queue", href: "/dashboard/queue", icon: ListOrdered },
 ];
 
 function NavLink({
@@ -463,20 +456,7 @@ export default function DashboardLayout({
                 <SheetTitle className="text-sm">More</SheetTitle>
               </SheetHeader>
               <div className="space-y-1">
-                <Link
-                  href="/dashboard/accounts"
-                  onClick={() => setMoreSheetOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                    pathname.startsWith("/dashboard/accounts")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Users className="h-4 w-4" />
-                  Accounts
-                </Link>
-                <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                   Settings
                 </div>
                 {settingsSubNav.map((item) => (

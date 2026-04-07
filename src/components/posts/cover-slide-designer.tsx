@@ -68,10 +68,13 @@ function FontSizeControls({
   onChange: (deltas: Record<string, number>) => void;
 }) {
   const current = deltas[field] || 0;
+  const MAX_DELTA = 12;
+  const MIN_DELTA = -12;
+  const atMax = current >= MAX_DELTA;
+  const atMin = current <= MIN_DELTA;
   const adjust = (delta: number) => {
     const next = current + delta;
-    // Clamp to ±20
-    const clamped = Math.max(-20, Math.min(20, next));
+    const clamped = Math.max(MIN_DELTA, Math.min(MAX_DELTA, next));
     onChange({ ...deltas, [field]: clamped });
   };
 
@@ -79,8 +82,12 @@ function FontSizeControls({
     <div className="flex items-center gap-0.5">
       <button
         onClick={() => adjust(-2)}
-        className="text-white/40 hover:text-white/80 p-0.5 rounded hover:bg-zinc-700 transition-colors"
-        title="Decrease font size"
+        disabled={atMin}
+        className={cn(
+          "p-0.5 rounded transition-colors",
+          atMin ? "text-white/15 cursor-not-allowed" : "text-white/40 hover:text-white/80 hover:bg-zinc-700"
+        )}
+        title={atMin ? "Minimum size reached" : "Decrease font size"}
       >
         <Minus className="h-2.5 w-2.5" />
       </button>
@@ -89,8 +96,12 @@ function FontSizeControls({
       </span>
       <button
         onClick={() => adjust(2)}
-        className="text-white/40 hover:text-white/80 p-0.5 rounded hover:bg-zinc-700 transition-colors"
-        title="Increase font size"
+        disabled={atMax}
+        className={cn(
+          "p-0.5 rounded transition-colors",
+          atMax ? "text-white/15 cursor-not-allowed" : "text-white/40 hover:text-white/80 hover:bg-zinc-700"
+        )}
+        title={atMax ? "Maximum size reached" : "Increase font size"}
       >
         <Plus className="h-2.5 w-2.5" />
       </button>
@@ -296,7 +307,10 @@ export function CoverSlideDesigner({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId }),
       });
-      if (!res.ok) throw new Error("Failed to generate content");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to generate content");
+      }
       return res.json();
     },
     onSuccess: (data) => {

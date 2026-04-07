@@ -6,6 +6,7 @@
  */
 
 import type { ScrapedBlogData, ContentSection } from "@/lib/firecrawl";
+import { buildToneGuidance } from "./tone-guidance";
 
 // ── System Prompt ──────────────────────────────────────────────────────
 
@@ -153,6 +154,14 @@ export interface UserPromptParams {
    *  Batch 1: variantOffset=0, Batch 2: variantOffset=2, etc.
    *  Controls which sections are assigned to this batch. */
   variantOffset?: number;
+  /** Voice intensity (0-100) for tone guidance injection. Omit to skip. */
+  voiceIntensity?: number | null;
+  /** Brand name (for tone dimension labels) */
+  brandName?: string;
+  /** Per-brand tone dimensions (8 sliders, 1-10 scale) */
+  toneDimensions?: import("@/lib/airtable/types").ToneDimensions;
+  /** Short additional tone notes */
+  toneNotes?: string;
 }
 
 export function buildUserPrompt(params: UserPromptParams): string {
@@ -348,6 +357,12 @@ ${brandVoice.voiceGuidelines}
 </brand_voice_guidelines>
 
 ${editorialDirection ? `<editorial_direction>\n${editorialDirection}\n</editorial_direction>\n\n<constraint_priority>\nThe editorial direction above is a stylistic guide for tone and focus. It does NOT override the Image-Text Integrity Rule. You may mention a person by name ONLY if the scraped content explicitly associates them with specific work. If the editorial direction asks you to highlight or name people but you cannot confidently identify them from the content, write about the event/topic instead.\n</constraint_priority>` : ""}
+
+${buildToneGuidance(params.voiceIntensity, {
+  brandName: params.brandName,
+  toneDimensions: params.toneDimensions,
+  toneNotes: params.toneNotes,
+})}
 
 ${contentBlock}
 

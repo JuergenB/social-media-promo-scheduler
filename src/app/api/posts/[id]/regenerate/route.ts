@@ -6,6 +6,7 @@ import {
   formatPlatformSettings,
   type PlatformSetting,
 } from "@/lib/prompts/blog-post-generator";
+import { buildToneGuidance } from "@/lib/prompts/tone-guidance";
 
 interface PostFields {
   Campaign: string[];
@@ -25,6 +26,7 @@ interface CampaignFields {
   Brand: string[];
   "Editorial Direction": string;
   "Scraped Content": string;
+  Tone: number;
 }
 
 interface BrandFields {
@@ -32,6 +34,8 @@ interface BrandFields {
   "Voice Guidelines": string;
   "Website URL": string;
   "Anthropic API Key Label": string;
+  "Tone Dimensions": string;
+  "Tone Notes": string;
 }
 
 const PLATFORM_MAP: Record<string, string> = {
@@ -80,6 +84,8 @@ export async function POST(
     const brandId = campaign.fields.Brand?.[0];
     let brandVoice = { name: "Default", voiceGuidelines: "", websiteUrl: "" };
     let anthropicConfig = resolveAnthropicConfig();
+    let brandToneDimensions: import("@/lib/airtable/types").ToneDimensions | undefined;
+    let brandToneNotes: string | undefined;
 
     if (brandId) {
       const brand = await getRecord<BrandFields>("Brands", brandId);
@@ -91,6 +97,12 @@ export async function POST(
       anthropicConfig = resolveAnthropicConfig({
         anthropicApiKeyLabel: brand.fields["Anthropic API Key Label"] || null,
       });
+      if (brand.fields["Tone Dimensions"]) {
+        try {
+          brandToneDimensions = JSON.parse(brand.fields["Tone Dimensions"]);
+        } catch { /* fall through */ }
+      }
+      brandToneNotes = brand.fields["Tone Notes"] || undefined;
     }
 
     // Load platform settings for this post's platform
@@ -117,6 +129,12 @@ ${brandVoice.voiceGuidelines}
 </brand_voice_guidelines>
 
 ${editorialDirection ? `<editorial_direction>\n${editorialDirection}\n</editorial_direction>` : ""}
+
+${buildToneGuidance(campaign.fields.Tone ?? null, {
+  brandName: brandVoice.name,
+  toneDimensions: brandToneDimensions,
+  toneNotes: brandToneNotes,
+})}
 
 <current_post>
 ${post.fields.Content}

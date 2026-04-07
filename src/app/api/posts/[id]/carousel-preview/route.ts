@@ -56,9 +56,9 @@ export async function POST(
       } catch { /* ignore parse errors */ }
     }
 
-    if (mediaItems.length < 2) {
+    if (mediaItems.length < 1) {
       return NextResponse.json(
-        { error: "Carousel requires at least 2 images (excluding cover slide)" },
+        { error: "No images available to render as carousel slides" },
         { status: 400 }
       );
     }

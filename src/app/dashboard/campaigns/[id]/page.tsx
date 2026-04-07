@@ -23,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +38,7 @@ import { PlatformIcon, PlatformBadge } from "@/components/shared/platform-icon";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
 import { CampaignTimeline } from "@/components/campaigns/campaign-timeline";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import type { Platform } from "@/lib/late-api";
 import { useAccounts } from "@/hooks/use-accounts";
@@ -48,21 +48,19 @@ import {
   ENABLED_CAMPAIGN_TYPES,
   DISTRIBUTION_BIASES,
   DURATION_PRESETS,
-  FEEDBACK_CATEGORIES,
   type Campaign,
   type CampaignStatus,
   type CampaignType,
   type DistributionBias,
-  type FeedbackCategory,
-  type FeedbackSeverity,
   type Post,
   type PostStatus,
 } from "@/lib/airtable/types";
 import { toast } from "sonner";
+import { getToneLabel, getAllToneTiers } from "@/lib/prompts/tone-guidance";
 import { compressImage, validateImage } from "@/lib/image-compression";
-import { parseMediaItems, serializeMediaItems, type MediaItem } from "@/lib/media-items";
-import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
-import type { CoverSlideData } from "@/lib/cover-slide-types";
+import { toPlatformId, POST_STATUS_CONFIG } from "@/lib/platform-constants";
+import { CampaignPostDetail } from "@/components/posts/campaign-post-detail";
+import { useNewPosts } from "@/hooks/use-new-posts";
 import {
   ArrowLeft,
   Calendar,
@@ -89,22 +87,12 @@ import {
   Trash2,
   X,
   Link2,
-  Maximize2,
   Plus,
   RotateCcw,
-  Flag,
   Upload,
-  ImageOff,
-  Pencil,
-  ArrowLeftRight,
   Layers,
-  Link2Off,
-  RefreshCw,
   Send,
-  Pipette,
-  Eraser,
   CalendarX2,
-  LayoutTemplate,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -120,26 +108,6 @@ interface ProgressEvent {
 // ── Helpers ────────────────────────────────────────────────────────────
 
 /** Map Airtable platform select values to Zernio platform IDs used by PlatformIcon */
-const AIRTABLE_TO_PLATFORM: Record<string, Platform> = {
-  Instagram: "instagram",
-  "X/Twitter": "twitter",
-  LinkedIn: "linkedin",
-  Facebook: "facebook",
-  Threads: "threads",
-  Bluesky: "bluesky",
-  Pinterest: "pinterest",
-  TikTok: "tiktok",
-  YouTube: "youtube",
-  Reddit: "reddit",
-  Telegram: "telegram",
-  Snapchat: "snapchat",
-  "Google Business": "googlebusiness",
-};
-
-function toPlatformId(airtableValue: string): Platform {
-  return AIRTABLE_TO_PLATFORM[airtableValue] || airtableValue.toLowerCase() as Platform;
-}
-
 // ── Constants ──────────────────────────────────────────────────────────
 
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
@@ -181,35 +149,6 @@ const STATUS_STYLES: Record<string, string> = {
   Failed: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
 
-const POST_STATUS_CONFIG: Record<
-  PostStatus,
-  { variant: "default" | "secondary" | "outline" | "destructive"; className?: string }
-> = {
-  Pending: { variant: "outline" },
-  Approved: {
-    variant: "secondary",
-    className: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  },
-  Modified: {
-    variant: "secondary",
-    className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
-  },
-  Dismissed: { variant: "secondary", className: "opacity-50" },
-  Queued: {
-    variant: "secondary",
-    className: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  },
-  Scheduled: {
-    variant: "secondary",
-    className: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300",
-  },
-  Published: {
-    variant: "secondary",
-    className: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  },
-  Failed: { variant: "destructive" },
-};
-
 // ── Main Page ──────────────────────────────────────────────────────────
 
 export default function CampaignDetailPage() {
@@ -231,9 +170,12 @@ export default function CampaignDetailPage() {
   const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
   const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
   const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null); // null = auto
+  const [genVoiceIntensity, setGenVoiceIntensity] = useState<number>(50);
+  const [genVoiceInitialized, setGenVoiceInitialized] = useState(false);
   const [settingsUnsaved, setSettingsUnsaved] = useState(false);
   const [activeTab, setActiveTab] = useState("posts");
   const queryClient = useQueryClient();
+  const { markNew, dismissNew, isNew } = useNewPosts();
 
   // Fetch connected accounts for the current brand
   const { currentBrand } = useBrand();
@@ -349,6 +291,14 @@ export default function CampaignDetailPage() {
     }
   }, [campaign?.maxVariantsPerPlatform, genMaxInitialized]);
 
+  // Initialize voice intensity from campaign's saved value
+  useEffect(() => {
+    if (!genVoiceInitialized && campaign?.voiceIntensity != null) {
+      setGenVoiceIntensity(campaign.voiceIntensity);
+      setGenVoiceInitialized(true);
+    }
+  }, [campaign?.voiceIntensity, genVoiceInitialized]);
+
   // Track whether generation options have unsaved changes
   const genOptionsChanged = useMemo(() => {
     if (!campaign) return false;
@@ -356,8 +306,9 @@ export default function CampaignDetailPage() {
     const currentPlatforms = Array.from(genPlatforms).sort();
     const platformsMatch = savedPlatforms.sort().join(",") === currentPlatforms.join(",");
     const maxMatch = (campaign.maxVariantsPerPlatform ?? null) === genMaxPerPlatform;
-    return !platformsMatch || !maxMatch;
-  }, [campaign, genPlatforms, genMaxPerPlatform]);
+    const voiceMatch = (campaign.voiceIntensity ?? 50) === genVoiceIntensity;
+    return !platformsMatch || !maxMatch || !voiceMatch;
+  }, [campaign, genPlatforms, genMaxPerPlatform, genVoiceIntensity]);
 
   const [savingGenOptions, setSavingGenOptions] = useState(false);
   const saveGenOptions = async () => {
@@ -370,6 +321,7 @@ export default function CampaignDetailPage() {
         body: JSON.stringify({
           targetPlatforms: Array.from(genPlatforms).join(","),
           maxVariantsPerPlatform: genMaxPerPlatform,
+          voiceIntensity: genVoiceIntensity,
         }),
       });
       queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
@@ -503,7 +455,7 @@ export default function CampaignDetailPage() {
   const scheduleCount = hasActiveFilter ? filteredApprovedPosts.length : approvedCount;
   const schedulePostIds = hasActiveFilter ? filteredApprovedPosts.map((p) => p.id) : null;
 
-  // Group filtered posts by date
+  // Group filtered posts by date, sorted newest-first within each group
   const postsByDate = useMemo(() => {
     const groups: Record<string, Post[]> = {};
     filteredPosts.forEach((p) => {
@@ -513,14 +465,24 @@ export default function CampaignDetailPage() {
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(p);
     });
+    // Sort each group by createdAt descending (newest first)
+    for (const key of Object.keys(groups)) {
+      groups[key].sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+    }
     return groups;
   }, [filteredPosts]);
 
   const sortedDateKeys = useMemo(() => {
     return Object.keys(postsByDate).sort((a, b) => {
-      if (a === "unscheduled") return 1;
-      if (b === "unscheduled") return -1;
-      return a.localeCompare(b);
+      // Unscheduled posts at the top (newest-first view)
+      if (a === "unscheduled") return -1;
+      if (b === "unscheduled") return 1;
+      // Newest dates first
+      return b.localeCompare(a);
     });
   }, [postsByDate]);
 
@@ -616,8 +578,13 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // ── Track post IDs before generation (for "New" badge) ──────────────
+  const preGenPostIdsRef = useRef<Set<string>>(new Set());
+
   // ── Generate posts handler (SSE) ─────────────────────────────────────
   const handleGenerate = async () => {
+    // Snapshot current post IDs so we can diff after generation
+    preGenPostIdsRef.current = new Set(posts.map((p) => p.id));
     setIsGenerating(true);
     setProgressLog([]);
 
@@ -689,6 +656,26 @@ export default function CampaignDetailPage() {
     setActiveTab("posts");
     queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
   };
+
+  // Mark newly generated posts as "new" when query data refreshes after generation
+  const prevPostIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (posts.length === 0) return;
+    const currentIds = new Set(posts.map((p) => p.id));
+    const preGenIds = preGenPostIdsRef.current;
+    // Only detect new posts if we had a pre-generation snapshot (i.e., generation was triggered)
+    if (preGenIds.size > 0) {
+      const newIds = posts
+        .filter((p) => !preGenIds.has(p.id))
+        .map((p) => p.id);
+      if (newIds.length > 0) {
+        markNew(newIds);
+      }
+      // Clear the snapshot so we don't re-detect on subsequent refetches
+      preGenPostIdsRef.current = new Set();
+    }
+    prevPostIdsRef.current = currentIds;
+  }, [posts, markNew]);
 
   const togglePlatformFilter = (platform: string) => {
     setPlatformFilter((prev) => {
@@ -1002,6 +989,45 @@ export default function CampaignDetailPage() {
                     ? `Test mode: ${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
                     : `Auto: variant count based on content sections and campaign duration`}
                 </p>
+              </div>
+
+              {/* Voice intensity slider */}
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+                  Tone of Voice
+                </Label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3">
+                    <Slider
+                      value={[genVoiceIntensity]}
+                      onValueChange={([val]) => setGenVoiceIntensity(val)}
+                      min={0}
+                      max={100}
+                      step={1}
+                      className="flex-1"
+                    />
+                    <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
+                      {genVoiceIntensity}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
+                    {getAllToneTiers().map((tier) => (
+                      <span
+                        key={tier.label}
+                        className={cn(
+                          "cursor-pointer hover:text-foreground transition-colors",
+                          genVoiceIntensity >= tier.min && genVoiceIntensity <= tier.max && "text-foreground font-medium"
+                        )}
+                        onClick={() => setGenVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
+                      >
+                        {tier.label}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.
+                  </p>
+                </div>
               </div>
 
               {genOptionsChanged && (
@@ -1454,7 +1480,8 @@ export default function CampaignDetailPage() {
                           key={post.id}
                           post={post}
                           campaignStatus={campaign.status}
-                          onClick={() => setSelectedPost(post)}
+                          isNewPost={isNew(post.id)}
+                          onClick={() => { dismissNew(post.id); setSelectedPost(post); }}
                           onApprove={() => quickApprove(post.id)}
                           onDismiss={() => quickDismiss(post.id)}
                           onUnapprove={() => quickUnapprove(post.id)}
@@ -1487,7 +1514,8 @@ export default function CampaignDetailPage() {
                         key={post.id}
                         post={post}
                         campaignStatus={campaign.status}
-                        onClick={() => setSelectedPost(post)}
+                        isNewPost={isNew(post.id)}
+                        onClick={() => { dismissNew(post.id); setSelectedPost(post); }}
                         onApprove={() => quickApprove(post.id)}
                         onDismiss={() => quickDismiss(post.id)}
                       />
@@ -1544,7 +1572,7 @@ export default function CampaignDetailPage() {
         <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[90vh] flex flex-col" aria-describedby={undefined}>
           <DialogTitle className="sr-only">Post Detail</DialogTitle>
           {selectedPost && (
-            <PostDetailView
+            <CampaignPostDetail
               post={selectedPost}
               posts={filteredPosts}
               campaign={campaign}
@@ -1687,6 +1715,7 @@ function PublishButton({ campaignId, queuedCount }: { campaignId: string; queued
 function CampaignPostRow({
   post,
   campaignStatus,
+  isNewPost,
   onClick,
   onApprove,
   onDismiss,
@@ -1697,6 +1726,7 @@ function CampaignPostRow({
 }: {
   post: Post;
   campaignStatus: CampaignStatus;
+  isNewPost?: boolean;
   onClick: () => void;
   onApprove?: () => void;
   onDismiss?: () => void;
@@ -1763,6 +1793,14 @@ function CampaignPostRow({
             >
               {post.status}
             </Badge>
+            {isNewPost && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/30 dark:text-violet-400"
+              >
+                New
+              </Badge>
+            )}
           </div>
           <p className="text-sm line-clamp-2">{post.content || "(No content)"}</p>
         </div>
@@ -1837,1451 +1875,8 @@ function CampaignPostRow({
   );
 }
 
-/** Debounced wheel handler — one trackpad swipe = one image change */
-let _wheelCooldown = false;
-function wheelNav(delta: number, onPrev: () => void, onNext: () => void) {
-  if (_wheelCooldown) return;
-  if (delta > 0) onNext(); else onPrev();
-  _wheelCooldown = true;
-  setTimeout(() => { _wheelCooldown = false; }, 300);
-}
+// PostDetailView extracted to src/components/posts/campaign-post-detail.tsx
 
-/** Keyboard handler for lightbox — uses window listener to bypass Radix focus trap */
-function LightboxKeyHandler({ imageCount, onPrev, onNext, onClose }: {
-  imageCount: number; onPrev: () => void; onNext: () => void; onClose: () => void;
-}) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { onClose(); return; }
-      if (imageCount <= 1) return;
-      if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); onPrev(); }
-      else if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); onNext(); }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  });
-  return null;
-}
-
-function PostDetailView({
-  post,
-  posts,
-  campaign,
-  onClose,
-  onNavigate,
-}: {
-  post: Post;
-  posts: Post[];
-  campaign: Campaign;
-  onClose: () => void;
-  onNavigate: (post: Post) => void;
-}) {
-  const { currentBrand } = useBrand();
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
-  const [flagDialogOpen, setFlagDialogOpen] = useState(false);
-  const [showAddImage, setShowAddImage] = useState(false);
-  const [imageUrlInput, setImageUrlInput] = useState("");
-  const [isDragging, setIsDragging] = useState(false);
-  const queryClient = useQueryClient();
-
-  // Multi-image state with captions
-  const buildMediaItems = (p: Post): MediaItem[] => parseMediaItems({
-    "Image URL": p.imageUrl,
-    "Media URLs": p.mediaUrls,
-    "Media Captions": p.mediaCaptions,
-  });
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>(buildMediaItems(post));
-  // Derived URL array for backward-compatible consumers
-  const mediaImages = mediaItems.map((i) => i.url);
-
-  // Track slide state locally (so UI updates immediately before query refetch)
-  const [slidesLocalState, setSlidesLocalState] = useState<"applied" | "reset" | null>(null);
-
-  // Reset state when navigating between posts
-  const [prevPostId, setPrevPostId] = useState(post.id);
-  if (prevPostId !== post.id) {
-    setPrevPostId(post.id);
-    setShowAddImage(false);
-    setImageUrlInput("");
-    setMediaItems(buildMediaItems(post));
-    setIsDragging(false);
-    setSlidesLocalState(null);
-  }
-
-  const platformLower = toPlatformId(post.platform);
-  const isPublished = post.status === "Published";
-  const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
-  const charCount = post.content?.length || 0;
-  const platformCharLimits: Record<string, number> = {
-    instagram: 2200, threads: 500, bluesky: 300, twitter: 280,
-    linkedin: 3000, facebook: 63206, pinterest: 500, tiktok: 4000,
-  };
-  const charLimit = platformCharLimits[platformLower] || 0;
-
-  // The URL to the source article — prefer shortUrl, fall back to linkUrl
-  const articleUrl = post.shortUrl || post.linkUrl;
-
-  // Save all images + captions to Airtable
-  const saveImagesMutation = useMutation({
-    mutationFn: async (items: MediaItem[]) => {
-      const serialized = serializeMediaItems(items);
-      const res = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          imageUrl: serialized["Image URL"],
-          mediaUrls: serialized["Media URLs"],
-          mediaCaptions: serialized["Media Captions"],
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save images");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-    },
-    onError: () => toast.error("Failed to save images"),
-  });
-
-  // Optimize for platform — AI outpainting
-  const platformTargets: Record<string, { w: number; h: number; label: string }> = {
-    instagram: { w: 1080, h: 1350, label: "4:5 portrait" },
-    pinterest: { w: 1000, h: 1500, label: "2:3 tall pin" },
-    threads: { w: 1440, h: 1920, label: "3:4" },
-    tiktok: { w: 1080, h: 1920, label: "9:16 vertical" },
-    bluesky: { w: 1000, h: 1000, label: "1:1 square" },
-    facebook: { w: 1080, h: 1350, label: "4:5 portrait" },
-    linkedin: { w: 1200, h: 1200, label: "1:1 square" },
-  };
-  const optimizeTarget = platformTargets[platformLower];
-  const optimizeTooltip = optimizeTarget
-    ? `AI outpaint to ${optimizeTarget.label} (${optimizeTarget.w}×${optimizeTarget.h})`
-    : "Optimize image for this platform";
-
-  const [optimizePreview, setOptimizePreview] = useState<{
-    optimizedUrl: string;
-    originalUrl: string;
-    dimensions: string;
-    duration: number;
-  } | null>(null);
-
-  const optimizeMutation = useMutation({
-    mutationFn: async (imageIndex: number) => {
-      const res = await fetch(`/api/posts/${post.id}/optimize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageIndex }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to optimize");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.skipped) {
-        toast.info(data.reason || "Image already optimal");
-      } else {
-        // Show preview dialog instead of auto-applying
-        setOptimizePreview(data);
-      }
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const acceptOptimization = () => {
-    if (!optimizePreview) return;
-    // Image is already saved by the endpoint — just refresh the view
-    const next = [...mediaItems];
-    next[0] = { ...next[0], url: optimizePreview.optimizedUrl };
-    setMediaItems(next);
-    queryClient.invalidateQueries({ queryKey: ["campaign"] });
-    toast.success(`Optimized for ${post.platform} (${optimizePreview.dimensions})`);
-    setOptimizePreview(null);
-  };
-
-  const rejectOptimization = () => {
-    // Revert: restore the original image URL in Airtable
-    if (optimizePreview?.originalUrl) {
-      const next = [...mediaItems];
-      next[0] = { ...next[0], url: optimizePreview.originalUrl };
-      setMediaItems(next);
-      saveImagesMutation.mutate(next);
-    }
-    setOptimizePreview(null);
-  };
-
-  // Carousel slide generation (Instagram framed slides with captions)
-  // Per-slide options: frameColor (eyedropper-picked), removeColor (chroma key)
-  type SlideOpt = { frameColor?: { r: number; g: number; b: number }; removeColor?: { r: number; g: number; b: number }; removeTolerance?: number };
-  const [carouselPreviews, setCarouselPreviews] = useState<Array<{ dataUri: string; caption: string; frameColor: { r: number; g: number; b: number } }> | null>(null);
-  const [perSlideOptions, setPerSlideOptions] = useState<(SlideOpt | undefined)[]>([]);
-  const [eyedropperMode, setEyedropperMode] = useState<{ slideIndex: number; mode: "frame" | "removeBg" } | null>(null);
-  const slidePlatforms = ["instagram", "threads", "linkedin", "bluesky"];
-  const slidesApplied = slidesLocalState === "applied" ? true
-    : slidesLocalState === "reset" ? false
-    : !!post.originalMedia;
-  const canGenerateSlides = slidePlatforms.includes(platformLower) && mediaImages.length >= 2
-    && !slidesApplied
-    && (platformLower === "bluesky" || mediaItems.some((m) => m.caption));
-
-  // Cover slide designer state
-  const [showCoverSlideDesigner, setShowCoverSlideDesigner] = useState(false);
-  const [coverSlideKey, setCoverSlideKey] = useState(0);
-  const canAddCoverSlide = slidePlatforms.includes(platformLower) && mediaImages.length >= 1 && post.status !== "Published";
-  const savedCoverSlideData: CoverSlideData | null = (() => {
-    try {
-      if (!post.coverSlideData) return null;
-      const data: CoverSlideData = JSON.parse(post.coverSlideData);
-      // Only treat as "saved" if the applied cover URL is actually the first media item.
-      // Prevents stale data from a previous session that was reset/undone.
-      if (data.appliedUrl && mediaItems[0]?.url !== data.appliedUrl) return null;
-      return data;
-    } catch { return null; }
-  })();
-
-  // Get pixel color from a click on the rendered preview image
-  const getPixelColor = (e: React.MouseEvent<HTMLImageElement>): { r: number; g: number; b: number } | null => {
-    const img = e.currentTarget;
-    const rect = img.getBoundingClientRect();
-    const x = Math.round((e.clientX - rect.left) / rect.width * img.naturalWidth);
-    const y = Math.round((e.clientY - rect.top) / rect.height * img.naturalHeight);
-    const canvas = document.createElement("canvas");
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(img, 0, 0);
-    const pixel = ctx.getImageData(x, y, 1, 1).data;
-    return { r: pixel[0], g: pixel[1], b: pixel[2] };
-  };
-
-  const handleSlideClick = (e: React.MouseEvent<HTMLImageElement>, slideIndex: number) => {
-    if (!eyedropperMode) return;
-    e.stopPropagation();
-    const color = getPixelColor(e);
-    if (!color) return;
-
-    const newOptions = [...perSlideOptions];
-    const existing = newOptions[slideIndex] || {};
-
-    if (eyedropperMode.mode === "frame") {
-      newOptions[slideIndex] = { ...existing, frameColor: color };
-    } else {
-      newOptions[slideIndex] = { ...existing, removeColor: color, removeTolerance: 50 };
-    }
-
-    setPerSlideOptions(newOptions);
-    setEyedropperMode(null);
-    // Re-render with updated options
-    carouselPreviewMutation.mutate(newOptions);
-  };
-
-  const carouselPreviewMutation = useMutation({
-    mutationFn: async (slideOpts?: (SlideOpt | undefined)[]) => {
-      const res = await fetch(`/api/posts/${post.id}/carousel-preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apply: false, slideOptions: slideOpts }),
-      });
-      if (!res.ok) throw new Error("Failed to generate carousel preview");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      const previews = data.previews.map((p: { dataUri: string; caption: string; frameColor: { r: number; g: number; b: number } }) => ({
-        dataUri: p.dataUri,
-        caption: p.caption,
-        frameColor: p.frameColor,
-      }));
-      setCarouselPreviews(previews);
-    },
-    onError: (err) => toast.error(`Carousel preview failed: ${err.message}`),
-  });
-
-  const carouselApplyMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/posts/${post.id}/carousel-preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apply: true, slideOptions: perSlideOptions }),
-      });
-      if (!res.ok) throw new Error("Failed to apply carousel slides");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      const newItems: MediaItem[] = data.mediaItems;
-      setMediaItems(newItems);
-      setCarouselPreviews(null);
-      setPerSlideOptions([]);
-      setEyedropperMode(null);
-      setSlidesLocalState("applied");
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success(`${newItems.length} carousel slides applied`);
-    },
-    onError: (err) => toast.error(`Apply failed: ${err.message}`),
-  });
-
-  const carouselResetMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/posts/${post.id}/carousel-preview`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to reset slides");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      const restoredItems: MediaItem[] = data.mediaItems;
-      setMediaItems(restoredItems);
-      setCarouselPreviews(null);
-      setPerSlideOptions([]);
-      setEyedropperMode(null);
-      setSlidesLocalState("reset");
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Original images restored");
-    },
-    onError: (err) => toast.error(`Reset failed: ${err.message}`),
-  });
-
-  const addImageUrl = (url: string) => {
-    const next = [...mediaItems, { url, caption: "" }];
-    setMediaItems(next);
-    setImageUrlInput("");
-    setShowAddImage(false);
-    saveImagesMutation.mutate(next);
-    toast.success(mediaItems.length === 0 ? "Image added" : `${next.length} images — carousel ready`);
-  };
-
-  const removeImage = (index: number) => {
-    const next = mediaItems.filter((_, i) => i !== index);
-    setMediaItems(next);
-    saveImagesMutation.mutate(next);
-    toast.success("Image removed");
-  };
-
-  const updateCaption = (index: number, caption: string) => {
-    const next = [...mediaItems];
-    next[index] = { ...next[index], caption };
-    setMediaItems(next);
-  };
-
-  const saveCaption = (index: number) => {
-    saveImagesMutation.mutate(mediaItems);
-  };
-
-  const uploadImageMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const validation = validateImage(file);
-      if (!validation.valid) throw new Error(validation.error);
-      const compressed = await compressImage(file);
-      const formData = new FormData();
-      formData.append("file", compressed);
-      const res = await fetch(`/api/posts/${post.id}/image`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) throw new Error("Failed to upload image");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      if (data.imageUrl) {
-        const next = [...mediaItems, { url: data.imageUrl, caption: "" }];
-        setMediaItems(next);
-        setShowAddImage(false);
-        saveImagesMutation.mutate(next);
-        toast.success(next.length > 1 ? `${next.length} images — carousel ready` : "Image uploaded");
-      }
-    },
-    onError: () => toast.error("Failed to upload image"),
-  });
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
-    if (files.length > 0) {
-      // Upload first file (could extend to batch later)
-      uploadImageMutation.mutate(files[0]);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handlePasteUrl = () => {
-    const url = imageUrlInput.trim();
-    if (url) addImageUrl(url);
-  };
-
-  // Approve/Dismiss mutations
-  const { data: session } = useSession();
-
-  const approveMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "Approved",
-          approvedBy: session?.user?.name || session?.user?.email || "",
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to approve");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Post approved");
-      if (nextPost) onNavigate(nextPost);
-    },
-    onError: () => toast.error("Failed to approve post"),
-  });
-
-  const dismissMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          status: "Dismissed",
-          shortUrl: post.shortUrl || undefined,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to dismiss");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Post dismissed");
-      if (nextPost) onNavigate(nextPost);
-    },
-    onError: () => toast.error("Failed to dismiss post"),
-  });
-
-  const publishNowMutation = useMutation({
-    mutationFn: async (scheduledFor?: string) => {
-      const res = await fetch(`/api/posts/${post.id}/publish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scheduledFor: scheduledFor || undefined }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to publish");
-      }
-      return res.json();
-    },
-    onSuccess: (_data, scheduledFor) => {
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success(scheduledFor
-        ? `Scheduled ${post.platform} for ${format(new Date(scheduledFor), "MMM d, h:mm a")}`
-        : `Published to ${post.platform} — scheduled in ~2 min`);
-      setShowSchedulePicker(false);
-      setScheduleDateTime("");
-      onClose();
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  // Schedule / Publish Now
-  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
-  const [scheduleDateTime, setScheduleDateTime] = useState("");
-
-  // Regenerate
-  const [regenDialogOpen, setRegenDialogOpen] = useState(false);
-  const [regenGuidance, setRegenGuidance] = useState("");
-
-  const regenerateMutation = useMutation({
-    mutationFn: async (guidance: string) => {
-      const res = await fetch(`/api/posts/${post.id}/regenerate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guidance }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to regenerate");
-      }
-      return res.json();
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Post regenerated");
-      setRegenDialogOpen(false);
-      setRegenGuidance("");
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  // Content editing
-  const [isEditingContent, setIsEditingContent] = useState(false);
-  const [editedContent, setEditedContent] = useState(post.content || "");
-
-  // Reset content edit state on post navigation
-  if (prevPostId !== post.id && isEditingContent) {
-    setIsEditingContent(false);
-    setEditedContent(post.content || "");
-  }
-
-  const saveContentMutation = useMutation({
-    mutationFn: async (content: string) => {
-      const res = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      if (!res.ok) throw new Error("Failed to save content");
-    },
-    onSuccess: () => {
-      setIsEditingContent(false);
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Content saved");
-    },
-    onError: () => toast.error("Failed to save content"),
-  });
-
-  // Navigation
-  const currentIndex = posts.findIndex((p) => p.id === post.id);
-  const prevPost = currentIndex > 0 ? posts[currentIndex - 1] : null;
-  const nextPost = currentIndex < posts.length - 1 ? posts[currentIndex + 1] : null;
-
-  return (
-    <div className="flex flex-col max-h-[90vh] min-h-[80vh] relative">
-      {/* Sticky header — platform + navigation combined */}
-      <div className="border-b border-border shrink-0 pr-10">
-        <div className="flex items-center gap-2 px-4 py-2.5">
-          {/* Prev */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            disabled={!prevPost}
-            onClick={() => prevPost && onNavigate(prevPost)}
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Platform + status — center */}
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <PlatformBadge platform={platformLower} className="h-7 w-7 shrink-0" />
-            <span className="font-medium text-sm truncate">{post.platform}</span>
-            <Badge
-              variant={statusConfig.variant}
-              className={cn("text-[10px] px-1.5 py-0 shrink-0", statusConfig.className)}
-            >
-              {post.status}
-            </Badge>
-            {post.approvedBy && (
-              <span className="text-[10px] text-muted-foreground shrink-0 hidden sm:inline">
-                by {post.approvedBy}
-              </span>
-            )}
-            {post.scheduledDate && (
-              <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:inline">
-                {format(parseISO(post.scheduledDate), "MMM d, h:mm a")}
-              </span>
-            )}
-          </div>
-
-          {/* Counter + Next */}
-          <span className="text-[11px] text-muted-foreground shrink-0">
-            {currentIndex + 1}/{posts.length}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            disabled={!nextPost}
-            onClick={() => nextPost && onNavigate(nextPost)}
-          >
-            <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-
-        {/* Image gallery — multi-image with add/remove/reorder for carousels */}
-        <div className="px-6 pb-3 space-y-2">
-          {/* Images — always show as strip when multiple */}
-          {mediaImages.length > 0 && (
-            <>
-              {mediaImages.length === 1 ? (
-                /* Single image — full width with click to lightbox */
-                <div
-                  className="rounded-lg overflow-hidden bg-muted relative group cursor-pointer"
-                  onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
-                >
-                  <img src={mediaImages[0]} alt="" className="w-full max-h-64 object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                    <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
-                  </div>
-                  {/* Remove on hover */}
-                  {!isPublished && (
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => { e.stopPropagation(); removeImage(0); }}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                  )}
-                </div>
-              ) : (
-                /* Multiple images — horizontal strip */
-                <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
-                  {mediaImages.map((imgUrl, idx) => (
-                    <div key={idx} className="shrink-0 snap-start flex flex-col gap-1">
-                    <div
-                      className={cn("relative group cursor-pointer rounded-lg overflow-hidden bg-muted", slidesApplied ? "w-40" : "w-40 h-40")}
-                      style={slidesApplied ? { aspectRatio: platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5" } : undefined}
-                      onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
-                    >
-                      <img src={imgUrl} alt="" className={cn(slidesApplied ? "w-full h-full object-contain" : "w-40 h-40 object-cover")} />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
-                      {/* Reorder buttons */}
-                      {!isPublished && (
-                      <div className="absolute top-1 left-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {idx > 0 && (
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="h-5 w-5"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const next = [...mediaItems];
-                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-                              setMediaItems(next);
-                              saveImagesMutation.mutate(next);
-                            }}
-                          >
-                            <ArrowLeft className="h-3 w-3" />
-                          </Button>
-                        )}
-                        {idx < mediaImages.length - 1 && (
-                          <Button
-                            variant="secondary"
-                            size="icon"
-                            className="h-5 w-5"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const next = [...mediaItems];
-                              [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-                              setMediaItems(next);
-                              saveImagesMutation.mutate(next);
-                            }}
-                          >
-                            <ArrowLeft className="h-3 w-3 rotate-180" />
-                          </Button>
-                        )}
-                      </div>
-                      )}
-                      {/* Remove button */}
-                      {!isPublished && (
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                      )}
-                      {/* Slide number */}
-                      <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
-                        {idx + 1}/{mediaImages.length}
-                      </span>
-                    </div>
-                    {/* Caption input — hidden for Bluesky and when slides are applied (captions baked in) */}
-                    {platformLower !== "bluesky" && !slidesApplied && (
-                    <input
-                      type="text"
-                      placeholder="Caption..."
-                      maxLength={120}
-                      value={mediaItems[idx]?.caption || ""}
-                      onChange={(e) => updateCaption(idx, e.target.value)}
-                      onBlur={() => saveCaption(idx)}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveCaption(idx); }}
-                      readOnly={isPublished}
-                      className={cn("w-40 text-[11px] px-1.5 py-1 border border-border rounded bg-background text-foreground truncate", isPublished && "opacity-60 cursor-default")}
-                    />
-                    )}
-                  </div>
-                ))}
-                </div>
-              )}
-
-              {/* Carousel info */}
-              {mediaImages.length > 1 && (
-                <p className="text-[11px] text-muted-foreground">
-                  {mediaImages.length} images — will post as carousel on supported platforms
-                </p>
-              )}
-            </>
-          )}
-
-          {/* Always-visible action bar — hidden for published posts */}
-          {!isPublished && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            {!slidesApplied && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs h-7 px-2"
-              onClick={() => setShowAddImage(!showAddImage)}
-              title={mediaImages.length === 0 ? "Add image" : "Add images for carousel"}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              {mediaImages.length >= 1 ? "Add for Carousel" : "Add"}
-            </Button>
-            )}
-            {!slidesApplied && mediaImages.length === 1 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground h-7 px-2"
-                onClick={() => {
-                  removeImage(0);
-                  setShowAddImage(true);
-                }}
-              >
-                <ArrowLeftRight className="h-3 w-3 mr-1" />
-                Replace
-              </Button>
-            )}
-            {!slidesApplied && mediaImages.length >= 1 && optimizeTarget && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground h-7 px-2"
-                onClick={() => optimizeMutation.mutate(0)}
-                disabled={optimizeMutation.isPending}
-                title={optimizeTooltip}
-              >
-                {optimizeMutation.isPending ? (
-                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Optimizing...</>
-                ) : (
-                  <><Sparkles className="h-3 w-3 mr-1" /> {optimizeTarget.label}</>
-                )}
-              </Button>
-            )}
-            {canAddCoverSlide && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground h-7 px-2"
-                onClick={() => { setCoverSlideKey((k) => k + 1); setShowCoverSlideDesigner(true); }}
-                title="Design a cover slide for this carousel"
-              >
-                <LayoutTemplate className="h-3 w-3 mr-1" /> Cover
-              </Button>
-            )}
-            {canGenerateSlides && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground h-7 px-2"
-                onClick={() => { setPerSlideOptions([]); carouselPreviewMutation.mutate(undefined); }}
-                disabled={carouselPreviewMutation.isPending}
-                title={`Generate framed carousel slides${platformLower === "bluesky" ? "" : " with captions"} (${platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})`}
-              >
-                {carouselPreviewMutation.isPending ? (
-                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Generating...</>
-                ) : (
-                  <><Layers className="h-3 w-3 mr-1" /> Slides</>
-                )}
-              </Button>
-            )}
-            {slidesApplied && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground h-7 px-2"
-                onClick={() => carouselResetMutation.mutate()}
-                disabled={carouselResetMutation.isPending}
-                title="Reset to original images (undo slide generation)"
-              >
-                {carouselResetMutation.isPending ? (
-                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Resetting...</>
-                ) : (
-                  <><RotateCcw className="h-3 w-3 mr-1" /> Reset Slides</>
-                )}
-              </Button>
-            )}
-          </div>
-          )}
-
-          {/* Add image panel — drag-drop + paste URL */}
-          {showAddImage && (
-            <div
-              className={cn(
-                "rounded-lg border-2 border-dashed p-4 space-y-3 transition-colors",
-                isDragging ? "border-primary bg-primary/5" : "border-border bg-muted/30"
-              )}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={() => setIsDragging(false)}
-            >
-              <div className="text-center py-3">
-                {uploadImageMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-6 w-6 mx-auto text-primary mb-1 animate-spin" />
-                    <p className="text-sm text-muted-foreground">Compressing & uploading...</p>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                    <p className="text-sm text-muted-foreground">Drag & drop an image</p>
-                    <label className="inline-block mt-1">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={uploadImageMutation.isPending}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) uploadImageMutation.mutate(file);
-                        }}
-                      />
-                      <span className="text-xs text-primary hover:underline cursor-pointer">
-                        Browse files
-                      </span>
-                    </label>
-                  </>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="url"
-                  placeholder="Paste image URL..."
-                  value={imageUrlInput}
-                  onChange={(e) => setImageUrlInput(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handlePasteUrl()}
-                  className="text-sm"
-                />
-                <Button
-                  size="sm"
-                  onClick={handlePasteUrl}
-                  disabled={!imageUrlInput.trim() || saveImagesMutation.isPending}
-                >
-                  Add
-                </Button>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full text-xs text-muted-foreground"
-                onClick={() => setShowAddImage(false)}
-              >
-                Done
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Image lightbox overlay with navigation */}
-        {/* Lightbox placeholder — actual lightbox rendered below, outside scroll area */}
-
-        {/* Full content — editable */}
-        <div className="px-6 pb-3">
-          {isEditingContent ? (
-            <div className="space-y-2">
-              <Textarea
-                value={editedContent}
-                onChange={(e) => setEditedContent(e.target.value)}
-                rows={8}
-                className="text-sm"
-                autoFocus
-              />
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  {editedContent.length} characters
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => {
-                      setEditedContent(post.content || "");
-                      setIsEditingContent(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => saveContentMutation.mutate(editedContent)}
-                    disabled={saveContentMutation.isPending || editedContent === post.content}
-                  >
-                    {saveContentMutation.isPending ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div
-              className={cn("group relative rounded-md p-1 -m-1", !isPublished && "cursor-pointer hover:bg-muted/30 transition-colors")}
-              onClick={() => {
-                if (isPublished) return;
-                setEditedContent(post.content || "");
-                setIsEditingContent(true);
-              }}
-            >
-              <p className="text-sm whitespace-pre-wrap">
-                {post.content || "(No content)"}
-              </p>
-              <div className="flex items-center justify-between mt-2">
-                <p className={cn("text-xs", charLimit && charCount > charLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
-                  {charCount}{charLimit ? ` / ${charLimit.toLocaleString()}` : ""} chars
-                </p>
-                {!isPublished && (
-                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                  <Pencil className="h-3 w-3" />
-                  Click to edit
-                </span>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Metadata row: article link + variant — consolidated */}
-        <div className="px-6 pb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          {articleUrl && (
-            <a
-              href={articleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              <Link2 className="h-3 w-3" />
-              {post.shortUrl || "Source"}
-              <ExternalLink className="h-2.5 w-2.5" />
-            </a>
-          )}
-          {post.contentVariant && (
-            <span>Variant {post.contentVariant}</span>
-          )}
-          {post.notes && (
-            <span>{post.notes}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Image lightbox — portaled to body to escape dialog transform containing block */}
-      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
-        <DialogContent
-          showCloseButton={false}
-          className="!max-w-none !w-screen !h-screen !p-0 !border-none !bg-black/92 !rounded-none flex flex-col items-center justify-center gap-0 !translate-x-0 !translate-y-0 !top-0 !left-0"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onWheel={(e: React.WheelEvent) => {
-            if (mediaImages.length <= 1) return;
-            const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-            if (Math.abs(delta) < 20) return;
-            wheelNav(
-              delta,
-              () => setLightboxIndex((i) => Math.max(i - 1, 0)),
-              () => setLightboxIndex((i) => Math.min(i + 1, mediaImages.length - 1))
-            );
-          }}
-          onTouchStart={(e: React.TouchEvent) => {
-            (e.currentTarget as HTMLElement).dataset.touchX = String(e.touches[0].clientX);
-          }}
-          onTouchEnd={(e: React.TouchEvent) => {
-            const startX = Number((e.currentTarget as HTMLElement).dataset.touchX);
-            const diff = startX - e.changedTouches[0].clientX;
-            if (Math.abs(diff) < 50 || mediaImages.length <= 1) return;
-            if (diff > 0) {
-              setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
-            } else {
-              setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
-            }
-          }}
-        >
-          <DialogTitle className="sr-only">Image Preview</DialogTitle>
-          <LightboxKeyHandler
-            imageCount={mediaImages.length}
-            onPrev={() => setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1))}
-            onNext={() => setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0))}
-            onClose={() => setLightboxOpen(false)}
-          />
-
-          {/* Close button — top right */}
-          <button
-            onClick={() => setLightboxOpen(false)}
-            className="absolute top-4 right-4 z-10 text-white/60 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-
-          {/* Image */}
-          <img
-            src={mediaImages[lightboxIndex]}
-            alt={mediaItems[lightboxIndex]?.caption || `Image ${lightboxIndex + 1}`}
-            className="max-h-[80vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
-            draggable={false}
-          />
-
-          {/* Bottom bar — caption, arrows, dots */}
-          <div className="flex flex-col items-center gap-2 mt-4">
-            {mediaItems[lightboxIndex]?.caption && !slidesApplied && (
-              <p className="text-white/70 text-sm text-center max-w-md truncate">
-                {mediaItems[lightboxIndex].caption}
-              </p>
-            )}
-            {mediaImages.length > 1 && (
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1))}
-                  className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2.5 transition-colors"
-                >
-                  <ArrowLeft className="h-5 w-5" />
-                </button>
-                <div className="flex items-center gap-2">
-                  {mediaImages.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setLightboxIndex(i)}
-                      className={cn(
-                        "rounded-full transition-all",
-                        i === lightboxIndex
-                          ? "w-2.5 h-2.5 bg-white"
-                          : "w-2 h-2 bg-white/30 hover:bg-white/50"
-                      )}
-                    />
-                  ))}
-                </div>
-                <button
-                  onClick={() => setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0))}
-                  className="text-white/50 hover:text-white bg-white/10 hover:bg-white/20 rounded-full p-2.5 transition-colors"
-                >
-                  <ArrowLeft className="h-5 w-5 rotate-180" />
-                </button>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Cover slide designer modal */}
-      {showCoverSlideDesigner && (
-        <CoverSlideDesigner
-          key={coverSlideKey}
-          postId={post.id}
-          platform={platformLower}
-          brandId={campaign?.brandIds?.[0]}
-          brandHandle={currentBrand?.instagramHandle || ""}
-          brandLogoUrl={currentBrand?.logoTransparentDark || currentBrand?.logoTransparentLight || null}
-          brandLogoLightUrl={currentBrand?.logoTransparentLight || null}
-          brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}
-          brandWebsiteUrl={currentBrand?.websiteUrl || null}
-          savedData={savedCoverSlideData}
-          onApply={(newMediaItems) => {
-            setMediaItems(newMediaItems);
-            setShowCoverSlideDesigner(false);
-            queryClient.invalidateQueries({ queryKey: ["campaign"] });
-          }}
-          onRemove={(restoredItems) => {
-            setMediaItems(restoredItems);
-            setShowCoverSlideDesigner(false);
-            queryClient.invalidateQueries({ queryKey: ["campaign"] });
-          }}
-          onClose={() => setShowCoverSlideDesigner(false)}
-        />
-      )}
-
-      {/* Carousel slide preview modal */}
-      {carouselPreviews && (
-        <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden">
-          {/* Header — tools in toolbar, not on slides */}
-          <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-zinc-700/50">
-            <div className="flex items-center gap-2 min-w-0">
-              <Layers className="h-4 w-4 text-white/70 shrink-0" />
-              <span className="text-white font-medium text-sm truncate">{carouselPreviews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})</span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Eyedropper tools — apply to whichever slide user clicks */}
-              <button
-                onClick={() => setEyedropperMode(
-                  eyedropperMode?.mode === "frame" ? null : { slideIndex: -1, mode: "frame" }
-                )}
-                disabled={carouselPreviewMutation.isPending}
-                className={cn(
-                  "flex items-center gap-1 text-white text-[10px] px-2 py-1.5 rounded-full transition-colors",
-                  eyedropperMode?.mode === "frame" ? "bg-amber-500/90" : "bg-zinc-700 hover:bg-zinc-600"
-                )}
-                title="Pick frame color from any slide"
-              >
-                <Pipette className="h-3 w-3" /> <span className="hidden sm:inline">Color</span>
-              </button>
-              <button
-                onClick={() => setEyedropperMode(
-                  eyedropperMode?.mode === "removeBg" ? null : { slideIndex: -1, mode: "removeBg" }
-                )}
-                disabled={carouselPreviewMutation.isPending}
-                className={cn(
-                  "flex items-center gap-1 text-white text-[10px] px-2 py-1.5 rounded-full transition-colors",
-                  eyedropperMode?.mode === "removeBg" ? "bg-amber-500/90" : "bg-zinc-700 hover:bg-zinc-600"
-                )}
-                title="Click background color on any slide to remove it"
-              >
-                <Eraser className="h-3 w-3" /> <span className="hidden sm:inline">Remove BG</span>
-              </button>
-              {perSlideOptions.some(Boolean) && (
-                <button
-                  onClick={() => { setPerSlideOptions([]); carouselPreviewMutation.mutate([]); }}
-                  disabled={carouselPreviewMutation.isPending}
-                  className="flex items-center gap-1 bg-zinc-700 hover:bg-zinc-600 text-white text-[10px] px-2 py-1.5 rounded-full transition-colors"
-                  title="Reset all to auto-detected colors"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                </button>
-              )}
-              <button
-                className="text-white/70 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors"
-                onClick={() => { setCarouselPreviews(null); setEyedropperMode(null); setPerSlideOptions([]); }}
-                disabled={carouselApplyMutation.isPending}
-              >
-                <X className="h-4 w-4" />
-              </button>
-              <Button
-                size="sm"
-                className="bg-white text-black hover:bg-white/90 text-xs h-7"
-                onClick={() => carouselApplyMutation.mutate()}
-                disabled={carouselApplyMutation.isPending || carouselPreviewMutation.isPending}
-              >
-                {carouselApplyMutation.isPending ? (
-                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Applying...</>
-                ) : (
-                  "Apply Slides"
-                )}
-              </Button>
-            </div>
-          </div>
-          {eyedropperMode && (
-            <div className="bg-amber-500/20 text-amber-400 text-xs text-center py-1 shrink-0">
-              {eyedropperMode.mode === "frame" ? "Click any slide to pick a frame color" : "Click a background color on any slide to remove it"}
-            </div>
-          )}
-          {/* Slides — constrained to correct aspect ratio */}
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-3 carousel-dark-scroll">
-            <div className="flex gap-4 h-full items-center">
-              {carouselPreviews.map((slide, idx) => {
-                const ar = platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5";
-                return (
-                <div key={idx} className="shrink-0 flex flex-col items-center gap-1.5 h-full">
-                  <div
-                    className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40 h-[calc(100%-24px)]"
-                    style={{ aspectRatio: ar }}
-                  >
-                    <img
-                      src={slide.dataUri}
-                      alt={slide.caption || `Slide ${idx + 1}`}
-                      crossOrigin="anonymous"
-                      className={cn(
-                        "h-full w-full object-contain",
-                        carouselPreviewMutation.isPending && "opacity-50",
-                        eyedropperMode && "cursor-crosshair"
-                      )}
-                      onClick={(e) => {
-                        if (eyedropperMode) {
-                          handleSlideClick(e, idx);
-                        }
-                      }}
-                    />
-                    {/* Frame color swatch */}
-                    {slide.frameColor && (
-                      <div
-                        className="absolute bottom-2 left-2 w-4 h-4 rounded-full border-2 border-white/50 shadow z-10"
-                        style={{ backgroundColor: `rgb(${slide.frameColor.r},${slide.frameColor.g},${slide.frameColor.b})` }}
-                        title={`Frame: rgb(${slide.frameColor.r}, ${slide.frameColor.g}, ${slide.frameColor.b})`}
-                      />
-                    )}
-                  </div>
-                  <span className="text-white/60 text-xs shrink-0">
-                    {idx + 1}/{carouselPreviews.length}
-                  </span>
-                </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Footer actions — pinned */}
-      <div className="flex items-center justify-between border-t border-border px-6 py-4 shrink-0">
-        <div className="flex gap-2">
-          {post.status === "Pending" && (
-            <>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => approveMutation.mutate()}
-                disabled={approveMutation.isPending}
-              >
-                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                {approveMutation.isPending ? "Approving..." : "Approve"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={() => dismissMutation.mutate()}
-                disabled={dismissMutation.isPending}
-              >
-                {dismissMutation.isPending ? "Dismissing..." : "Dismiss"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground"
-                onClick={() => setRegenDialogOpen(true)}
-                disabled={regenerateMutation.isPending}
-                title="Regenerate"
-              >
-                {regenerateMutation.isPending
-                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  : <RotateCcw className="h-3.5 w-3.5" />}
-              </Button>
-            </>
-          )}
-          {post.status === "Approved" && (
-            <>
-              {showSchedulePicker ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="datetime-local"
-                    value={scheduleDateTime}
-                    onChange={(e) => setScheduleDateTime(e.target.value)}
-                    className="text-xs border border-border rounded px-2 py-1 bg-background"
-                    min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
-                  />
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => publishNowMutation.mutate(new Date(scheduleDateTime).toISOString())}
-                    disabled={publishNowMutation.isPending || !scheduleDateTime}
-                  >
-                    {publishNowMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
-                    {publishNowMutation.isPending ? "" : "Schedule"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setShowSchedulePicker(false); setScheduleDateTime(""); }}>
-                    Cancel
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => publishNowMutation.mutate(undefined)}
-                    disabled={publishNowMutation.isPending}
-                  >
-                    <Send className="mr-1.5 h-3.5 w-3.5" />
-                    {publishNowMutation.isPending ? "Publishing..." : "Publish Now"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs text-muted-foreground"
-                    onClick={() => setShowSchedulePicker(true)}
-                  >
-                    <Clock className="mr-1 h-3 w-3" />
-                    Schedule
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-xs text-muted-foreground"
-                    onClick={() => {
-                      fetch(`/api/posts/${post.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ status: "Pending" }),
-                      }).then(() => {
-                        queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                        toast.success("Post returned to Pending");
-                      });
-                    }}
-                  >
-                    <RotateCcw className="mr-1 h-3 w-3" />
-                    Unapprove
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-          {post.status === "Scheduled" && (
-            <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
-              <Send className="mr-1 h-3 w-3" />
-              Scheduled
-            </Badge>
-          )}
-          {post.status === "Failed" && (
-            <div className="flex items-center gap-1">
-              <Button
-                variant="default"
-                size="sm"
-                onClick={() => {
-                  fetch(`/api/posts/${post.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ status: "Approved", clearZernioState: true }),
-                  }).then(() => {
-                    queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                    toast.success("Post reset to Approved — ready to re-publish");
-                  });
-                }}
-              >
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Retry
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => {
-                  if (confirm("Delete this failed post?")) {
-                    fetch(`/api/posts/${post.id}`, { method: "DELETE" }).then(() => {
-                      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                      toast.success("Post deleted");
-                      onClose();
-                    });
-                  }
-                }}
-              >
-                <Trash2 className="mr-1 h-3.5 w-3.5" />
-                Delete
-              </Button>
-            </div>
-          )}
-          {post.status === "Dismissed" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={() => {
-                // Restore to Pending
-                fetch(`/api/posts/${post.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ status: "Pending" }),
-                }).then(() => {
-                  queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                  toast.success("Post restored to Pending");
-                });
-              }}
-            >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              Restore
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={() => setFlagDialogOpen(true)}
-            title="Flag Issue"
-          >
-            <Flag className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-        <Button variant="outline" size="sm" onClick={onClose}>
-          Close
-        </Button>
-      </div>
-
-      {/* Flag Issue Dialog */}
-      <FlagIssueDialog
-        open={flagDialogOpen}
-        onOpenChange={setFlagDialogOpen}
-        post={post}
-        campaign={campaign}
-      />
-
-      {/* Regenerate Dialog */}
-      <Dialog open={regenDialogOpen} onOpenChange={setRegenDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Regenerate Post</DialogTitle>
-            <DialogDescription>
-              Optionally describe what this post should focus on. Leave blank to generate a fresh take.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            placeholder="e.g., Focus on the event itself, not a specific artist. Highlight the opening night details and CTA."
-            value={regenGuidance}
-            onChange={(e) => setRegenGuidance(e.target.value)}
-            rows={3}
-            disabled={regenerateMutation.isPending}
-          />
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => { setRegenDialogOpen(false); setRegenGuidance(""); }} disabled={regenerateMutation.isPending}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => regenerateMutation.mutate(regenGuidance)}
-              disabled={regenerateMutation.isPending}
-            >
-              {regenerateMutation.isPending ? (
-                <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Regenerating...</>
-              ) : (
-                <><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Regenerate</>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Optimize Preview Dialog */}
-      <Dialog open={!!optimizePreview} onOpenChange={(open) => !open && rejectOptimization()}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Optimized for {post.platform}</DialogTitle>
-            <DialogDescription>
-              {optimizePreview?.dimensions} — generated in {optimizePreview?.duration}s. Accept, retry, or dismiss.
-            </DialogDescription>
-          </DialogHeader>
-          {optimizePreview && (
-            <div className="grid grid-cols-2 gap-3 items-end">
-              <div>
-                <p className="text-[10px] text-muted-foreground mb-1 text-center">Original</p>
-                <img src={optimizePreview.originalUrl} alt="Original" className="w-full rounded border object-contain max-h-56 bg-muted" />
-              </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground mb-1 text-center">Optimized ({optimizePreview.dimensions})</p>
-                <img src={optimizePreview.optimizedUrl} alt="Optimized" className="w-full rounded border object-contain max-h-56 bg-muted" />
-              </div>
-            </div>
-          )}
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={rejectOptimization}>
-              Dismiss
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setOptimizePreview(null);
-                optimizeMutation.mutate(0);
-              }}
-            >
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-              Retry
-            </Button>
-            <Button onClick={acceptOptimization}>
-              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-              Accept
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
 
 /** Editable settings for Draft campaigns — reuses creation form components */
 function CampaignSettingsEditable({
@@ -3312,6 +1907,7 @@ function CampaignSettingsEditable({
   const [additionalUrlsList, setAdditionalUrlsList] = useState<string[]>(
     campaign.additionalUrls ? campaign.additionalUrls.split("\n").filter(Boolean) : []
   );
+  const [voiceIntensity, setVoiceIntensity] = useState<number>(campaign.voiceIntensity ?? 50);
 
   const isDateDriven = type === "Event" || type === "Open Call";
 
@@ -3324,7 +1920,8 @@ function CampaignSettingsEditable({
     startDate !== (campaign.startDate || "") ||
     eventDate !== (campaign.eventDate || "") ||
     eventDetails !== (campaign.eventDetails || "") ||
-    additionalUrlsList.filter(Boolean).join("\n") !== (campaign.additionalUrls || "");
+    additionalUrlsList.filter(Boolean).join("\n") !== (campaign.additionalUrls || "") ||
+    voiceIntensity !== (campaign.voiceIntensity ?? 50);
 
   // Notify parent of unsaved changes
   useEffect(() => {
@@ -3346,6 +1943,7 @@ function CampaignSettingsEditable({
           eventDate: eventDate || undefined,
           eventDetails: eventDetails || undefined,
           additionalUrls: additionalUrlsList.filter(Boolean).join("\n") || undefined,
+          voiceIntensity,
         }),
       });
       if (!res.ok) throw new Error("Failed to save");
@@ -3469,6 +2067,45 @@ function CampaignSettingsEditable({
               <li><strong>Let the AI handle attribution:</strong> The system automatically matches people and images from the scraped content — no need to instruct it to name specific individuals unless you want a particular focus</li>
             </ul>
           </details>
+        </CardContent>
+      </Card>
+
+      {/* Tone of Voice */}
+      <Card>
+        <CardContent className="pt-6 space-y-3">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+            Tone of Voice
+          </Label>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[voiceIntensity]}
+              onValueChange={([val]) => setVoiceIntensity(val)}
+              min={0}
+              max={100}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
+              {voiceIntensity}
+            </span>
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
+            {getAllToneTiers().map((tier) => (
+              <span
+                key={tier.label}
+                className={cn(
+                  "cursor-pointer hover:text-foreground transition-colors",
+                  voiceIntensity >= tier.min && voiceIntensity <= tier.max && "text-foreground font-medium"
+                )}
+                onClick={() => setVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
+              >
+                {tier.label}
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {getToneLabel(voiceIntensity)} — adjusts how much brand personality comes through in generated posts.
+          </p>
         </CardContent>
       </Card>
 
@@ -3971,170 +2608,3 @@ function SettingsField({
   );
 }
 
-// ── Flag Issue Dialog ───────────────────────────────────────────────────
-
-const SEVERITY_OPTIONS: FeedbackSeverity[] = ["Minor", "Moderate", "Critical"];
-
-function FlagIssueDialog({
-  open,
-  onOpenChange,
-  post,
-  campaign,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  post: Post;
-  campaign: Campaign;
-}) {
-  const [selectedCategories, setSelectedCategories] = useState<Set<FeedbackCategory>>(
-    new Set()
-  );
-  const [description, setDescription] = useState("");
-  const [severity, setSeverity] = useState<FeedbackSeverity>("Minor");
-  const [submitting, setSubmitting] = useState(false);
-
-  const toggleCategory = (cat: FeedbackCategory) => {
-    setSelectedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(cat)) {
-        next.delete(cat);
-      } else {
-        next.add(cat);
-      }
-      return next;
-    });
-  };
-
-  const handleSubmit = async () => {
-    if (selectedCategories.size === 0) {
-      toast.error("Please select at least one issue category");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const categories = Array.from(selectedCategories);
-      const summary = categories.length === 1
-        ? categories[0] + " — " + post.platform
-        : categories.length + " issues — " + post.platform;
-
-      const res = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          summary,
-          campaignIds: [campaign.id],
-          postIds: [post.id],
-          campaignTypeIds: [],
-          issueCategories: categories,
-          description,
-          severity,
-        }),
-      });
-
-      if (!res.ok) throw new Error("Failed to submit feedback");
-
-      toast.success("Feedback submitted");
-      onOpenChange(false);
-      // Reset form
-      setSelectedCategories(new Set());
-      setDescription("");
-      setSeverity("Minor");
-    } catch {
-      toast.error("Failed to submit feedback");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Flag Issue</DialogTitle>
-          <DialogDescription>
-            Report a problem with this {post.platform} post. This feedback helps
-            improve future content generation.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-4">
-          {/* Issue categories */}
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-              Issue Category
-            </Label>
-            <div className="grid grid-cols-2 gap-2">
-              {FEEDBACK_CATEGORIES.map((cat) => (
-                <label
-                  key={cat}
-                  className="flex items-center gap-2 text-sm cursor-pointer"
-                >
-                  <Checkbox
-                    checked={selectedCategories.has(cat)}
-                    onCheckedChange={() => toggleCategory(cat)}
-                  />
-                  {cat}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Description */}
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">
-              Description (optional)
-            </Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              placeholder="Describe the issue in more detail..."
-              className="text-sm"
-            />
-          </div>
-
-          {/* Severity */}
-          <div>
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2 block">
-              Severity
-            </Label>
-            <div className="flex gap-3">
-              {SEVERITY_OPTIONS.map((sev) => (
-                <label
-                  key={sev}
-                  className="flex items-center gap-2 text-sm cursor-pointer"
-                >
-                  <input
-                    type="radio"
-                    name="severity"
-                    value={sev}
-                    checked={severity === sev}
-                    onChange={() => setSeverity(sev)}
-                    className="accent-primary"
-                  />
-                  {sev}
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={submitting || selectedCategories.size === 0}
-          >
-            {submitting ? "Submitting..." : "Submit Feedback"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

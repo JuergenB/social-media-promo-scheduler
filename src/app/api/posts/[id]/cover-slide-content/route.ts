@@ -17,7 +17,7 @@ interface CampaignFields {
   Type: string;
   Description: string;
   "Editorial Direction": string;
-  "Brand IDs": string[];
+  Brand: string[];
 }
 
 interface BrandFields {
@@ -82,7 +82,7 @@ export async function POST(
         editorialDirection = campaign.fields["Editorial Direction"] || "";
 
         // Fetch brand for handle context
-        const brandId = campaign.fields["Brand IDs"]?.[0];
+        const brandId = campaign.fields.Brand?.[0];
         if (brandId) {
           try {
             const brand = await getRecord<BrandFields>("Brands", brandId);
@@ -211,12 +211,20 @@ CRITICAL: Respect character limits exactly. Count characters carefully.
 
     let generatedFields;
     try {
-      // Strip markdown code fences if present
-      const cleaned = textContent.text.replace(/```json\n?|\n?```/g, "").trim();
+      // Strip markdown code fences, leading/trailing text, and extract JSON object
+      let cleaned = textContent.text
+        .replace(/```(?:json)?\n?/g, "")
+        .replace(/```/g, "")
+        .trim();
+      // If Claude wrapped the JSON in explanation text, extract the JSON object
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleaned = jsonMatch[0];
+      }
       generatedFields = JSON.parse(cleaned);
     } catch {
       console.error("[cover-slide-content] Failed to parse AI response:", textContent.text);
-      return NextResponse.json({ error: "Failed to parse AI response" }, { status: 500 });
+      return NextResponse.json({ error: "Failed to parse AI response: " + textContent.text.slice(0, 200) }, { status: 500 });
     }
 
     return NextResponse.json({
