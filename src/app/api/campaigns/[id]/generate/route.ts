@@ -617,12 +617,16 @@ export async function POST(
 
         // Store scraped data on campaign record (skip status change in additive mode)
         // Also set og:image as campaign image if none exists
+        // For Quick Posts, also save the scraped title as description and update the name
         const ogImageUrl = blogData.ogImage || blogData.heroImage?.url || "";
+        const isQuickPostCampaign = fields.Name?.startsWith("Quick Post:");
         await updateRecord("Campaigns", campaignId, {
           ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
           "Scraped Images": JSON.stringify(blogData.images),
           ...(!fields["Image URL"] && ogImageUrl ? { "Image URL": ogImageUrl } : {}),
+          ...(!fields.Description && blogData.title ? { Description: blogData.title } : {}),
+          ...(isQuickPostCampaign && blogData.title ? { Name: `Quick Post: ${blogData.title}` } : {}),
         });
 
         // Analyze sections for section-aware generation

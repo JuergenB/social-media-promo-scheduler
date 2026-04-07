@@ -331,41 +331,8 @@ export default function QuickPostPage() {
         </p>
       </div>
 
-      {/* Existing quick posts */}
-      {quickPostCampaigns.length > 0 && (
-        <Card>
-          <CardContent className="pt-5 pb-4">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3 block">
-              Recent Quick Posts
-            </Label>
-            <div className="divide-y divide-border">
-              {quickPostCampaigns.slice(0, 5).map((qp) => (
-                <Link
-                  key={qp.id}
-                  href={`/dashboard/campaigns/${qp.id}`}
-                  className="flex items-center gap-3 py-2.5 hover:bg-muted/50 -mx-2 px-2 rounded transition-colors"
-                >
-                  {qp.imageUrl ? (
-                    <img src={qp.imageUrl} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
-                  ) : (
-                    <div className="h-10 w-10 rounded bg-muted flex items-center justify-center shrink-0">
-                      <PenSquare className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {qp.name?.replace("Quick Post: ", "") || "Untitled"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {qp.status} · {qp.targetPlatforms?.join(", ") || ""}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* ── Create section ─────────────────────────────────────── */}
+      <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Create</h2>
 
       {/* Platform selector */}
       <Card>
@@ -548,6 +515,52 @@ export default function QuickPostPage() {
               </CardContent>
             </Card>
           )}
+        </>
+      )}
+
+      {/* ── My Posts section ──────────────────────────────────── */}
+      {quickPostCampaigns.length > 0 && (
+        <>
+          <div className="pt-4">
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">My Posts</h2>
+          </div>
+          <Card>
+            <CardContent className="pt-4 pb-2">
+              <div className="divide-y divide-border">
+                {quickPostCampaigns.map((qp) => {
+                  // Derive a meaningful title: scraped page title (in description),
+                  // or cleaned campaign name, or URL
+                  const title = qp.description
+                    || qp.name?.replace("Quick Post: ", "")
+                    || qp.url?.replace(/^https?:\/\//, "").replace(/\/$/, "")
+                    || "Untitled";
+                  const platformLabel = qp.targetPlatforms?.join(", ") || "";
+                  return (
+                    <Link
+                      key={qp.id}
+                      href={`/dashboard/campaigns/${qp.id}`}
+                      className="flex items-center gap-3 py-3 hover:bg-muted/50 -mx-2 px-2 rounded transition-colors"
+                    >
+                      {qp.imageUrl ? (
+                        <img src={qp.imageUrl} alt="" className="h-12 w-12 rounded object-cover shrink-0" />
+                      ) : (
+                        <div className="h-12 w-12 rounded bg-muted flex items-center justify-center shrink-0">
+                          <PenSquare className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {qp.status}{platformLabel ? ` · ${platformLabel}` : ""}
+                          {qp.createdAt ? ` · ${new Date(qp.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>
