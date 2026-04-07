@@ -191,21 +191,26 @@ export async function POST(
       ? new Date(userScheduledFor).toISOString()
       : new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
+    // Build platform entry with platformSpecificData for first comment
+    const platformEntry: Record<string, unknown> = {
+      platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
+      accountId: (account as { _id: string })._id,
+    };
+
+    // First comment must be inside platformSpecificData per Zernio API spec
+    if (post.fields["First Comment"]) {
+      platformEntry.platformSpecificData = {
+        firstComment: post.fields["First Comment"],
+      };
+    }
+
     const createBody: Record<string, unknown> = {
       content: post.fields.Content || "",
       mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
-      platforms: [{
-        platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
-        accountId: (account as { _id: string })._id,
-      }],
+      platforms: [platformEntry],
       scheduledFor: publishAt,
       timezone: "America/New_York",
     };
-
-    // Add first comment for Instagram (hashtags + engagement hook)
-    if (post.fields["First Comment"]) {
-      createBody.firstComment = post.fields["First Comment"];
-    }
 
     const { data: zernioPost, error: zernioError } = await client.posts.createPost({
       body: createBody as Parameters<typeof client.posts.createPost>[0]["body"],

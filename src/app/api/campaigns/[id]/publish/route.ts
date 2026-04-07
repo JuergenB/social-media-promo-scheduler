@@ -179,20 +179,24 @@ export async function POST(
         }
 
         // Create post on Zernio
-        const createBody: Record<string, unknown> = {
-          content: post.fields.Content || "",
-          mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
-          platforms: [{
-            platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
-            accountId: (account as { _id: string })._id,
-          }],
-          scheduledFor: post.fields["Scheduled Date"],
-          timezone: "America/New_York",
+        const platformEntry: Record<string, unknown> = {
+          platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
+          accountId: (account as { _id: string })._id,
         };
 
         if (post.fields["First Comment"]) {
-          createBody.firstComment = post.fields["First Comment"];
+          platformEntry.platformSpecificData = {
+            firstComment: post.fields["First Comment"],
+          };
         }
+
+        const createBody: Record<string, unknown> = {
+          content: post.fields.Content || "",
+          mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
+          platforms: [platformEntry],
+          scheduledFor: post.fields["Scheduled Date"],
+          timezone: "America/New_York",
+        };
 
         const { data: zernioPost, error: zernioError } = await client.posts.createPost({
           body: createBody as Parameters<typeof client.posts.createPost>[0]["body"],
