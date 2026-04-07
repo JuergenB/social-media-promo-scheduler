@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess } from "@/lib/brand-access";
-import type { Brand, PlatformCadenceConfig } from "@/lib/airtable/types";
+import type { Brand, PlatformCadenceConfig, ToneDimensions } from "@/lib/airtable/types";
 
 interface AirtableAttachment {
   id: string;
@@ -33,6 +33,8 @@ interface BrandFields {
   "Instagram Handle": string;
   "Logo Transparent Light": string;
   "Logo Transparent Dark": string;
+  "Tone Dimensions": string;
+  "Tone Notes": string;
   Status: "Active" | "Inactive";
 }
 
@@ -42,6 +44,15 @@ function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig
     return JSON.parse(raw) as PlatformCadenceConfig;
   } catch {
     return null;
+  }
+}
+
+function parseToneDimensions(raw: string | undefined | null): ToneDimensions | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as ToneDimensions;
+  } catch {
+    return undefined;
   }
 }
 
@@ -64,6 +75,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     instagramHandle: r.fields["Instagram Handle"] || null,
     logoTransparentLight: r.fields["Logo Transparent Light"] || null,
     logoTransparentDark: r.fields["Logo Transparent Dark"] || null,
+    toneDimensions: parseToneDimensions(r.fields["Tone Dimensions"]),
+    toneNotes: r.fields["Tone Notes"] || undefined,
     status: r.fields.Status || "Active",
   };
 }
@@ -115,6 +128,8 @@ export async function PATCH(request: NextRequest) {
       zernioApiKeyLabel: "Zernio API Key Label",
       timezone: "Timezone",
       platformCadence: "Platform Cadence",
+      toneDimensions: "Tone Dimensions",
+      toneNotes: "Tone Notes",
       status: "Status",
     };
 
@@ -123,7 +138,7 @@ export async function PATCH(request: NextRequest) {
       const airtableField = fieldMap[key];
       if (airtableField) {
         // Serialize objects to JSON for long-text fields
-        fields[airtableField] = key === "platformCadence" && typeof value === "object"
+        fields[airtableField] = (key === "platformCadence" || key === "toneDimensions") && typeof value === "object"
           ? JSON.stringify(value)
           : value;
       }

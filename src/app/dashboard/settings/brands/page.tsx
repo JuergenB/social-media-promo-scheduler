@@ -34,8 +34,13 @@ import {
   ChevronUp,
   Settings2,
   LinkIcon,
+  SlidersHorizontal,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
-import type { Brand, PlatformCadenceEntry, TimeWindow } from "@/lib/airtable/types";
+import type { Brand, PlatformCadenceEntry, TimeWindow, ToneDimensions } from "@/lib/airtable/types";
+import { TONE_DIMENSION_DEFS } from "@/lib/airtable/types";
+import { Slider } from "@/components/ui/slider";
 import type { Platform } from "@/lib/late-api";
 import { useBrand } from "@/lib/brand-context";
 import { CadenceEditor } from "@/components/brands/cadence-editor";
@@ -216,6 +221,193 @@ function CadenceSummary({ brand }: { brand: Brand }) {
         );
       })}
     </div>
+  );
+}
+
+// ── Tone Dimensions Editor ────────────────────────────────────────────
+
+const DEFAULT_TONE_DIMENSIONS: ToneDimensions = {
+  wit: 5, warmth: 5, opinion: 5, skepticism: 5,
+  playfulness: 5, urgency: 5, authority: 5, intimacy: 5,
+};
+
+function ToneDimensionsEditor({ brand }: { brand: Brand }) {
+  const queryClient = useQueryClient();
+  const [dimensions, setDimensions] = useState<ToneDimensions>(
+    brand.toneDimensions || DEFAULT_TONE_DIMENSIONS
+  );
+  const [toneNotes, setToneNotes] = useState(brand.toneNotes || "");
+  const [isDirty, setIsDirty] = useState(false);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Reset state when brand changes
+  const brandId = brand.id;
+  const [lastBrandId, setLastBrandId] = useState(brandId);
+  if (brandId !== lastBrandId) {
+    setDimensions(brand.toneDimensions || DEFAULT_TONE_DIMENSIONS);
+    setToneNotes(brand.toneNotes || "");
+    setIsDirty(false);
+    setPreviewText(null);
+    setLastBrandId(brandId);
+  }
+
+  const mutation = useMutation({
+    mutationFn: async (updates: Record<string, unknown>) => {
+      const res = await fetch("/api/brands", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: brand.id, ...updates }),
+      });
+      if (!res.ok) throw new Error("Failed to update brand");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      toast.success("Tone dimensions saved");
+      setIsDirty(false);
+    },
+    onError: () => {
+      toast.error("Failed to save tone dimensions");
+    },
+  });
+
+  const handleDimensionChange = (key: keyof ToneDimensions, value: number) => {
+    setDimensions((prev) => ({ ...prev, [key]: value }));
+    setIsDirty(true);
+  };
+
+  const handleSave = () => {
+    mutation.mutate({ toneDimensions: dimensions, toneNotes });
+  };
+
+  const handleGeneratePreview = async () => {
+    setPreviewLoading(true);
+    setPreviewText(null);
+    try {
+      const res = await fetch("/api/brands/tone-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          brandName: brand.name,
+          toneDimensions: dimensions,
+          toneNotes,
+          voiceGuidelines: brand.voiceGuidelines,
+          anthropicApiKeyLabel: brand.anthropicApiKeyLabel,
+        }),
+      });
+      if (!res.ok) throw new Error("Preview failed");
+      const data = await res.json();
+      setPreviewText(data.preview);
+    } catch {
+      toast.error("Failed to generate preview");
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between mb-2">
+          <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <SlidersHorizontal className="h-3 w-3" />
+            Tone of Voice Dimensions
+          </Label>
+          {isDirty && (
+            <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={mutation.isPending}>
+              <Save className="h-3 w-3 mr-1" />
+              {mutation.isPending ? "Saving..." : "Save"}
+            </Button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          These settings shape how AI generates content for this brand. Each dimension is a 1-10 scale.
+          The campaign-level intensity slider will amplify or dampen these settings.
+        </p>
+
+        <div className="space-y-4">
+          {TONE_DIMENSION_DEFS.map((def) => (
+            <div key={def.key} className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">{def.label}</span>
+                <span className="text-sm font-semibold tabular-nums w-6 text-right">
+                  {dimensions[def.key]}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-muted-foreground w-24 text-right shrink-0">
+                  {def.lowLabel}
+                </span>
+                <Slider
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={[dimensions[def.key]]}
+                  onValueChange={([v]) => handleDimensionChange(def.key, v)}
+                  className="flex-1"
+                />
+                <span className="text-[10px] text-muted-foreground w-24 shrink-0">
+                  {def.highLabel}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground/70 pl-[calc(6rem+12px)]">
+                {def.description}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <Separator className="my-4" />
+
+        {/* Additional tone notes */}
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Additional tone notes</Label>
+          <Input
+            value={toneNotes}
+            onChange={(e) => {
+              setToneNotes(e.target.value);
+              setIsDirty(true);
+            }}
+            placeholder="e.g., Dry British-adjacent humor, never sarcastic"
+            className="text-sm h-8"
+          />
+        </div>
+
+        <Separator className="my-4" />
+
+        {/* Preview section */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs text-muted-foreground">Preview</Label>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={handleGeneratePreview}
+              disabled={previewLoading}
+            >
+              {previewLoading ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Sparkles className="h-3 w-3 mr-1" />
+              )}
+              {previewLoading ? "Generating..." : "Generate Preview"}
+            </Button>
+          </div>
+          {previewText && (
+            <div className="rounded-md border bg-muted/30 p-3">
+              <p className="text-sm italic leading-relaxed text-foreground/80">
+                {previewText}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-2">
+                This is how your brand sounds at these settings
+              </p>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -484,6 +676,9 @@ function BrandSettings({ brand }: { brand: Brand }) {
             )}
           </CardContent>
         </Card>
+
+        {/* ── Tone Dimensions ─────────────────────────────────────── */}
+        <ToneDimensionsEditor brand={brand} />
 
         {/* ── Posting Cadence ─────────────────────────────────────── */}
         <Card>

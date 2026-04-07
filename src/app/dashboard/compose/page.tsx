@@ -7,10 +7,11 @@ import { useCreatePost, useAccounts, useCurrentProfileId, type UploadedMedia } f
 import { useAppStore } from "@/stores";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { PlatformSelector } from "./_components/platform-selector";
 import { MediaUploader } from "./_components/media-uploader";
 import { SchedulePicker, type ScheduleType } from "./_components/schedule-picker";
+import { ContentEditor } from "@/components/posts/content-editor";
+import { PLATFORM_CHAR_LIMITS } from "@/lib/platform-constants";
 import { Loader2, Send, PenSquare, Users, Calendar, Image as ImageIcon } from "lucide-react";
 import type { Platform } from "@/lib/late-api";
 
@@ -38,9 +39,11 @@ export default function ComposePage() {
     selectedAccountIds.includes(a._id)
   );
 
-  // Character count (Twitter limit as reference)
-  const charCount = content.length;
-  const charLimit = 280;
+  // Determine character limit from selected platform(s)
+  const selectedPlatforms = selectedAccounts.map((a) => a.platform as string);
+  const charLimit = selectedPlatforms.length > 0
+    ? Math.min(...selectedPlatforms.map((p) => PLATFORM_CHAR_LIMITS[p] || 63206))
+    : 280;
 
   const canSubmit =
     selectedAccountIds.length > 0 &&
@@ -98,6 +101,17 @@ export default function ComposePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 sm:space-y-6">
+      {/* Migration banner */}
+      <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 text-sm">
+        <p className="font-medium text-amber-800 dark:text-amber-200">This page has moved</p>
+        <p className="text-amber-700 dark:text-amber-300 mt-1">
+          The Compose page has been replaced by{" "}
+          <a href="/dashboard/quick-post" className="font-medium underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-100">
+            Quick Post
+          </a>
+          , which supports AI generation, image editing, and carousel creation.
+        </p>
+      </div>
       {/* Page header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold">Create Post</h1>
@@ -118,26 +132,13 @@ export default function ComposePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Textarea
-              placeholder="What's on your mind?"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={8}
-              className="resize-none"
-            />
-            <div className="flex justify-end">
-              <span
-                className={`text-xs ${
-                  charCount > charLimit
-                    ? "text-destructive"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {charCount} / {charLimit}
-              </span>
-            </div>
-          </div>
+          <ContentEditor
+            content=""
+            alwaysEditing
+            editedContent={content}
+            onEditedContentChange={setContent}
+            charLimit={charLimit}
+          />
 
           <div className="rounded-lg bg-muted p-4">
             <div className="flex items-center gap-2 mb-3">

@@ -278,6 +278,7 @@ interface CampaignFields {
   "Target Platforms": string;
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
+  Tone: number;
 }
 
 interface BrandFields {
@@ -288,6 +289,8 @@ interface BrandFields {
   "Short API Key Label": string;
   "Anthropic API Key Label": string;
   "Zernio API Key Label": string;
+  "Tone Dimensions": string;
+  "Tone Notes": string;
 }
 
 // ── Config ─────────────────────────────────────────────────────────────
@@ -455,6 +458,8 @@ export async function POST(
         let brandVoice = { name: "Default", voiceGuidelines: "", websiteUrl: "" };
         let brandForShortIo: { name?: string; shortDomain?: string | null; shortApiKeyLabel?: string | null } = {};
         let brandForAnthropic: { anthropicApiKeyLabel?: string | null } = {};
+        let brandToneDimensions: import("@/lib/airtable/types").ToneDimensions | undefined;
+        let brandToneNotes: string | undefined;
 
         if (fields.Brand && fields.Brand.length > 0) {
           const brand = await getRecord<BrandFields>("Brands", fields.Brand[0]);
@@ -471,6 +476,13 @@ export async function POST(
           brandForAnthropic = {
             anthropicApiKeyLabel: brand.fields["Anthropic API Key Label"] || null,
           };
+          // Parse tone dimensions from brand record
+          if (brand.fields["Tone Dimensions"]) {
+            try {
+              brandToneDimensions = JSON.parse(brand.fields["Tone Dimensions"]);
+            } catch { /* fall through */ }
+          }
+          brandToneNotes = brand.fields["Tone Notes"] || undefined;
         }
 
         sendEvent(controller, encoder, {
@@ -604,10 +616,17 @@ export async function POST(
         }
 
         // Store scraped data on campaign record (skip status change in additive mode)
+        // Also set og:image as campaign image if none exists
+        // For Quick Posts, also save the scraped title as description and update the name
+        const ogImageUrl = blogData.ogImage || blogData.heroImage?.url || "";
+        const isQuickPostCampaign = fields.Name?.startsWith("Quick Post:");
         await updateRecord("Campaigns", campaignId, {
           ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
           "Scraped Images": JSON.stringify(blogData.images),
+          ...(!fields["Image URL"] && ogImageUrl ? { "Image URL": ogImageUrl } : {}),
+          ...(!fields.Description && blogData.title ? { Description: blogData.title } : {}),
+          ...(isQuickPostCampaign && blogData.title ? { Name: `Quick Post: ${blogData.title}` } : {}),
         });
 
         // Analyze sections for section-aware generation
@@ -750,6 +769,8 @@ export async function POST(
               : SYSTEM_PROMPT;
 
             const variantOffset = platformPosts.length; // 0 for batch 1, 2 for batch 2, etc.
+            const campaignVoiceIntensity = fields.Tone ?? null;
+
             const userPrompt = campaignTypeRule
               ? composeUserPrompt({
                   blogData,
@@ -765,6 +786,10 @@ export async function POST(
                   eventDetails: fields["Event Details"] || null,
                   supplementalContent: supplementalContent || null,
                   eventData: eventData as Record<string, string | null> | null,
+                  voiceIntensity: campaignVoiceIntensity,
+                  brandName: brandVoice.name,
+                  toneDimensions: brandToneDimensions,
+                  toneNotes: brandToneNotes,
                 })
               : buildUserPrompt({
                   blogData,
@@ -775,6 +800,10 @@ export async function POST(
                   postsPerPlatform: batchCount,
                   imageCount: contentImages.length,
                   variantOffset,
+                  voiceIntensity: campaignVoiceIntensity,
+                  brandName: brandVoice.name,
+                  toneDimensions: brandToneDimensions,
+                  toneNotes: brandToneNotes,
                 });
 
             // Scale output tokens: ~400 tokens per post (content + JSON structure) + buffer
@@ -792,7 +821,16 @@ export async function POST(
           // User-uploaded hero (in campaign "Image URL") takes precedence over scraped og:image
           const heroFallback = fields["Image URL"] || heroUrl || "";
 
+          // For Quick Post campaigns (maxPerPlatform=1 with a URL), always use the
+          // og:image/hero as the post image. The user can swap in the editor.
+          const isQuickPost = fields.Name?.startsWith("Quick Post:") && maxPerPlatformOverride === 1;
+
           for (const post of result.posts) {
+            if (isQuickPost && heroFallback) {
+              post.imageUrl = heroFallback;
+              continue;
+            }
+
             // Deterministic section→image binding for multi-section posts:
             // If post has a sectionIndex and that section has an image, use it directly.
             // This bypasses Claude's imageIndex which is unreliable when alt text is poor.

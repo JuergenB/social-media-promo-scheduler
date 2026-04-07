@@ -31,7 +31,9 @@ import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
 import { useAccounts } from "@/hooks/use-accounts";
 import { PlatformIcon } from "@/components/shared/platform-icon";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 import type { Platform } from "@/lib/late-api";
+import { getToneLabel, getAllToneTiers } from "@/lib/prompts/tone-guidance";
 import {
   ArrowLeft,
   Mail,
@@ -97,6 +99,7 @@ export default function NewCampaignPage() {
   const [distributionBias, setDistributionBias] = useState<DistributionBias>("Front-loaded");
   const [customDuration, setCustomDuration] = useState(false);
   const [editorialDirection, setEditorialDirection] = useState("");
+  const [voiceIntensity, setVoiceIntensity] = useState<number>(50);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
@@ -247,6 +250,7 @@ export default function NewCampaignPage() {
           ...(genPlatforms.size > 0 ? { targetPlatforms: Array.from(genPlatforms).join(",") } : {}),
           ...(genMaxPerPlatform !== null ? { maxVariantsPerPlatform: genMaxPerPlatform } : {}),
           ...(Object.keys(campaignCadence).length > 0 ? { platformCadence: campaignCadence } : {}),
+          voiceIntensity,
         }),
       });
 
@@ -892,6 +896,45 @@ export default function NewCampaignPage() {
                   ? `${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
                   : "Auto: variant count based on content and campaign duration"}
               </p>
+            </div>
+
+            {/* Voice intensity slider */}
+            <div>
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider mb-2 block">
+                Tone of Voice
+              </Label>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Slider
+                    value={[voiceIntensity]}
+                    onValueChange={([val]) => setVoiceIntensity(val)}
+                    min={0}
+                    max={100}
+                    step={1}
+                    className="flex-1"
+                  />
+                  <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
+                    {voiceIntensity}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
+                  {getAllToneTiers().map((tier) => (
+                    <span
+                      key={tier.label}
+                      className={cn(
+                        "cursor-pointer hover:text-foreground transition-colors",
+                        voiceIntensity >= tier.min && voiceIntensity <= tier.max && "text-foreground font-medium"
+                      )}
+                      onClick={() => setVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
+                    >
+                      {tier.label}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {getToneLabel(voiceIntensity)} — adjusts how much brand personality comes through in generated posts.
+                </p>
+              </div>
             </div>
           </CardContent>
         )}

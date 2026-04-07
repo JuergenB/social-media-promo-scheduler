@@ -25,6 +25,7 @@ interface CampaignFields {
   "Target Platforms": string;
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
+  Tone: number;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -108,6 +109,7 @@ export async function GET(
       targetPlatforms: record.fields["Target Platforms"] ? record.fields["Target Platforms"].split(",") : undefined,
       maxVariantsPerPlatform: record.fields["Max Variants Per Platform"] ?? undefined,
       platformCadence: parseCadenceJson(record.fields["Platform Cadence"]),
+      voiceIntensity: record.fields.Tone ?? undefined,
     };
 
     // Fetch posts linked to this campaign
@@ -138,6 +140,7 @@ export async function GET(
       notes: r.fields.Notes || "",
       originalMedia: r.fields["Original Media"] || "",
       coverSlideData: r.fields["Cover Slide Data"] || "",
+      createdAt: r.createdTime || "",
     }));
 
     return NextResponse.json({ campaign, posts });
@@ -184,6 +187,7 @@ export async function PATCH(
       maxVariantsPerPlatform: "Max Variants Per Platform",
       platformCadence: "Platform Cadence",
       imageUrl: "Image URL",
+      voiceIntensity: "Tone",
     };
 
     const fields: Record<string, unknown> = {};

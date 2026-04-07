@@ -25,8 +25,42 @@ export interface Brand {
   logoTransparentLight: string | null;
   /** Vercel Blob URL for dark/black transparent PNG logo (for light backgrounds). */
   logoTransparentDark: string | null;
+  /** Per-brand tone dimension settings (8 dimensions, 1-10 scale each). */
+  toneDimensions?: ToneDimensions;
+  /** Short additional tone notes (1-2 sentences). */
+  toneNotes?: string;
   status: "Active" | "Inactive";
 }
+
+// ── Per-brand tone dimensions ────────────────────────────────────────
+
+export interface ToneDimensions {
+  wit: number;
+  warmth: number;
+  opinion: number;
+  skepticism: number;
+  playfulness: number;
+  urgency: number;
+  authority: number;
+  intimacy: number;
+}
+
+export const TONE_DIMENSION_DEFS: Array<{
+  key: keyof ToneDimensions;
+  label: string;
+  lowLabel: string;
+  highLabel: string;
+  description: string;
+}> = [
+  { key: "wit", label: "Wit", lowLabel: "Straightforward", highLabel: "Sharp & ironic", description: "Clever wordplay, dry humor, ironic observations" },
+  { key: "warmth", label: "Warmth", lowLabel: "Formal", highLabel: "Personal", description: "How inviting and familiar the voice feels" },
+  { key: "opinion", label: "Opinion", lowLabel: "Neutral", highLabel: "Strong positions", description: "Whether the voice hedges or takes clear stances" },
+  { key: "skepticism", label: "Skepticism", lowLabel: "Accepting", highLabel: "Questions everything", description: "Healthy questioning of trends, hype, and conventional wisdom" },
+  { key: "playfulness", label: "Playfulness", lowLabel: "Serious", highLabel: "Irreverent", description: "Lighthearted energy, fun asides, willingness to not take itself too seriously" },
+  { key: "urgency", label: "Urgency", lowLabel: "Relaxed", highLabel: "Action-oriented", description: "How strongly posts push toward action, deadlines, or FOMO" },
+  { key: "authority", label: "Authority", lowLabel: "Exploratory", highLabel: "Expert", description: "Commanding expertise vs. humble curiosity" },
+  { key: "intimacy", label: "Intimacy", lowLabel: "Institutional", highLabel: "First-person", description: "Personal, confessional voice vs. organizational distance" },
+];
 
 // ── Per-brand platform cadence ────────────────────────────────────────
 
@@ -111,6 +145,8 @@ export interface Campaign {
   maxVariantsPerPlatform?: number | null;
   /** Per-campaign platform cadence overrides. Seeded from brand defaults on creation. */
   platformCadence?: PlatformCadenceConfig | null;
+  /** Tone of voice intensity (0-100). 0=Professional, 50=Balanced (default), 100=Full Voice. */
+  voiceIntensity?: number;
 }
 
 export const POST_STATUSES = [
@@ -146,6 +182,8 @@ export interface Post {
   notes: string;
   originalMedia: string;
   coverSlideData: string;
+  /** Airtable record creation timestamp (ISO 8601) */
+  createdAt?: string;
 }
 
 export interface PlatformSetting {

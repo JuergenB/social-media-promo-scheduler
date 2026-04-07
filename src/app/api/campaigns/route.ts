@@ -23,6 +23,7 @@ interface CampaignFields {
   "Target Platforms": string;
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
+  Tone: number;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -111,6 +112,7 @@ export async function GET() {
       targetPlatforms: r.fields["Target Platforms"] ? r.fields["Target Platforms"].split(",") : undefined,
       maxVariantsPerPlatform: r.fields["Max Variants Per Platform"] ?? undefined,
       platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
+      voiceIntensity: r.fields.Tone ?? undefined,
     }));
 
     // Filter by user's allowed brands
@@ -184,6 +186,7 @@ export async function POST(request: NextRequest) {
       ...(body.targetPlatforms ? { "Target Platforms": body.targetPlatforms } : {}),
       ...(body.maxVariantsPerPlatform != null ? { "Max Variants Per Platform": body.maxVariantsPerPlatform } : {}),
       ...(cadenceJson ? { "Platform Cadence": cadenceJson } : {}),
+      ...(body.voiceIntensity != null ? { Tone: body.voiceIntensity } : {}),
     });
 
     return NextResponse.json({ campaign: record }, { status: 201 });

@@ -32,7 +32,6 @@ import {
   PenSquare,
   Calendar,
   Users,
-  ListOrdered,
   Megaphone,
   Settings,
   Layers,
@@ -44,38 +43,15 @@ import {
   ChevronRight,
   Check,
   ExternalLink,
+  BarChart3,
   MoreHorizontal,
 } from "lucide-react";
 
-const campaignNav = [
-  {
-    label: "Campaigns",
-    href: "/dashboard/campaigns",
-    icon: Megaphone,
-  },
-];
-
-const schedulingNav = [
-  {
-    label: "Compose",
-    href: "/dashboard/compose",
-    icon: PenSquare,
-  },
-  {
-    label: "Calendar",
-    href: "/dashboard/calendar",
-    icon: Calendar,
-  },
-  {
-    label: "Queue",
-    href: "/dashboard/queue",
-    icon: ListOrdered,
-  },
-  {
-    label: "Accounts",
-    href: "/dashboard/accounts",
-    icon: Users,
-  },
+const mainNav = [
+  { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
+  { label: "Quick Post", href: "/dashboard/quick-post", icon: PenSquare },
+  { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, disabled: true },
 ];
 
 const settingsSubNav = [
@@ -95,6 +71,11 @@ const settingsSubNav = [
     icon: Megaphone,
   },
   {
+    label: "Accounts",
+    href: "/dashboard/accounts",
+    icon: Users,
+  },
+  {
     label: "Platforms",
     href: "/dashboard/settings/platforms",
     icon: Layers,
@@ -105,9 +86,8 @@ const settingsSubNav = [
 const mobileNav = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
-  { label: "Compose", href: "/dashboard/compose", icon: PenSquare },
+  { label: "Quick Post", href: "/dashboard/quick-post", icon: PenSquare },
   { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-  { label: "Queue", href: "/dashboard/queue", icon: ListOrdered },
 ];
 
 function NavLink({
@@ -116,17 +96,34 @@ function NavLink({
   label,
   pathname,
   indent = false,
+  disabled = false,
 }: {
   href: string;
   icon: React.ElementType;
   label: string;
   pathname: string;
   indent?: boolean;
+  disabled?: boolean;
 }) {
   const isActive =
     href === "/dashboard"
       ? pathname === href
       : pathname === href || pathname.startsWith(href + "/");
+
+  if (disabled) {
+    return (
+      <span
+        className={cn(
+          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground/40 cursor-not-allowed",
+          indent && "pl-6",
+        )}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        <span>{label}</span>
+        <span className="ml-auto text-[9px] uppercase tracking-wider opacity-60">Soon</span>
+      </span>
+    );
+  }
 
   return (
     <Link
@@ -145,13 +142,6 @@ function NavLink({
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-      {children}
-    </p>
-  );
-}
 
 export default function DashboardLayout({
   children,
@@ -193,30 +183,17 @@ export default function DashboardLayout({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto p-2">
-          {/* Dashboard */}
-          <NavLink
-            href="/dashboard"
-            icon={LayoutDashboard}
-            label="Dashboard"
-            pathname={pathname}
-          />
-
-          {/* Campaigns section */}
-          <SectionLabel>Campaigns</SectionLabel>
           <div className="space-y-0.5">
-            {campaignNav.map((item) => (
-              <NavLink key={item.href} {...item} pathname={pathname} />
+            <NavLink
+              href="/dashboard"
+              icon={LayoutDashboard}
+              label="Dashboard"
+              pathname={pathname}
+            />
+            {mainNav.map((item) => (
+              <NavLink key={item.href} {...item} pathname={pathname} disabled={item.disabled} />
             ))}
           </div>
-
-          {/* Scheduling section */}
-          <SectionLabel>Scheduling</SectionLabel>
-          <div className="space-y-0.5">
-            {schedulingNav.map((item) => (
-              <NavLink key={item.href} {...item} pathname={pathname} />
-            ))}
-          </div>
-
         </nav>
 
         {/* Settings — pinned to bottom */}
@@ -463,20 +440,7 @@ export default function DashboardLayout({
                 <SheetTitle className="text-sm">More</SheetTitle>
               </SheetHeader>
               <div className="space-y-1">
-                <Link
-                  href="/dashboard/accounts"
-                  onClick={() => setMoreSheetOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors",
-                    pathname.startsWith("/dashboard/accounts")
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <Users className="h-4 w-4" />
-                  Accounts
-                </Link>
-                <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                <div className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                   Settings
                 </div>
                 {settingsSubNav.map((item) => (

@@ -14,6 +14,7 @@ import {
   buildUserPrompt as baseBuildUserPrompt,
   type UserPromptParams,
 } from "./blog-post-generator";
+import { buildToneGuidance } from "./tone-guidance";
 
 // ── Priority ordering ───────────────────────────────────────────────────
 
@@ -117,6 +118,14 @@ export interface ComposeUserPromptParams extends UserPromptParams {
   supplementalContent?: string | null;
   /** Structured event data from JSON extraction */
   eventData?: Record<string, string | null> | null;
+  /** Voice intensity (0-100) for tone guidance injection */
+  voiceIntensity?: number | null;
+  /** Brand name (for tone dimension labels) */
+  brandName?: string;
+  /** Per-brand tone dimensions (8 sliders, 1-10 scale) */
+  toneDimensions?: import("@/lib/airtable/types").ToneDimensions;
+  /** Short additional tone notes */
+  toneNotes?: string;
 }
 
 /**
@@ -126,13 +135,21 @@ export interface ComposeUserPromptParams extends UserPromptParams {
  * Falls back to the base buildUserPrompt() if no campaignTypeRule is provided.
  */
 export function composeUserPrompt(params: ComposeUserPromptParams): string {
-  const { campaignTypeRule, eventDate, eventDetails, supplementalContent, eventData, ...baseParams } = params;
+  const { campaignTypeRule, eventDate, eventDetails, supplementalContent, eventData, voiceIntensity, brandName, toneDimensions, toneNotes, ...baseParams } = params;
 
   // Get the base user prompt
   const basePrompt = baseBuildUserPrompt(baseParams);
 
   // Build all context sections to inject
   const contextSections: string[] = [];
+
+  // Tone guidance — injected before type context and editorial direction
+  const toneBlock = buildToneGuidance(voiceIntensity, {
+    brandName,
+    toneDimensions,
+    toneNotes,
+  });
+  if (toneBlock) contextSections.push(toneBlock);
 
   // Type-specific context from CampaignTypeRule
   const typeContext = campaignTypeRule ? buildTypeContext(campaignTypeRule) : null;
