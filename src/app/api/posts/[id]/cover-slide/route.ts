@@ -166,6 +166,20 @@ export async function POST(
 
     // Save to Airtable
     const serialized = serializeMediaItems(newMediaItems);
+
+    // Build designed card URL list — preserve any existing ones and add the new one
+    let existingDesignedUrls: string[] = [];
+    if (post.fields["Cover Slide Data"]) {
+      try {
+        const existing: CoverSlideData = JSON.parse(post.fields["Cover Slide Data"]);
+        existingDesignedUrls = existing.designedCardUrls || [];
+        if (existing.appliedUrl && !existingDesignedUrls.includes(existing.appliedUrl)) {
+          existingDesignedUrls.push(existing.appliedUrl);
+        }
+      } catch { /* ignore */ }
+    }
+    const designedCardUrls = [...new Set([...existingDesignedUrls, coverUrl])];
+
     const coverSlideData: CoverSlideData = {
       templateId,
       fields: {
@@ -178,6 +192,7 @@ export async function POST(
       fontSizeDeltas,
       showLinkInBio,
       appliedUrl: coverUrl,
+      designedCardUrls,
     };
 
     await updateRecord("Posts", id, {

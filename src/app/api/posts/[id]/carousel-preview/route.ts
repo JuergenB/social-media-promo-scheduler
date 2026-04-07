@@ -45,13 +45,17 @@ export async function POST(
 
     let mediaItems = parseMediaItems(post.fields);
 
-    // If a cover slide is applied, exclude it from carousel slide generation.
-    // The cover slide is always the first item — don't frame a cover inside another slide.
+    // Exclude all designed cards (covers, quote cards) from carousel slide generation.
+    // Designed cards are tracked by URL in coverSlideData.designedCardUrls so
+    // reordering images doesn't break the exclusion.
     if (post.fields["Cover Slide Data"]) {
       try {
         const coverData = JSON.parse(post.fields["Cover Slide Data"]);
-        if (coverData.appliedUrl && mediaItems[0]?.url === coverData.appliedUrl) {
-          mediaItems = mediaItems.slice(1);
+        const designedUrls = new Set<string>(coverData.designedCardUrls || []);
+        // Also include the legacy appliedUrl for backward compatibility
+        if (coverData.appliedUrl) designedUrls.add(coverData.appliedUrl);
+        if (designedUrls.size > 0) {
+          mediaItems = mediaItems.filter((item) => !designedUrls.has(item.url));
         }
       } catch { /* ignore parse errors */ }
     }
@@ -99,19 +103,36 @@ export async function POST(
       });
     }
 
-    // If a cover slide exists, keep it as the first item
-    let coverItem: MediaItem | null = null;
+    // Re-insert designed cards (covers, quote cards) at their original positions.
+    // This preserves user-arranged order of designed cards among the rendered slides.
+    const allItems = parseMediaItems(post.fields);
+    let designedUrls = new Set<string>();
     if (post.fields["Cover Slide Data"]) {
       try {
-        const allItems = parseMediaItems(post.fields);
         const coverData = JSON.parse(post.fields["Cover Slide Data"]);
-        if (coverData.appliedUrl && allItems[0]?.url === coverData.appliedUrl) {
-          coverItem = allItems[0];
-        }
+        (coverData.designedCardUrls || []).forEach((u: string) => designedUrls.add(u));
+        if (coverData.appliedUrl) designedUrls.add(coverData.appliedUrl);
       } catch { /* ignore */ }
     }
 
-    const newMediaItems = coverItem ? [coverItem, ...renderedSlides] : renderedSlides;
+    // Rebuild the full list: walk through original order, replacing raw images
+    // with rendered slides while keeping designed cards in place
+    const newMediaItems: MediaItem[] = [];
+    let slideIdx = 0;
+    for (const item of allItems) {
+      if (designedUrls.has(item.url)) {
+        // Keep designed card as-is in its current position
+        newMediaItems.push(item);
+      } else if (slideIdx < renderedSlides.length) {
+        // Replace raw image with rendered slide
+        newMediaItems.push(renderedSlides[slideIdx]);
+        slideIdx++;
+      }
+    }
+    // Append any remaining slides (shouldn't happen, but safety)
+    while (slideIdx < renderedSlides.length) {
+      newMediaItems.push(renderedSlides[slideIdx++]);
+    }
     const serialized = serializeMediaItems(newMediaItems);
     await updateRecord("Posts", id, {
       "Image URL": serialized["Image URL"],

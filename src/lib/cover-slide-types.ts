@@ -213,4 +213,10 @@ export interface CoverSlideData {
   fontSizeDeltas?: Record<string, number>;
   showLinkInBio?: boolean;
   appliedUrl?: string;
+  /**
+   * URLs of all designed cards (covers, quote cards, etc.) in this post.
+   * Used by the slide generator to exclude designed cards from framing.
+   * Tracked by URL (not position) so reordering doesn't break exclusion.
+   */
+  designedCardUrls?: string[];
 }
