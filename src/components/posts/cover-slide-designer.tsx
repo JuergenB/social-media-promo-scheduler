@@ -135,24 +135,32 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
   };
 
   return (
-    <div className="h-full w-full flex flex-col relative" style={{ backgroundColor: bgColor }}>
+    <div
+      className={cn("h-full w-full flex flex-col relative", isQuotable && "justify-center")}
+      style={{ backgroundColor: bgColor }}
+    >
       {bands.map((band, i) => {
         const h = typeof band.height === "string" && band.height.endsWith("%")
           ? band.height
           : band.type === "image" ? "45%" : undefined;
 
         if (band.type === "image") {
+          // Soft gradient placeholder for image area
+          const isDark = bgColor.toLowerCase() === "#1a1a1a" || bgColor.toLowerCase() === "#000000";
           return (
             <div
               key={i}
-              className="relative overflow-hidden flex items-center justify-center"
-              style={{ height: h || "45%", backgroundColor: "rgba(128,128,128,0.15)" }}
+              className="relative overflow-hidden"
+              style={{
+                height: h || "45%",
+                background: isDark
+                  ? `linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.08) 100%)`
+                  : `linear-gradient(135deg, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.01) 50%, rgba(0,0,0,0.06) 100%)`,
+              }}
             >
-              {/* Cross-hatch pattern to indicate image area */}
-              <div className="absolute inset-0 opacity-20" style={{
-                backgroundImage: `repeating-linear-gradient(45deg, transparent, transparent 8px, ${accentColor} 8px, ${accentColor} 9px)`,
-              }} />
-              <ImageIcon className="h-6 w-6 opacity-20" style={{ color: primaryColor }} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <ImageIcon className="h-5 w-5 opacity-10" style={{ color: primaryColor }} />
+              </div>
             </div>
           );
         }
@@ -269,7 +277,7 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
           const widthPct = band.widthPercent || 25;
           return (
             <div key={i} className="flex justify-center py-1">
-              <div style={{ width: `${widthPct}%`, height: 1, backgroundColor: color }} />
+              <div style={{ width: `${widthPct}%`, height: 1, backgroundColor: color, opacity: 0.15 }} />
             </div>
           );
         }
@@ -288,6 +296,8 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
         }
 
         if (band.type === "spacer") {
+          // Skip spacers in quotable previews — flex justify-center handles vertical centering
+          if (isQuotable) return null;
           const h2 = typeof band.height === "string" && band.height.endsWith("%")
             ? band.height : "8%";
           return <div key={i} style={{ height: h2 }} />;
