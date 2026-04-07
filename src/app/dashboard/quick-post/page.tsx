@@ -884,10 +884,10 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           size="sm"
           className="text-xs h-7 px-2"
           onClick={() => setShowAddImage(!showAddImage)}
-          title={mediaImages.length === 0 ? "Add image" : "Add images for carousel"}
+          title="Add images — multiple images will post as a carousel on supported platforms"
         >
           <Plus className="h-3 w-3 mr-1" />
-          {mediaImages.length >= 1 ? "Add for Carousel" : "Add"}
+          Add
         </Button>
       )}
       {!slidesApplied && mediaImages.length === 1 && (
@@ -926,9 +926,9 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           size="sm"
           className="text-xs text-muted-foreground h-7 px-2"
           onClick={() => { setCoverSlideKey((k) => k + 1); setShowCoverSlideDesigner(true); }}
-          title="Design a cover slide for this carousel"
+          title="Add a designed card — editorial covers, quote cards, and more"
         >
-          <LayoutTemplate className="h-3 w-3 mr-1" /> Cover
+          <LayoutTemplate className="h-3 w-3 mr-1" /> Cards
         </Button>
       )}
       {canGenerateSlides && (
@@ -938,7 +938,7 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           className="text-xs text-muted-foreground h-7 px-2"
           onClick={() => carousel.generatePreview(undefined)}
           disabled={carousel.previewMutation.isPending}
-          title={`Generate framed carousel slides${platformLower === "bluesky" ? "" : " with captions"}`}
+          title={`Frame each image as a ${platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"} slide with caption overlay — designed cards are preserved`}
         >
           {carousel.previewMutation.isPending ? (
             <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Generating...</>

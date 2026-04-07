@@ -570,7 +570,7 @@ export function CoverSlideDesigner({
         <div className="flex items-center justify-between px-6 py-4 shrink-0">
           <div className="flex items-center gap-2">
             <LayoutTemplate className="h-4 w-4 text-white/70" />
-            <span className="text-white font-medium text-sm">Choose a cover slide template</span>
+            <span className="text-white font-medium text-sm">Choose a card template</span>
           </div>
           <button
             className="text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
