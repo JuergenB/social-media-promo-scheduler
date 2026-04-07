@@ -18,6 +18,7 @@ import {
   ImageIcon,
   LayoutTemplate,
   ChevronLeft,
+  ChevronRight,
   Maximize2,
   Minus,
   Plus,
@@ -41,6 +42,8 @@ interface CoverSlideDesignerProps {
   brandWebsiteUrl?: string | null;
   /** Previously saved cover slide data (for re-editing) */
   savedData?: CoverSlideData | null;
+  /** Available source images for background selection (raw images, no rendered slides) */
+  availableImages?: Array<{ url: string; caption?: string }>;
   /** Called when cover slide is applied or removed */
   onApply: (mediaItems: MediaItem[]) => void;
   onRemove: (mediaItems: MediaItem[]) => void;
@@ -310,6 +313,7 @@ export function CoverSlideDesigner({
   brandLogoDarkUrl,
   brandWebsiteUrl,
   savedData,
+  availableImages,
   onApply,
   onRemove,
   onClose,
@@ -346,6 +350,8 @@ export function CoverSlideDesigner({
   );
   const [showLogo, setShowLogo] = useState(true);
   const [showLinkInBio, setShowLinkInBio] = useState(platform.toLowerCase() === "instagram");
+  const [sourceImageIndex, setSourceImageIndex] = useState(0);
+  const sourceImages = availableImages || [];
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -420,6 +426,7 @@ export function CoverSlideDesigner({
           fontSizeDeltas,
           showLinkInBio,
           platform,
+          sourceImageIndex: sourceImages.length > 0 ? sourceImageIndex : undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to generate preview");
@@ -451,6 +458,7 @@ export function CoverSlideDesigner({
           fontSizeDeltas,
           showLinkInBio,
           platform,
+          sourceImageIndex: sourceImages.length > 0 ? sourceImageIndex : undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to apply cover slide");
@@ -473,7 +481,7 @@ export function CoverSlideDesigner({
     if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current);
     previewTimeoutRef.current = setTimeout(() => {
       previewMutation.mutate(fieldsOverride);
-    }, 600);
+    }, 750);
   };
 
   // Re-preview when fields or offset change
@@ -482,7 +490,7 @@ export function CoverSlideDesigner({
       requestPreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio]);
+  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio, sourceImageIndex]);
 
   // Handle template selection
   const handleTemplateSelect = (template: CoverSlideTemplate) => {
@@ -888,6 +896,55 @@ export function CoverSlideDesigner({
               <span className="text-white/20 text-[10px]">Btm</span>
             </div>
           </div>
+
+          {/* Background image selector */}
+          {sourceImages.length > 1 && (
+            <div>
+              <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Background Image</span>
+              <div className="flex items-center gap-2 mt-1.5">
+                <button
+                  onClick={() => {
+                    const prev = (sourceImageIndex - 1 + sourceImages.length) % sourceImages.length;
+                    setSourceImageIndex(prev);
+                  }}
+                  className="text-white/40 hover:text-white p-1 rounded hover:bg-white/10 transition-colors shrink-0"
+                  title="Previous image"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+                <div className="flex gap-1.5 overflow-x-auto flex-1 py-0.5">
+                  {sourceImages.map((img, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setSourceImageIndex(idx)}
+                      className={cn(
+                        "shrink-0 w-10 h-10 rounded overflow-hidden border-2 transition-colors",
+                        idx === sourceImageIndex
+                          ? "border-blue-500"
+                          : "border-zinc-700 hover:border-zinc-500"
+                      )}
+                      title={img.caption || `Image ${idx + 1}`}
+                    >
+                      <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => {
+                    const next = (sourceImageIndex + 1) % sourceImages.length;
+                    setSourceImageIndex(next);
+                  }}
+                  className="text-white/40 hover:text-white p-1 rounded hover:bg-white/10 transition-colors shrink-0"
+                  title="Next image"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <p className="text-white/20 text-[9px] mt-1 text-center">
+                {sourceImageIndex + 1} of {sourceImages.length}
+              </p>
+            </div>
+          )}
 
           {/* Show logo toggle */}
           {(brandLogoLightUrl || brandLogoDarkUrl || brandLogoUrl) && (
