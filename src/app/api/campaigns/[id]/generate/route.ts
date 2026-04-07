@@ -616,10 +616,13 @@ export async function POST(
         }
 
         // Store scraped data on campaign record (skip status change in additive mode)
+        // Also set og:image as campaign image if none exists
+        const ogImageUrl = blogData.ogImage || blogData.heroImage?.url || "";
         await updateRecord("Campaigns", campaignId, {
           ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
           "Scraped Images": JSON.stringify(blogData.images),
+          ...(!fields["Image URL"] && ogImageUrl ? { "Image URL": ogImageUrl } : {}),
         });
 
         // Analyze sections for section-aware generation
