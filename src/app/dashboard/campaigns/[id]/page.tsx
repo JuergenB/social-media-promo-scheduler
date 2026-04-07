@@ -740,6 +740,8 @@ export default function CampaignDetailPage() {
   const displayName =
     campaign.name ||
     campaign.url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const isQuickPost = campaign.name?.startsWith("Quick Post:");
+  const backHref = isQuickPost ? "/dashboard/quick-post" : "/dashboard/campaigns";
 
   // ── Render ──────────────────────────────────────────────────────────
 
@@ -748,7 +750,7 @@ export default function CampaignDetailPage() {
       {/* Back button + page title */}
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-          <Link href="/dashboard/campaigns">
+          <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
