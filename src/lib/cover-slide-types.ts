@@ -183,6 +183,10 @@ export interface CoverSlideRenderOptions {
   fontSizeDeltas?: Record<string, number>;
   /** Show a subtle "Link in bio" text in the bottom-right corner */
   showLinkInBio?: boolean;
+  /** Overlay opacity for quotable cards (0-100, default ~70). Controls how much the background image shows through. */
+  overlayOpacity?: number;
+  /** Overlay tint color for quotable cards (hex string). Tints the semi-transparent overlay. */
+  overlayTint?: string;
 }
 
 /** Result from the renderer */
