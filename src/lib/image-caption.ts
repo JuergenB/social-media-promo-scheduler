@@ -364,13 +364,14 @@ async function buildCaptionOverlay(
   // Font size 24px at 1080w slide = subtle caption. Satori wraps if text is long.
   // 80% width (10% padding each side), step down font for longer captions
   const sidePadding = Math.round(width * 0.10);
-  const bottomPad = 16;
+  // Extra bottom padding keeps caption text above Instagram/Threads carousel progress dots
+  const bottomPad = 50;
 
   const captionIsLight = textColor.includes("255");
   const captionColor = captionIsLight ? "rgba(255,255,255,0.92)" : "rgba(25,25,25,0.88)";
 
-  // Adaptive font: 42px for short (1 line), 32px for longer (2-3 lines)
-  const fontSize = lines.length <= 1 ? 42 : 32;
+  // Adaptive font: 36px for short (1 line), 28px for longer (2-3 lines)
+  const fontSize = lines.length <= 1 ? 36 : 28;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const element: any = {
