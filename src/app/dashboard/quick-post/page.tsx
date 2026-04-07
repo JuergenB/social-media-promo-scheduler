@@ -177,13 +177,21 @@ export default function QuickPostPage() {
 
   // ── Handle platform selection ──────────────────────────────────────────
 
-  const handlePlatformSelect = async (platform: Platform) => {
+  const handlePlatformSelect = (platform: Platform) => {
     setSelectedPlatform(platform);
-    // Create phantom campaign + post immediately
-    if (!campaign) {
-      await createPhantomPost(platform);
-    }
+    // Don't create Airtable records yet — wait until user takes an action
+    // (Generate, type content, or upload image)
   };
+
+  /** Ensure phantom campaign + post exist, creating lazily if needed */
+  const ensurePost = useCallback(
+    async (opts?: { url?: string; editorialDirection?: string; voiceIntensity?: number }) => {
+      if (post && campaign) return { campaign, post };
+      if (!selectedPlatform) return null;
+      return createPhantomPost(selectedPlatform, opts);
+    },
+    [post, campaign, selectedPlatform, createPhantomPost]
+  );
 
   // ── Handle generate ────────────────────────────────────────────────────
 
@@ -193,9 +201,9 @@ export default function QuickPostPage() {
     let targetCampaign = campaign;
     let targetPost = post;
 
-    // Create phantom campaign if needed
+    // Create phantom campaign if needed (lazy — only when user commits to generating)
     if (!targetCampaign) {
-      const result = await createPhantomPost(selectedPlatform, {
+      const result = await ensurePost({
         url,
         editorialDirection,
         voiceIntensity,
@@ -503,14 +511,23 @@ export default function QuickPostPage() {
             />
           ) : (
             <Card>
-              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+              <CardContent className="py-6">
                 {isCreating ? (
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Setting up...
                   </div>
                 ) : (
-                  "Select a platform above to start writing"
+                  <Textarea
+                    placeholder="Start writing your post..."
+                    rows={4}
+                    className="resize-none"
+                    onFocus={async () => {
+                      // Create phantom on first interaction with the editor
+                      const result = await ensurePost();
+                      if (!result) return;
+                    }}
+                  />
                 )}
               </CardContent>
             </Card>
