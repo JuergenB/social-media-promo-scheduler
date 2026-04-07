@@ -613,20 +613,20 @@ export function CoverSlideDesigner({
               No templates available. Create templates in Airtable.
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               {templatesQuery.data?.map((template) => (
                 <button
                   key={template.id}
                   onClick={() => handleTemplateSelect(template)}
                   className="group text-left rounded-lg overflow-hidden border border-zinc-700/50 hover:border-zinc-500 transition-colors bg-zinc-800/50"
                 >
-                  {/* Schematic preview from band layout */}
-                  <div className="aspect-[4/5] overflow-hidden">
+                  {/* Preview image — show complete image at 4:5 Instagram aspect ratio */}
+                  <div className="aspect-[4/5] overflow-hidden bg-zinc-900 flex items-center justify-center">
                     {template.previewUrl ? (
                       <img
                         src={template.previewUrl}
                         alt={template.name}
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain"
                       />
                     ) : (
                       <TemplateSchemPreview template={template} />
