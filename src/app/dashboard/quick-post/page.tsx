@@ -144,7 +144,7 @@ export default function QuickPostPage() {
   const [isScraping, setIsScraping] = useState(false);
   const [scrapedImages, setScrapedImages] = useState<ScrapedImageItem[] | null>(null);
   const [showImagePicker, setShowImagePicker] = useState(false);
-  const [selectedImageUrls, setSelectedImageUrls] = useState<string[]>([]);
+  const [selectedImages, setSelectedImages] = useState<Array<{ url: string; caption: string }>>([]);
   // Refs to hold campaign/post during the async scrape → pick → generate flow
   const pendingCampaignRef = useRef<Campaign | null>(null);
   const pendingPostRef = useRef<Post | null>(null);
@@ -309,21 +309,20 @@ export default function QuickPostPage() {
   };
 
   /** Image picker callbacks */
-  const handleImageSelect = async (urls: string[]) => {
+  const handleImageSelect = async (items: Array<{ url: string; caption: string }>) => {
     setShowImagePicker(false);
-    setSelectedImageUrls(urls);
+    setSelectedImages(items);
     setScrapedImages(null);
     const targetCampaign = pendingCampaignRef.current;
     const targetPost = pendingPostRef.current;
     if (!targetCampaign) return;
-    await runGeneration(targetCampaign, targetPost, urls);
+    await runGeneration(targetCampaign, targetPost, items);
   };
 
   const handleImageSkip = async () => {
     setShowImagePicker(false);
     setScrapedImages(null);
-    // "Skip" means use the featured/og image (the generate endpoint's default behavior)
-    setSelectedImageUrls([]);
+    setSelectedImages([]);
     const targetCampaign = pendingCampaignRef.current;
     const targetPost = pendingPostRef.current;
     if (!targetCampaign) return;
@@ -334,7 +333,7 @@ export default function QuickPostPage() {
   const runGeneration = async (
     targetCampaign: Campaign,
     targetPost: Post | null,
-    userSelectedImages: string[]
+    userSelectedImages: Array<{ url: string; caption: string }>
   ) => {
     setIsGenerating(true);
     setProgressLog([]);
@@ -420,21 +419,26 @@ export default function QuickPostPage() {
             // Override images with user's selection (if any)
             if (userSelectedImages.length > 0) {
               try {
+                const mediaCaptions = JSON.stringify(
+                  userSelectedImages.map((img) => ({ url: img.url, caption: img.caption }))
+                );
                 await fetch(`/api/posts/${platformPost.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    imageUrl: userSelectedImages[0],
+                    imageUrl: userSelectedImages[0].url,
                     mediaUrls: userSelectedImages.length > 1
-                      ? userSelectedImages.slice(1).join("\n")
+                      ? userSelectedImages.slice(1).map((img) => img.url).join("\n")
                       : "",
+                    mediaCaptions,
                   }),
                 });
                 // Update local state to reflect overridden images
-                platformPost.imageUrl = userSelectedImages[0];
+                platformPost.imageUrl = userSelectedImages[0].url;
                 platformPost.mediaUrls = userSelectedImages.length > 1
-                  ? userSelectedImages.slice(1).join("\n")
+                  ? userSelectedImages.slice(1).map((img) => img.url).join("\n")
                   : "";
+                platformPost.mediaCaptions = mediaCaptions;
               } catch {
                 // Non-critical — user can still change images in editor
               }
