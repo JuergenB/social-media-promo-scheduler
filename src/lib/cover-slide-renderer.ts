@@ -387,9 +387,9 @@ async function applyHighKey(
   buffer: Buffer,
   tint?: { r: number; g: number; b: number }
 ): Promise<Buffer> {
-  // Pass 1: Boost brightness, kill saturation
+  // Pass 1: Boost brightness, reduce saturation (keep some image detail)
   let pipeline = sharp(buffer)
-    .modulate({ brightness: 2.0, saturation: 0.15 });
+    .modulate({ brightness: 1.8, saturation: 0.2 });
 
   // Apply tint if provided (shifts the image toward the tint color)
   if (tint) {
@@ -398,9 +398,10 @@ async function applyHighKey(
 
   const pass1 = await pipeline.toBuffer();
 
-  // Pass 2: Crush contrast toward white (output = input * 0.25 + 195)
+  // Pass 2: Compress contrast toward white — wider range preserves more texture
+  // (output = input * 0.3 + 180)
   return sharp(pass1)
-    .linear(0.25, 195)
+    .linear(0.3, 180)
     .blur(2)
     .toBuffer();
 }
@@ -414,9 +415,9 @@ async function applyLowKey(
   buffer: Buffer,
   tint?: { r: number; g: number; b: number }
 ): Promise<Buffer> {
-  // Pass 1: Reduce brightness, kill saturation
+  // Pass 1: Reduce brightness, keep slight saturation for texture
   let pipeline = sharp(buffer)
-    .modulate({ brightness: 0.3, saturation: 0.2 });
+    .modulate({ brightness: 0.35, saturation: 0.25 });
 
   if (tint) {
     pipeline = pipeline.tint(tint);
@@ -424,9 +425,10 @@ async function applyLowKey(
 
   const pass1 = await pipeline.toBuffer();
 
-  // Pass 2: Crush contrast toward black (output = input * 0.25 + 15)
+  // Pass 2: Compress contrast toward black — wider range preserves more texture
+  // (output = input * 0.3 + 15)
   return sharp(pass1)
-    .linear(0.25, 15)
+    .linear(0.3, 15)
     .blur(2)
     .toBuffer();
 }
