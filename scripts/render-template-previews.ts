@@ -99,21 +99,27 @@ async function main() {
     console.log(`Rendering: ${template.name} (${template.slug})`);
 
     try {
-      // Render at 4:5 only — one version per template
+      // Render at full production size (1080x1350), then downscale for preview
       const result = await renderCoverSlide({
         template,
         content,
-        width: 540,
-        height: 675,
+        width: 1080,
+        height: 1350,
         imageOffset: 30,
         showLinkInBio: false,
-        ...(isQuotable ? { fontSizeDeltas: QUOTE_FONT_DELTAS } : {}),
       });
+
+      // Downscale to preview size
+      const sharp = (await import("sharp")).default;
+      const downscaled = await sharp(result.buffer)
+        .resize(540, 675, { fit: "fill" })
+        .jpeg({ quality: 90 })
+        .toBuffer();
 
       const filename = `${template.slug}.jpg`;
       const outPath = path.join(outDir, filename);
-      fs.writeFileSync(outPath, result.buffer);
-      console.log(`  OK ${filename} (${result.buffer.length} bytes)`);
+      fs.writeFileSync(outPath, downscaled);
+      console.log(`  OK ${filename} (${downscaled.length} bytes)`);
     } catch (err) {
       console.error(`  FAIL:`, (err as Error).message);
     }
