@@ -932,7 +932,8 @@ export default function NewCampaignPage() {
                   ))}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {getToneLabel(voiceIntensity)} — adjusts how much brand personality comes through in generated posts.
+                  {getToneLabel(voiceIntensity)} — adjusts how much brand personality comes through in generated posts.{" "}
+                  <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
                 </p>
               </div>
             </div>

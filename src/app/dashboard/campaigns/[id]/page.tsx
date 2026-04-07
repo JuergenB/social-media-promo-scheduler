@@ -1027,7 +1027,8 @@ export default function CampaignDetailPage() {
                     ))}
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.
+                    {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.{" "}
+                    <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
                   </p>
                 </div>
               </div>
@@ -2107,7 +2108,8 @@ function CampaignSettingsEditable({
             ))}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {getToneLabel(voiceIntensity)} — adjusts how much brand personality comes through in generated posts.
+            {getToneLabel(voiceIntensity)} — adjusts how much brand personality comes through in generated posts.{" "}
+            <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
           </p>
         </CardContent>
       </Card>

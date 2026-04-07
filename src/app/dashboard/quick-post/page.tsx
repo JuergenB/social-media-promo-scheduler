@@ -575,6 +575,9 @@ export default function QuickPostPage() {
                       step={1}
                       className="w-full"
                     />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
+                    </p>
                   </div>
 
                   <Button
