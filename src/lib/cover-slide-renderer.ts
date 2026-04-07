@@ -383,41 +383,54 @@ function truncateToFit(
  * Used as a subtle background texture behind text on quote cards.
  * Optional tint shifts the high-key toward a specific color.
  */
+/**
+ * Create a high-key (light, low contrast) version of an image.
+ * @param intensity 0-100: 0 = original image, 100 = near-solid white. Default 70.
+ */
 async function applyHighKey(
   buffer: Buffer,
-  tint?: { r: number; g: number; b: number }
+  tint?: { r: number; g: number; b: number },
+  intensity: number = 70
 ): Promise<Buffer> {
-  // Pass 1: Boost brightness, reduce saturation (keep some image detail)
-  let pipeline = sharp(buffer)
-    .modulate({ brightness: 1.8, saturation: 0.2 });
+  // Scale parameters by intensity (0-100)
+  const t = Math.max(0, Math.min(100, intensity)) / 100;
+  const brightness = 1.0 + t * 1.0;       // 1.0 (original) → 2.0 (full wash)
+  const saturation = 1.0 - t * 0.85;      // 1.0 → 0.15
+  const contrast = 1.0 - t * 0.7;         // 1.0 → 0.3 (linear multiplier)
+  const offset = t * 180;                  // 0 → 180 (push toward white)
 
-  // Apply tint if provided (shifts the image toward the tint color)
+  let pipeline = sharp(buffer)
+    .modulate({ brightness, saturation });
+
   if (tint) {
     pipeline = pipeline.tint(tint);
   }
 
   const pass1 = await pipeline.toBuffer();
 
-  // Pass 2: Compress contrast toward white — wider range preserves more texture
-  // (output = input * 0.3 + 180)
   return sharp(pass1)
-    .linear(0.3, 180)
-    .blur(2)
+    .linear(contrast, offset)
+    .blur(1 + t)
     .toBuffer();
 }
 
 /**
- * Create a low-key (very dark, low contrast) version of an image.
- * Used as a moody background behind light text on dark quote cards.
- * Optional tint shifts the low-key toward a specific color.
+ * Create a low-key (dark, low contrast) version of an image.
+ * @param intensity 0-100: 0 = original image, 100 = near-solid black. Default 70.
  */
 async function applyLowKey(
   buffer: Buffer,
-  tint?: { r: number; g: number; b: number }
+  tint?: { r: number; g: number; b: number },
+  intensity: number = 70
 ): Promise<Buffer> {
-  // Pass 1: Reduce brightness, keep slight saturation for texture
+  const t = Math.max(0, Math.min(100, intensity)) / 100;
+  const brightness = 1.0 - t * 0.7;       // 1.0 → 0.3
+  const saturation = 1.0 - t * 0.8;       // 1.0 → 0.2
+  const contrast = 1.0 - t * 0.7;         // 1.0 → 0.3
+  const offset = t * 15;                  // 0 → 15
+
   let pipeline = sharp(buffer)
-    .modulate({ brightness: 0.35, saturation: 0.25 });
+    .modulate({ brightness, saturation });
 
   if (tint) {
     pipeline = pipeline.tint(tint);
@@ -425,11 +438,9 @@ async function applyLowKey(
 
   const pass1 = await pipeline.toBuffer();
 
-  // Pass 2: Compress contrast toward black — wider range preserves more texture
-  // (output = input * 0.3 + 15)
   return sharp(pass1)
-    .linear(0.3, 15)
-    .blur(2)
+    .linear(contrast, offset)
+    .blur(1 + t)
     .toBuffer();
 }
 
@@ -487,28 +498,17 @@ export async function renderCoverSlide(
           .toBuffer();
 
         // Apply high-key or low-key based on background luminance
-        // Use background color as a tint hint
+        // overlayOpacity controls intensity: 0 = original image visible, 80 = heavy wash
+        // Default intensity is 70 (strong wash for text readability, slight texture visible)
         const tintRgb = overlayTint ? hexToRgb(overlayTint) : bgRgb;
+        const intensity = typeof overlayOpacity === "number"
+          ? Math.max(0, Math.min(100, 70 + overlayOpacity * 0.3))  // slider 0→70, slider 80→94
+          : 70; // default
         const processed = bgLum > 0.5
-          ? await applyHighKey(resized, tintRgb)
-          : await applyLowKey(resized, tintRgb);
+          ? await applyHighKey(resized, tintRgb, intensity)
+          : await applyLowKey(resized, tintRgb, intensity);
 
-        // Apply user-controlled overlay opacity (0 = fully transparent/more image, 100 = fully opaque/solid bg)
-        // Default: no extra overlay (the high-key/low-key processing handles it)
-        if (typeof overlayOpacity === "number") {
-          const alpha = Math.round((overlayOpacity / 100) * 255);
-          const overlayBuffer = await sharp({
-            create: { width, height, channels: 4, background: { r: tintRgb.r, g: tintRgb.g, b: tintRgb.b, alpha: alpha / 255 } },
-          }).png().toBuffer();
-
-          const composited = await sharp(processed)
-            .composite([{ input: overlayBuffer, left: 0, top: 0 }])
-            .jpeg({ quality: 95 })
-            .toBuffer();
-          imageComposite = { input: composited, left: 0, top: 0 };
-        } else {
-          imageComposite = { input: processed, left: 0, top: 0 };
-        }
+        imageComposite = { input: processed, left: 0, top: 0 };
       }
     } catch {
       // Image fetch failed — fall back to solid background
