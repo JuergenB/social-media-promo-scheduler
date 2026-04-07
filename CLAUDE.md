@@ -28,6 +28,31 @@ When delegating research to an Agent subagent, explicitly instruct it to use Per
 
 When the user gives multiple instructions in one message, implement ALL of them before responding. Do not silently drop instructions.
 
+## Rule 6: Visual testing with Puppeteer is mandatory when requested
+
+When the user says "testing suite", "test visually", "take a screenshot", "use Puppeteer", or any variation — this is a **BLOCKING requirement**. Do not proceed without it.
+
+**What this means:**
+- After UI changes: load the page in Puppeteer, screenshot the relevant area, READ the screenshot, evaluate it
+- After generating images: open each image via Puppeteer, screenshot it, READ the screenshot, critique it
+- If issues found: fix and re-test. Do NOT present to the user until it passes visual review
+- TypeScript compilation passing does NOT count as visual testing
+- Reading a file inline does NOT count as visual testing
+- "Looks good based on the code" is NOT acceptable — visual output must be visually verified
+
+**How to use Puppeteer** (already installed as `puppeteer@24.40.0`):
+```javascript
+const puppeteer = require('puppeteer');
+const browser = await puppeteer.launch();
+const page = await browser.newPage();
+await page.goto('http://localhost:3025/dashboard/...');
+await page.screenshot({ path: '/tmp/screenshot.png', fullPage: true });
+await browser.close();
+```
+Then READ the screenshot file to evaluate it visually.
+
+**This rule exists because:** Visual testing was repeatedly skipped despite explicit user requests, causing the user to find bugs manually (calendar overflow, image off-by-one, template text overlap). This is not acceptable.
+
 ## Allowed Bash Commands
 
 - `git *`
