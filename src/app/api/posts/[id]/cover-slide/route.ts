@@ -58,6 +58,8 @@ export async function POST(
     const showLinkInBio: boolean = body.showLinkInBio === true;
     const platform: string = body.platform || "instagram";
     const sourceImageUrl: string | undefined = typeof body.sourceImageUrl === "string" ? body.sourceImageUrl : undefined;
+    const overlayOpacity: number | undefined = typeof body.overlayOpacity === "number" ? body.overlayOpacity : undefined;
+    const overlayTint: string | undefined = typeof body.overlayTint === "string" ? body.overlayTint : undefined;
 
     if (!templateId) {
       return NextResponse.json({ error: "templateId is required" }, { status: 400 });
@@ -140,6 +142,8 @@ export async function POST(
       colorSchemeOverrides,
       fontSizeDeltas,
       showLinkInBio,
+      overlayOpacity,
+      overlayTint,
     });
 
     if (!apply) {

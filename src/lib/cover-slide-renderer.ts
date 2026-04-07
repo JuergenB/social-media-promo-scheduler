@@ -448,7 +448,7 @@ async function applyLowKey(
 export async function renderCoverSlide(
   options: CoverSlideRenderOptions
 ): Promise<CoverSlideRenderResult> {
-  const { template, content, width, height, imageOffset, colorSchemeOverrides, fontSizeDeltas } = options;
+  const { template, content, width, height, imageOffset, colorSchemeOverrides, fontSizeDeltas, overlayOpacity, overlayTint } = options;
 
   // Resolve color scheme
   const scheme: ColorScheme = {
@@ -486,11 +486,27 @@ export async function renderCoverSlide(
 
         // Apply high-key or low-key based on background luminance
         // Use background color as a tint hint
+        const tintRgb = overlayTint ? hexToRgb(overlayTint) : bgRgb;
         const processed = bgLum > 0.5
-          ? await applyHighKey(resized, bgRgb)
-          : await applyLowKey(resized, bgRgb);
+          ? await applyHighKey(resized, tintRgb)
+          : await applyLowKey(resized, tintRgb);
 
-        imageComposite = { input: processed, left: 0, top: 0 };
+        // Apply user-controlled overlay opacity (0 = fully transparent/more image, 100 = fully opaque/solid bg)
+        // Default: no extra overlay (the high-key/low-key processing handles it)
+        if (typeof overlayOpacity === "number") {
+          const alpha = Math.round((overlayOpacity / 100) * 255);
+          const overlayBuffer = await sharp({
+            create: { width, height, channels: 4, background: { r: tintRgb.r, g: tintRgb.g, b: tintRgb.b, alpha: alpha / 255 } },
+          }).png().toBuffer();
+
+          const composited = await sharp(processed)
+            .composite([{ input: overlayBuffer, left: 0, top: 0 }])
+            .jpeg({ quality: 95 })
+            .toBuffer();
+          imageComposite = { input: composited, left: 0, top: 0 };
+        } else {
+          imageComposite = { input: processed, left: 0, top: 0 };
+        }
       }
     } catch {
       // Image fetch failed — fall back to solid background

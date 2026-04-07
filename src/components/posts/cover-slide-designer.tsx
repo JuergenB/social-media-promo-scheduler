@@ -352,6 +352,8 @@ export function CoverSlideDesigner({
   const [showLinkInBio, setShowLinkInBio] = useState(platform.toLowerCase() === "instagram");
   const [sourceImageIndex, setSourceImageIndex] = useState(0);
   const sourceImages = availableImages || [];
+  const [overlayOpacity, setOverlayOpacity] = useState<number | undefined>(undefined);
+  const [overlayTint, setOverlayTint] = useState<string | undefined>(undefined);
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -427,6 +429,8 @@ export function CoverSlideDesigner({
           showLinkInBio,
           platform,
           sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
+          overlayOpacity,
+          overlayTint,
         }),
       });
       if (!res.ok) throw new Error("Failed to generate preview");
@@ -459,6 +463,8 @@ export function CoverSlideDesigner({
           showLinkInBio,
           platform,
           sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
+          overlayOpacity,
+          overlayTint,
         }),
       });
       if (!res.ok) throw new Error("Failed to apply cover slide");
@@ -490,7 +496,7 @@ export function CoverSlideDesigner({
       requestPreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio, sourceImageIndex]);
+  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio, sourceImageIndex, overlayOpacity, overlayTint]);
 
   // Handle template selection
   const handleTemplateSelect = (template: CoverSlideTemplate) => {
@@ -523,9 +529,16 @@ export function CoverSlideDesigner({
     const pixel = ctx.getImageData(x, y, 1, 1).data;
     const hex = `#${pixel[0].toString(16).padStart(2, "0")}${pixel[1].toString(16).padStart(2, "0")}${pixel[2].toString(16).padStart(2, "0")}`;
 
-    setBackgroundColor(hex);
+    // For overlay templates (quotable cards), set the overlay tint
+    // For editorial templates, set the background color
+    const isOverlayTemplate = selectedTemplate && !selectedTemplate.bands.some((b) => b.type === "image");
+    if (isOverlayTemplate) {
+      setOverlayTint(hex);
+    } else {
+      setBackgroundColor(hex);
+    }
     setEyedropperActive(false);
-    // Preview will re-trigger from the useEffect watching backgroundColor
+    // Preview will re-trigger from the useEffect watching backgroundColor/overlayTint
   };
 
   // Update a field and request preview
@@ -896,6 +909,37 @@ export function CoverSlideDesigner({
               <span className="text-white/20 text-[10px]">Btm</span>
             </div>
           </div>
+
+          {/* Overlay opacity — only for templates without an image band (quotable cards, etc.) */}
+          {selectedTemplate && !selectedTemplate.bands.some((b) => b.type === "image") && (
+            <div>
+              <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Overlay</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-white/20 text-[10px]">Light</span>
+                <Slider
+                  value={[overlayOpacity ?? 0]}
+                  onValueChange={([v]) => setOverlayOpacity(v)}
+                  min={0}
+                  max={80}
+                  step={5}
+                  className="flex-1"
+                />
+                <span className="text-white/20 text-[10px]">Heavy</span>
+                <button
+                  onClick={() => {
+                    // Simple tint picker — cycle through preset tints or use eyedropper
+                    setEyedropperActive(true);
+                  }}
+                  className={cn(
+                    "shrink-0 w-5 h-5 rounded-full border transition-colors",
+                    overlayTint ? "border-white/50" : "border-zinc-600"
+                  )}
+                  style={{ backgroundColor: overlayTint || "transparent" }}
+                  title="Pick overlay tint color from the preview image"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Background image selector — compact: single preview + arrows */}
           {sourceImages.length > 1 && (
