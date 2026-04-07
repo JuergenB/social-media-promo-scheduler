@@ -195,19 +195,30 @@ export async function DELETE(
       .map((item) => item.url)
       .filter((url) => isBlobUrl(url));
 
-    // If a cover slide exists, preserve it as the first item
-    let coverItem: MediaItem | null = null;
+    // Preserve all designed cards (covers, quote cards) in their current positions.
+    // Only raw images get restored from the backup.
+    let designedUrls = new Set<string>();
+    const designedCards: MediaItem[] = [];
     if (post.fields["Cover Slide Data"]) {
       try {
         const coverData = JSON.parse(post.fields["Cover Slide Data"]);
-        const allItems = parseMediaItems(post.fields);
-        if (coverData.appliedUrl && allItems[0]?.url === coverData.appliedUrl) {
-          coverItem = allItems[0];
-        }
+        (coverData.designedCardUrls || []).forEach((u: string) => designedUrls.add(u));
+        if (coverData.appliedUrl) designedUrls.add(coverData.appliedUrl);
       } catch { /* ignore */ }
     }
 
-    const restoredItems = coverItem ? [coverItem, ...originalItems] : originalItems;
+    // Collect designed cards from current media in their current order
+    for (const item of currentItems) {
+      if (designedUrls.has(item.url)) {
+        designedCards.push(item);
+        // Don't delete designed card blobs during cleanup
+        const idx = blobUrlsToDelete.indexOf(item.url);
+        if (idx >= 0) blobUrlsToDelete.splice(idx, 1);
+      }
+    }
+
+    // Rebuild: designed cards first (in their current order), then restored raw images
+    const restoredItems = [...designedCards, ...originalItems];
     const serialized = serializeMediaItems(restoredItems);
     await updateRecord("Posts", id, {
       "Image URL": serialized["Image URL"],
@@ -216,10 +227,8 @@ export async function DELETE(
       "Original Media": "",
     });
 
-    // Fire-and-forget: clean up orphaned slide blobs (but NOT the cover slide blob)
-    const coverUrl = coverItem?.url;
+    // Fire-and-forget: clean up orphaned slide blobs (designed card blobs already removed from list above)
     for (const url of blobUrlsToDelete) {
-      if (url === coverUrl) continue; // Don't delete the cover slide
       deleteImage(url).catch((err) =>
         console.warn("[carousel-reset] Failed to delete blob:", url, err)
       );
