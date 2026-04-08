@@ -682,6 +682,7 @@ export async function renderCoverSlide(
         displayText = text.replace(/\b\w/g, (c) => c.toUpperCase());
       }
 
+      const bandBg = textBand.backgroundColor ? resolveColor(textBand.backgroundColor, scheme) : undefined;
       contentChildren.push({
         type: "div",
         props: {
@@ -704,6 +705,7 @@ export async function renderCoverSlide(
             lineHeight: textBand.lineHeight || 1.3,
             letterSpacing: textBand.letterSpacing || 0,
             flexShrink: 1,
+            ...(bandBg ? { backgroundColor: bandBg } : {}),
           },
           children: displayText,
         },
@@ -717,10 +719,11 @@ export async function renderCoverSlide(
       const spacerH = typeof rb.band.height === "string" && rb.band.height.endsWith("%")
         ? Math.round(height * parseFloat(rb.band.height) / 100)
         : typeof rb.band.height === "number" ? rb.band.height : 20;
+      const spacerBg = rb.band.backgroundColor ? resolveColor(rb.band.backgroundColor, scheme) : undefined;
       contentChildren.push({
         type: "div",
         props: {
-          style: { width, height: spacerH, flexShrink: 0 },
+          style: { width, height: spacerH, flexShrink: 0, ...(spacerBg ? { backgroundColor: spacerBg } : {}) },
           children: "",
         },
       });
