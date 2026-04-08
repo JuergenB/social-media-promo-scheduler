@@ -37,6 +37,7 @@ interface PostFields {
 interface BrandFields {
   "Zernio API Key Label": string;
   "Zernio Profile ID": string;
+  Timezone?: string;
 }
 
 /** Map Airtable platform names to Zernio platform IDs */
@@ -317,7 +318,7 @@ export async function POST(
           mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
           platforms: [platformEntry],
           scheduledFor: scheduledDate,
-          timezone: "America/New_York",
+          timezone: brandRecord.fields.Timezone || "America/New_York",
         };
 
         console.log(`[schedule] Creating Zernio post for ${platform} | airtableId=${post.id} | date=${scheduledDate}`);
@@ -357,11 +358,34 @@ export async function POST(
           console.error(`[schedule] WARNING: Zernio returned success but no post ID for ${platform} post ${post.id}. Full response:`, JSON.stringify(zernioPost));
         }
 
-        await updateRecord("Posts", post.id, {
+        const airtableUpdates: Record<string, unknown> = {
           "Scheduled Date": scheduledDate,
           "Zernio Post ID": zernioPostId,
           Status: zernioPostId ? "Scheduled" : "Approved", // Don't mark Scheduled without an ID
-        });
+        };
+
+        // lnk.bio integration for Instagram (The Intersect only — per-brand config in #68)
+        const INTERSECT_BRAND_ID = "recQ69SHPps9W5z0U";
+        if (platform === "instagram" && post.fields["Short URL"] && brandId === INTERSECT_BRAND_ID) {
+          try {
+            const { createLnkBioEntry } = await import("@/lib/lnk-bio");
+            const entryId = await createLnkBioEntry({
+              title: (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
+              link: post.fields["Short URL"],
+              image: imageUrls[0] || "",
+              scheduledDate,
+            });
+            if (entryId) {
+              airtableUpdates["Lnk.Bio Entry ID"] = entryId;
+            }
+            console.log(`[schedule] lnk.bio entry created for ${post.id}: ${entryId}`);
+          } catch (err) {
+            // Non-blocking — post scheduling succeeds even if lnk.bio fails
+            console.warn(`[schedule] lnk.bio creation failed for ${post.id}:`, err);
+          }
+        }
+
+        await updateRecord("Posts", post.id, airtableUpdates);
 
         results.push({
           postId: post.id,

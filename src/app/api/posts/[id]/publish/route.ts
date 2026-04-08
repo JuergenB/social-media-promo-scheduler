@@ -27,6 +27,7 @@ interface CampaignFields {
 interface BrandFields {
   "Zernio API Key Label": string;
   "Zernio Profile ID": string;
+  Timezone?: string;
 }
 
 const PLATFORM_MAP: Record<string, string> = {
@@ -209,7 +210,7 @@ export async function POST(
       mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
       platforms: [platformEntry],
       scheduledFor: publishAt,
-      timezone: "America/New_York",
+      timezone: brandRecord.fields.Timezone || "America/New_York",
     };
 
     const { data: zernioPost, error: zernioError } = await client.posts.createPost({
@@ -234,8 +235,9 @@ export async function POST(
       Status: "Scheduled",
     };
 
-    // lnk.bio integration for Instagram (The Intersect only, for now)
-    if (platform === "instagram" && post.fields["Short URL"]) {
+    // lnk.bio integration for Instagram (The Intersect only — per-brand config in #68)
+    const INTERSECT_BRAND_ID = "recQ69SHPps9W5z0U";
+    if (platform === "instagram" && post.fields["Short URL"] && brandId === INTERSECT_BRAND_ID) {
       try {
         const { createLnkBioEntry } = await import("@/lib/lnk-bio");
         const entryId = await createLnkBioEntry({

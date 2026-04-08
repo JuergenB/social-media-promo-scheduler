@@ -15,6 +15,7 @@ interface CampaignFields {
 interface BrandFields {
   "Zernio API Key Label": string;
   "Zernio Profile ID": string;
+  Timezone?: string;
 }
 
 interface PostFields {
@@ -195,7 +196,7 @@ export async function POST(
           mediaItems: mediaItems.length > 0 ? mediaItems : undefined,
           platforms: [platformEntry],
           scheduledFor: post.fields["Scheduled Date"],
-          timezone: "America/New_York",
+          timezone: brandRecord.fields.Timezone || "America/New_York",
         };
 
         const { data: zernioPost, error: zernioError } = await client.posts.createPost({

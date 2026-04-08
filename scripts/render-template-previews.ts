@@ -117,6 +117,8 @@ async function main() {
         height: 1350,
         imageOffset: 30,
         showLinkInBio: false,
+        logoScale: 0.30,
+        logoOpacity: 0.70,
       });
 
       // Downscale to preview size
