@@ -34,6 +34,7 @@ import { CarouselPreviewOverlay } from "@/components/posts/carousel-preview-over
 import { OptimizePreviewDialog } from "@/components/posts/optimize-preview-dialog";
 import { OutpaintImageSelector } from "@/components/posts/outpaint-image-selector";
 import { CardImageSelector } from "@/components/posts/card-image-selector";
+import { CampaignImageLibrary } from "@/components/posts/campaign-image-library";
 import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
 import { ImagePicker, type ScrapedImageItem } from "@/components/posts/image-picker";
 import { getToneLabel } from "@/lib/prompts/tone-guidance";
@@ -1019,12 +1020,21 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
 
           {/* Add image panel */}
           {showAddImage && (
-            <ImageDropZone
-              onFileUpload={(file) => media.uploadImageMutation.mutate(file)}
-              onUrlAdd={(url) => { media.addImageUrl(url); setShowAddImage(false); }}
-              isUploading={media.uploadImageMutation.isPending}
-              onClose={() => setShowAddImage(false)}
-            />
+            <div className="space-y-2">
+              {campaign?.scrapedImages && campaign.scrapedImages.length > 0 && (
+                <CampaignImageLibrary
+                  scrapedImages={campaign.scrapedImages}
+                  existingUrls={new Set(mediaItems.map((m) => m.url))}
+                  onAdd={(url) => media.addImageUrl(url)}
+                />
+              )}
+              <ImageDropZone
+                onFileUpload={(file) => media.uploadImageMutation.mutate(file)}
+                onUrlAdd={(url) => { media.addImageUrl(url); setShowAddImage(false); }}
+                isUploading={media.uploadImageMutation.isPending}
+                onClose={() => setShowAddImage(false)}
+              />
+            </div>
           )}
 
           {/* Content editor - always in editing mode, saves on blur */}

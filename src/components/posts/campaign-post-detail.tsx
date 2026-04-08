@@ -32,6 +32,7 @@ import { CarouselPreviewOverlay } from "./carousel-preview-overlay";
 import { OptimizePreviewDialog } from "./optimize-preview-dialog";
 import { OutpaintImageSelector } from "./outpaint-image-selector";
 import { CardImageSelector } from "./card-image-selector";
+import { CampaignImageLibrary } from "./campaign-image-library";
 import { RegenerateDialog } from "./regenerate-dialog";
 import { FlagIssueDialog } from "./flag-issue-dialog";
 import { CoverSlideDesigner } from "./cover-slide-designer";
@@ -352,12 +353,21 @@ export function CampaignPostDetail({
 
           {/* Add image panel */}
           {showAddImage && (
-            <ImageDropZone
-              onFileUpload={(file) => media.uploadImageMutation.mutate(file)}
-              onUrlAdd={(url) => { media.addImageUrl(url); setShowAddImage(false); }}
-              isUploading={media.uploadImageMutation.isPending}
-              onClose={() => setShowAddImage(false)}
-            />
+            <div className="space-y-2">
+              {campaign.scrapedImages && campaign.scrapedImages.length > 0 && (
+                <CampaignImageLibrary
+                  scrapedImages={campaign.scrapedImages}
+                  existingUrls={new Set(mediaItems.map((m) => m.url))}
+                  onAdd={(url) => media.addImageUrl(url)}
+                />
+              )}
+              <ImageDropZone
+                onFileUpload={(file) => media.uploadImageMutation.mutate(file)}
+                onUrlAdd={(url) => { media.addImageUrl(url); setShowAddImage(false); }}
+                isUploading={media.uploadImageMutation.isPending}
+                onClose={() => setShowAddImage(false)}
+              />
+            </div>
           )}
         </div>
 

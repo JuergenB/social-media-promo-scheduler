@@ -26,6 +26,7 @@ interface CampaignFields {
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
   Tone: number;
+  "Scraped Images": string;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -110,6 +111,13 @@ export async function GET(
       maxVariantsPerPlatform: record.fields["Max Variants Per Platform"] ?? undefined,
       platformCadence: parseCadenceJson(record.fields["Platform Cadence"]),
       voiceIntensity: record.fields.Tone ?? undefined,
+      scrapedImages: (() => {
+        try {
+          if (!record.fields["Scraped Images"]) return undefined;
+          const parsed = JSON.parse(record.fields["Scraped Images"]);
+          return Array.isArray(parsed) ? parsed : undefined;
+        } catch { return undefined; }
+      })(),
     };
 
     // Fetch posts linked to this campaign

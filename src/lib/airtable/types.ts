@@ -147,6 +147,8 @@ export interface Campaign {
   platformCadence?: PlatformCadenceConfig | null;
   /** Tone of voice intensity (0-100). 0=Professional, 50=Balanced (default), 100=Full Voice. */
   voiceIntensity?: number;
+  /** Images scraped during campaign generation — JSON array of { url, alt, storyTitle? } */
+  scrapedImages?: Array<{ url: string; alt: string; storyTitle?: string }>;
 }
 
 export const POST_STATUSES = [
