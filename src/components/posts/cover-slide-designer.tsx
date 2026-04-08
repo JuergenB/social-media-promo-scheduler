@@ -36,6 +36,8 @@ interface CoverSlideDesignerProps {
   platform: string;
   brandId?: string;
   brandHandle?: string;
+  /** Artist's Instagram handle (without @) — used as default for Artist Profile campaigns */
+  artistHandle?: string;
   brandLogoUrl?: string | null;
   brandLogoLightUrl?: string | null;
   brandLogoDarkUrl?: string | null;
@@ -320,6 +322,7 @@ export function CoverSlideDesigner({
   platform,
   brandId,
   brandHandle,
+  artistHandle,
   brandLogoUrl,
   brandLogoLightUrl,
   brandLogoDarkUrl,
@@ -334,8 +337,10 @@ export function CoverSlideDesigner({
   // State — always start at gallery unless there's persisted (applied) cover slide data
   const [step, setStep] = useState<"gallery" | "editor">(savedData?.appliedUrl ? "editor" : "gallery");
   const [selectedTemplate, setSelectedTemplate] = useState<CoverSlideTemplate | null>(null);
-  // Platform-aware default: Instagram → @handle, others → clean domain from brand website
+  // Platform-aware default: Artist Profile → artist's handle, Instagram → brand handle, others → domain
   const defaultHandleOrWebsite = (() => {
+    // Artist Profile: prefer artist's Instagram handle when available
+    if (artistHandle) return `@${artistHandle.replace(/^@/, "")}`;
     if (platform.toLowerCase() === "instagram" && brandHandle) return brandHandle;
     // For non-Instagram: extract clean domain (no https://, no www., no path)
     if (brandWebsiteUrl) {
@@ -365,8 +370,10 @@ export function CoverSlideDesigner({
   const [showLinkInBio, setShowLinkInBio] = useState(platform.toLowerCase() === "instagram");
   const [sourceImageIndex, setSourceImageIndex] = useState(0);
   const sourceImages = availableImages || [];
-  const [overlayOpacity, setOverlayOpacity] = useState<number | undefined>(undefined);
+  const [overlayOpacity, setOverlayOpacity] = useState<number>(50);
   const [overlayTint, setOverlayTint] = useState<string | undefined>(undefined);
+  const [keepOriginalColors, setKeepOriginalColors] = useState(false);
+  const [blurBackground, setBlurBackground] = useState(false);
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -444,6 +451,8 @@ export function CoverSlideDesigner({
           sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
           overlayOpacity,
           overlayTint,
+          keepOriginalColors,
+          blurBackground,
         }),
       });
       if (!res.ok) throw new Error("Failed to generate preview");
@@ -478,6 +487,8 @@ export function CoverSlideDesigner({
           sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
           overlayOpacity,
           overlayTint,
+          keepOriginalColors,
+          blurBackground,
           insertPosition,
         }),
       });
@@ -510,7 +521,7 @@ export function CoverSlideDesigner({
       requestPreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio, sourceImageIndex, overlayOpacity, overlayTint]);
+  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio, sourceImageIndex, overlayOpacity, overlayTint, keepOriginalColors, blurBackground]);
 
   // Handle template selection
   const handleTemplateSelect = (template: CoverSlideTemplate) => {
@@ -654,7 +665,7 @@ export function CoverSlideDesigner({
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="absolute inset-0 z-[60] bg-zinc-900/95 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden">
+    <div className="absolute inset-0 z-[60] bg-zinc-900 flex flex-col rounded-lg border border-zinc-700/50 overflow-hidden">
       {/* Header — compact toolbar with all actions */}
       <div className="flex items-center justify-between px-4 py-2 shrink-0 border-b border-zinc-700/50">
         <div className="flex items-center gap-2 min-w-0">
@@ -927,10 +938,10 @@ export function CoverSlideDesigner({
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-white/20 text-[10px]">Light</span>
                 <Slider
-                  value={[overlayOpacity ?? 0]}
+                  value={[overlayOpacity]}
                   onValueChange={([v]) => setOverlayOpacity(v)}
                   min={0}
-                  max={80}
+                  max={100}
                   step={5}
                   className="flex-1"
                 />
@@ -948,6 +959,26 @@ export function CoverSlideDesigner({
                   title="Pick overlay tint color from the preview image"
                 />
               </div>
+              {/* Color/B&W toggle */}
+              <label className="flex items-center gap-2 cursor-pointer mt-1.5">
+                <input
+                  type="checkbox"
+                  checked={keepOriginalColors}
+                  onChange={(e) => { setKeepOriginalColors(e.target.checked); }}
+                  className="rounded border-zinc-600 bg-zinc-800 text-blue-500 h-3.5 w-3.5"
+                />
+                <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Keep original colors</span>
+              </label>
+              {/* Gaussian blur toggle */}
+              <label className="flex items-center gap-2 cursor-pointer mt-1">
+                <input
+                  type="checkbox"
+                  checked={blurBackground}
+                  onChange={(e) => { setBlurBackground(e.target.checked); }}
+                  className="rounded border-zinc-600 bg-zinc-800 text-blue-500 h-3.5 w-3.5"
+                />
+                <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Blur background</span>
+              </label>
             </div>
           )}
 

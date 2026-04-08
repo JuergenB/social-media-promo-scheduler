@@ -27,6 +27,7 @@ interface CampaignFields {
   "Platform Cadence": string;
   Tone: number;
   "Scraped Images": string;
+  "Artist Handle": string;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -118,6 +119,7 @@ export async function GET(
           return Array.isArray(parsed) ? parsed : undefined;
         } catch { return undefined; }
       })(),
+      artistHandle: record.fields["Artist Handle"] || undefined,
     };
 
     // Fetch posts linked to this campaign

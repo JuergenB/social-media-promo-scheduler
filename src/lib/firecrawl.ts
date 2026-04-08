@@ -1373,3 +1373,134 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
     url: baseUrl,
   };
 }
+
+// ── Artist metadata extraction ──────────────────────────────────────
+
+export interface ArtistMetadata {
+  /** Detected artist name from page title/content */
+  artistName: string | null;
+  /** Instagram handle (without @) extracted from page links */
+  instagramHandle: string | null;
+  /** Content series name (e.g., "Q+Art Interview") if detected */
+  seriesName: string | null;
+  /** Suggested campaign label (e.g., "Q+Art Interview — Suzy González") */
+  campaignLabel: string | null;
+}
+
+/**
+ * Extract artist metadata from scraped content for Artist Profile campaigns.
+ *
+ * Detects:
+ * - Artist name from the page title (patterns like "Name's ..." or "... with Name")
+ * - Instagram handle from instagram.com links in the content
+ * - Content series (Q+Art, interview patterns) for smarter campaign labels
+ */
+export function extractArtistMetadata(blogData: ScrapedBlogData): ArtistMetadata {
+  const title = blogData.title || "";
+  const content = blogData.content || "";
+
+  // ── Detect content series ──
+  const lowerContent = content.toLowerCase();
+  const lowerTitle = title.toLowerCase();
+  let seriesName: string | null = null;
+
+  if (lowerContent.includes("q+art") || lowerTitle.includes("q+art") || lowerContent.includes("q + art")) {
+    seriesName = "Q+Art Interview";
+  } else if (
+    lowerTitle.includes("interview") || lowerTitle.includes("conversation with") ||
+    lowerTitle.includes("talking with") || lowerTitle.includes("in conversation")
+  ) {
+    seriesName = "Artist Interview";
+  }
+
+  // ── Extract artist name from title ──
+  let artistName = extractArtistNameFromTitle(title);
+
+  // Fallback: try og:description or first H2 section heading
+  if (!artistName && blogData.sections?.length) {
+    const firstNonPreamble = blogData.sections.find((s) => !s.isPreamble);
+    if (firstNonPreamble?.heading) {
+      // Section headings in interview articles are often the artist's name
+      const heading = firstNonPreamble.heading.replace(/[*#]/g, "").trim();
+      if (heading.split(/\s+/).length <= 4 && /^[A-Z]/.test(heading)) {
+        artistName = heading;
+      }
+    }
+  }
+
+  // ── Extract Instagram handle from links ──
+  let instagramHandle: string | null = null;
+  // Match instagram.com/username links in markdown
+  const instaMatches = content.match(/instagram\.com\/([a-zA-Z0-9_.]+)/g);
+  if (instaMatches) {
+    // Filter out generic brand/publication handles — prefer handles that don't
+    // match common non-artist patterns. Take the last non-generic match, as
+    // article-level IG links often appear after the artist content.
+    const handles = instaMatches
+      .map((m) => {
+        const match = m.match(/instagram\.com\/([a-zA-Z0-9_.]+)/);
+        return match ? match[1] : null;
+      })
+      .filter((h): h is string => !!h && h !== "p" && h !== "reel" && h !== "explore");
+
+    if (handles.length === 1) {
+      instagramHandle = handles[0];
+    } else if (handles.length > 1) {
+      // If we found the artist name, try to find a handle that resembles it
+      if (artistName) {
+        const nameParts = artistName.toLowerCase().replace(/[^a-z\s]/g, "").split(/\s+/);
+        const artistHandle = handles.find((h) => {
+          const lh = h.toLowerCase();
+          return nameParts.some((part) => part.length > 2 && lh.includes(part));
+        });
+        instagramHandle = artistHandle || handles[handles.length - 1];
+      } else {
+        // Take the last unique handle (most likely the featured artist)
+        instagramHandle = handles[handles.length - 1];
+      }
+    }
+  }
+
+  // ── Build campaign label ──
+  let campaignLabel: string | null = null;
+  if (seriesName && artistName) {
+    campaignLabel = `${seriesName} — ${artistName}`;
+  } else if (artistName) {
+    campaignLabel = `Artist Profile — ${artistName}`;
+  }
+
+  return { artistName, instagramHandle, seriesName, campaignLabel };
+}
+
+/**
+ * Extract an artist name from a page title.
+ *
+ * Handles common title patterns:
+ * - "Corn Is More Than a Crop in Suzy González's Visionary Portraits"
+ * - "Interview with Jane Doe: Her Latest Exhibition"
+ * - "Meet Artist John Smith"
+ * - "Jane Doe on Art, Identity, and Community"
+ */
+function extractArtistNameFromTitle(title: string): string | null {
+  // Pattern: "Name's ..." (possessive — very reliable)
+  const possessiveMatch = title.match(/\b([A-Z][a-záéíóúñü]+(?:\s+[A-Z][a-záéíóúñü]+)+)'s\b/);
+  if (possessiveMatch) return possessiveMatch[1];
+
+  // Pattern: "Interview with Name" / "Conversation with Name" / "Talking with Name"
+  const withMatch = title.match(/(?:interview|conversation|talking)\s+with\s+([A-Z][a-záéíóúñü]+(?:\s+[A-Z][a-záéíóúñü]+)+)/i);
+  if (withMatch) return withMatch[1];
+
+  // Pattern: "Meet [Artist] Name" or "Spotlight: Name"
+  const meetMatch = title.match(/(?:meet(?:\s+artist)?|spotlight:?)\s+([A-Z][a-záéíóúñü]+(?:\s+[A-Z][a-záéíóúñü]+)+)/i);
+  if (meetMatch) return meetMatch[1];
+
+  // Pattern: "Name on Art..." / "Name: Her Latest..." (name at start, followed by context)
+  const nameColonMatch = title.match(/^([A-Z][a-záéíóúñü]+(?:\s+[A-Z][a-záéíóúñü]+)+)\s*(?:on\b|:)/);
+  if (nameColonMatch) return nameColonMatch[1];
+
+  // Pattern: "... in Name's ..." (name embedded with possessive)
+  const embeddedPossessive = title.match(/in\s+([A-Z][a-záéíóúñü]+(?:\s+[A-Z][a-záéíóúñü]+)+)'s\b/i);
+  if (embeddedPossessive) return embeddedPossessive[1];
+
+  return null;
+}

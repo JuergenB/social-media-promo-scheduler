@@ -43,6 +43,8 @@ import { TONE_DIMENSION_DEFS } from "@/lib/airtable/types";
 import { Slider } from "@/components/ui/slider";
 import type { Platform } from "@/lib/late-api";
 import { useBrand } from "@/lib/brand-context";
+import { cn } from "@/lib/utils";
+import { getToneLabel, getAllToneTiers } from "@/lib/prompts/tone-guidance";
 import { CadenceEditor } from "@/components/brands/cadence-editor";
 import { PlatformIcon } from "@/components/shared/platform-icon";
 import { useAccounts } from "@/hooks/use-accounts";
@@ -237,6 +239,7 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
     brand.toneDimensions || DEFAULT_TONE_DIMENSIONS
   );
   const [toneNotes, setToneNotes] = useState(brand.toneNotes || "");
+  const [voiceIntensity, setVoiceIntensity] = useState(brand.defaultVoiceIntensity ?? 50);
   const [isDirty, setIsDirty] = useState(false);
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -247,6 +250,7 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
   if (brandId !== lastBrandId) {
     setDimensions(brand.toneDimensions || DEFAULT_TONE_DIMENSIONS);
     setToneNotes(brand.toneNotes || "");
+    setVoiceIntensity(brand.defaultVoiceIntensity ?? 50);
     setIsDirty(false);
     setPreviewText(null);
     setLastBrandId(brandId);
@@ -278,7 +282,7 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
   };
 
   const handleSave = () => {
-    mutation.mutate({ toneDimensions: dimensions, toneNotes });
+    mutation.mutate({ toneDimensions: dimensions, toneNotes, defaultVoiceIntensity: voiceIntensity });
   };
 
   const handleGeneratePreview = async () => {
@@ -294,6 +298,7 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
           toneNotes,
           voiceGuidelines: brand.voiceGuidelines,
           anthropicApiKeyLabel: brand.anthropicApiKeyLabel,
+          voiceIntensity,
         }),
       });
       if (!res.ok) throw new Error("Preview failed");
@@ -372,6 +377,43 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
             placeholder="e.g., Dry British-adjacent humor, never sarcastic"
             className="text-sm h-8"
           />
+        </div>
+
+        <Separator className="my-4" />
+
+        {/* Voice intensity slider */}
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">Overall Voice Intensity</Label>
+          <div className="flex items-center gap-3">
+            <Slider
+              value={[voiceIntensity]}
+              onValueChange={([val]) => { setVoiceIntensity(val); setIsDirty(true); }}
+              min={0}
+              max={100}
+              step={1}
+              className="flex-1"
+            />
+            <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
+              {voiceIntensity}
+            </span>
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
+            {getAllToneTiers().map((tier) => (
+              <span
+                key={tier.label}
+                className={cn(
+                  "cursor-pointer hover:text-foreground transition-colors",
+                  voiceIntensity >= tier.min && voiceIntensity <= tier.max && "text-foreground font-medium"
+                )}
+                onClick={() => { setVoiceIntensity(Math.round((tier.min + tier.max) / 2)); setIsDirty(true); }}
+              >
+                {tier.label}
+              </span>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {getToneLabel(voiceIntensity)} — controls how much brand personality comes through. This amplifies or dampens the dimension settings above.
+          </p>
         </div>
 
         <Separator className="my-4" />

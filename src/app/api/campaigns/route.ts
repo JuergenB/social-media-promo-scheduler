@@ -24,6 +24,7 @@ interface CampaignFields {
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
   Tone: number;
+  "Artist Handle": string;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -113,6 +114,7 @@ export async function GET() {
       maxVariantsPerPlatform: r.fields["Max Variants Per Platform"] ?? undefined,
       platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
       voiceIntensity: r.fields.Tone ?? undefined,
+      artistHandle: r.fields["Artist Handle"] || undefined,
     }));
 
     // Filter by user's allowed brands

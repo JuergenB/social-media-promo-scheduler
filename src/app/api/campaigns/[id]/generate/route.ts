@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { getCampaignTypeRule, getGenerationRules } from "@/lib/airtable/campaign-type-rules";
-import { scrapeBlogPost, scrapeNewsletter, scrapeEvent, scrapeExhibition, scrapeSupplemental, type ContentSection, type ScrapedEventBlogData, type ScrapedExhibitionBlogData } from "@/lib/firecrawl";
+import { scrapeBlogPost, scrapeNewsletter, scrapeEvent, scrapeExhibition, scrapeSupplemental, extractArtistMetadata, type ContentSection, type ScrapedEventBlogData, type ScrapedExhibitionBlogData } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
   SYSTEM_PROMPT,
@@ -533,6 +533,7 @@ export async function POST(
         const isNewsletter = fields.Type === "Newsletter";
         const isEventType = fields.Type === "Event" || fields.Type === "Open Call";
         const isExhibition = fields.Type === "Exhibition";
+        const isArtistProfile = fields.Type === "Artist Profile";
 
         // Always re-scrape to preserve section structure for image-entity matching.
         // Cached scrape data doesn't include sections, which breaks per-story image assignment.
@@ -568,7 +569,7 @@ export async function POST(
         } else {
           sendEvent(controller, encoder, {
             step: 4, totalSteps, status: "running",
-            message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : "blog post"} content...`,
+            message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : isArtistProfile ? "artist profile" : "blog post"} content...`,
           });
 
           blogData = isExhibition
@@ -620,6 +621,11 @@ export async function POST(
         // For Quick Posts, also save the scraped title as description and update the name
         const ogImageUrl = blogData.ogImage || blogData.heroImage?.url || "";
         const isQuickPostCampaign = fields.Name?.startsWith("Quick Post:");
+
+        // For Artist Profile: extract artist name, Instagram handle, and series detection
+        const artistMeta = isArtistProfile ? extractArtistMetadata(blogData) : null;
+        const artistCampaignName = artistMeta?.campaignLabel || null;
+
         await updateRecord("Campaigns", campaignId, {
           ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
@@ -627,6 +633,9 @@ export async function POST(
           ...(!fields["Image URL"] && ogImageUrl ? { "Image URL": ogImageUrl } : {}),
           ...(!fields.Description && blogData.title ? { Description: blogData.title } : {}),
           ...(isQuickPostCampaign && blogData.title ? { Name: `Quick Post: ${blogData.title}` } : {}),
+          // Artist Profile: set descriptive campaign name and store artist handle
+          ...(isArtistProfile && artistCampaignName ? { Name: artistCampaignName } : {}),
+          ...(isArtistProfile && artistMeta?.instagramHandle ? { "Artist Handle": artistMeta.instagramHandle } : {}),
         });
 
         // Analyze sections for section-aware generation
@@ -647,6 +656,8 @@ export async function POST(
             ? `Found ${exhibitionData.artworks.length} artworks by ${new Set(exhibitionData.artworks.map((a) => a.artistName)).size} artists · ${scrapedImageCount} images`
             : isEventType && eventData
               ? `Found ${scrapedImageCount} images · Extracted event details: ${Object.entries(eventData).filter(([, v]) => v).map(([k]) => k).join(", ")}`
+              : isArtistProfile && artistMeta?.artistName
+              ? `Artist: ${artistMeta.artistName}${artistMeta.instagramHandle ? ` (@${artistMeta.instagramHandle})` : ""}${artistMeta.seriesName ? ` · ${artistMeta.seriesName}` : ""} · ${scrapedImageCount} images`
               : isMultiSection
               ? `Found ${scrapedImageCount} images across ${sectionCount} sections (${contentSections.slice(0, 6).map((s: ContentSection) => s.heading).join(", ")}${sectionCount > 6 ? `, +${sectionCount - 6} more` : ""})`
               : `Found ${scrapedImageCount} images, ${blogData.content.length} chars of content`,

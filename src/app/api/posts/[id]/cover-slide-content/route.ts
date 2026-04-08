@@ -18,6 +18,7 @@ interface CampaignFields {
   Description: string;
   "Editorial Direction": string;
   Brand: string[];
+  "Artist Handle": string;
 }
 
 interface BrandFields {
@@ -72,6 +73,7 @@ export async function POST(
     let campaignDescription = "";
     let editorialDirection = "";
     let brandName = "";
+    let artistHandle = "";
 
     if (campaignId) {
       try {
@@ -80,6 +82,7 @@ export async function POST(
         campaignType = campaign.fields.Type || "";
         campaignDescription = campaign.fields.Description || "";
         editorialDirection = campaign.fields["Editorial Direction"] || "";
+        artistHandle = campaign.fields["Artist Handle"] || "";
 
         // Fetch brand for handle context
         const brandId = campaign.fields.Brand?.[0];
@@ -232,7 +235,8 @@ CRITICAL: Respect character limits exactly. Count characters carefully.
         campaignTypeLabel: (generatedFields.campaignTypeLabel || campaignType || "").slice(0, charBudgets.campaignTypeLabel || 30),
         headline: (generatedFields.headline || campaignName || "").slice(0, charBudgets.headline || 100),
         description: (generatedFields.description || "").slice(0, charBudgets.description || 180),
-        handle: "", // Populated by the frontend from brand data
+        // Artist Profile: default to artist's handle; otherwise frontend populates from brand data
+        handle: artistHandle ? `@${artistHandle.replace(/^@/, "")}` : "",
       },
       charBudgets,
     });

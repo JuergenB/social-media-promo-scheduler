@@ -78,7 +78,7 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   Newsletter: "Promote a newsletter issue across social media. Each story becomes its own post with a link that scrolls directly to that story. Great for curated newsletters with multiple features.",
   "Blog Post": "Turn a blog post or article into a series of social media posts. Images and key quotes are extracted and cycled through, with each post highlighting a different aspect of the article.",
   Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Auto-detects Artwork Archive embeds on gallery pages to extract structured artwork data, artist names, and images.",
-  "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms. (Coming soon)",
+  "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms.",
   "Podcast Episode": "Promote a podcast episode using show notes, guest highlights, and key quotes. Can incorporate transcripts for deeper content extraction. (Coming soon)",
   Event: "Promote physical or virtual events — gallery openings, anniversary celebrations, studio tours, art fairs. Date-driven campaigns that build intensity toward the event date with RSVP/ticket CTAs.",
   "Open Call": "Promote open calls for artist submissions. Deadline-driven campaigns that build toward a submission deadline with apply/submit CTAs. (Coming soon)",
@@ -99,7 +99,7 @@ export default function NewCampaignPage() {
   const [distributionBias, setDistributionBias] = useState<DistributionBias>("Front-loaded");
   const [customDuration, setCustomDuration] = useState(false);
   const [editorialDirection, setEditorialDirection] = useState("");
-  const [voiceIntensity, setVoiceIntensity] = useState<number>(50);
+  const [voiceIntensity, setVoiceIntensity] = useState<number>(currentBrand?.defaultVoiceIntensity ?? 50);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
@@ -133,17 +133,20 @@ export default function NewCampaignPage() {
     return platforms;
   }, [connectedAccounts]);
 
-  // Brand cadence: the brand's saved cadence (or global defaults for connected platforms)
+  // Brand cadence: the brand's saved cadence merged with connected platforms.
+  // If a connected platform isn't in the saved cadence, use global defaults so
+  // newly connected accounts always appear in the platform list.
   const brandCadence: PlatformCadenceConfig = useMemo(() => {
-    if (currentBrand?.platformCadence && Object.keys(currentBrand.platformCadence).length > 0) {
-      return currentBrand.platformCadence;
-    }
-    // Fallback: build from global defaults for connected platforms
-    const fallback: PlatformCadenceConfig = {};
+    const saved = currentBrand?.platformCadence && Object.keys(currentBrand.platformCadence).length > 0
+      ? { ...currentBrand.platformCadence }
+      : {} as PlatformCadenceConfig;
+    // Merge in any connected platforms not yet in saved cadence
     for (const p of connectedPlatforms) {
-      fallback[p] = GLOBAL_CADENCE_DEFAULTS[p] || { postsPerWeek: 3, activeDays: [1,2,3,4,5], timeWindows: ["morning", "afternoon"] };
+      if (!saved[p]) {
+        saved[p] = GLOBAL_CADENCE_DEFAULTS[p] || { postsPerWeek: 3, activeDays: [1,2,3,4,5], timeWindows: ["morning", "afternoon"] };
+      }
     }
-    return fallback;
+    return saved;
   }, [currentBrand?.platformCadence, connectedPlatforms]);
 
   // Platforms available for this campaign: intersection of cadence platforms and connected accounts
@@ -164,6 +167,13 @@ export default function NewCampaignPage() {
       setCadenceInitialized(true);
     }
   }, [availableCadencePlatforms, cadenceInitialized]);
+
+  // Sync voice intensity default when brand changes
+  useEffect(() => {
+    if (currentBrand?.defaultVoiceIntensity != null) {
+      setVoiceIntensity(currentBrand.defaultVoiceIntensity);
+    }
+  }, [currentBrand?.id, currentBrand?.defaultVoiceIntensity]);
 
   // Derived: active platforms set (for backward compat references)
   const genPlatforms = useMemo(() => {

@@ -35,6 +35,7 @@ interface BrandFields {
   "Logo Transparent Dark": string;
   "Tone Dimensions": string;
   "Tone Notes": string;
+  "Default Voice Intensity": number;
   Status: "Active" | "Inactive";
 }
 
@@ -77,6 +78,7 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     logoTransparentDark: r.fields["Logo Transparent Dark"] || null,
     toneDimensions: parseToneDimensions(r.fields["Tone Dimensions"]),
     toneNotes: r.fields["Tone Notes"] || undefined,
+    defaultVoiceIntensity: r.fields["Default Voice Intensity"] ?? undefined,
     status: r.fields.Status || "Active",
   };
 }
@@ -130,6 +132,7 @@ export async function PATCH(request: NextRequest) {
       platformCadence: "Platform Cadence",
       toneDimensions: "Tone Dimensions",
       toneNotes: "Tone Notes",
+      defaultVoiceIntensity: "Default Voice Intensity",
       status: "Status",
     };
 

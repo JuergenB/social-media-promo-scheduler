@@ -29,6 +29,8 @@ export interface Brand {
   toneDimensions?: ToneDimensions;
   /** Short additional tone notes (1-2 sentences). */
   toneNotes?: string;
+  /** Default overall voice intensity (0-100). 0=Professional, 50=Balanced, 100=Full Voice. */
+  defaultVoiceIntensity?: number;
   status: "Active" | "Inactive";
 }
 
@@ -94,7 +96,7 @@ export const CAMPAIGN_TYPES = [
 export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
 
 /** Campaign types with generation pipeline implemented */
-export const ENABLED_CAMPAIGN_TYPES: CampaignType[] = ["Newsletter", "Blog Post", "Event", "Exhibition"];
+export const ENABLED_CAMPAIGN_TYPES: CampaignType[] = ["Newsletter", "Blog Post", "Event", "Exhibition", "Artist Profile"];
 
 export const CAMPAIGN_STATUSES = [
   "Draft",
@@ -149,6 +151,8 @@ export interface Campaign {
   voiceIntensity?: number;
   /** Images scraped during campaign generation — JSON array of { url, alt, storyTitle? } */
   scrapedImages?: Array<{ url: string; alt: string; storyTitle?: string }>;
+  /** Artist Profile: Instagram handle of the featured artist (without @) */
+  artistHandle?: string;
 }
 
 export const POST_STATUSES = [

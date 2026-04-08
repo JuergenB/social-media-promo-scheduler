@@ -429,6 +429,7 @@ export function CampaignPostDetail({
           platform={platformLower}
           brandId={campaign?.brandIds?.[0]}
           brandHandle={currentBrand?.instagramHandle || ""}
+          artistHandle={campaign?.type === "Artist Profile" ? campaign.artistHandle : undefined}
           brandLogoUrl={currentBrand?.logoTransparentDark || currentBrand?.logoTransparentLight || null}
           brandLogoLightUrl={currentBrand?.logoTransparentLight || null}
           brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}

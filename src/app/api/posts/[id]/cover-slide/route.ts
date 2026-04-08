@@ -60,6 +60,8 @@ export async function POST(
     const sourceImageUrl: string | undefined = typeof body.sourceImageUrl === "string" ? body.sourceImageUrl : undefined;
     const overlayOpacity: number | undefined = typeof body.overlayOpacity === "number" ? body.overlayOpacity : undefined;
     const overlayTint: string | undefined = typeof body.overlayTint === "string" ? body.overlayTint : undefined;
+    const keepOriginalColors: boolean = body.keepOriginalColors === true;
+    const blurBackground: boolean = body.blurBackground === true;
     const insertPosition: "prepend" | "append" = body.insertPosition === "append" ? "append" : "prepend";
 
     if (!templateId) {
@@ -145,6 +147,8 @@ export async function POST(
       showLinkInBio,
       overlayOpacity,
       overlayTint,
+      keepOriginalColors,
+      blurBackground,
     });
 
     if (!apply) {

@@ -19,12 +19,14 @@ export async function POST(request: NextRequest) {
       toneNotes,
       voiceGuidelines,
       anthropicApiKeyLabel,
+      voiceIntensity,
     } = body as {
       brandName: string;
       toneDimensions: ToneDimensions;
       toneNotes?: string;
       voiceGuidelines?: string;
       anthropicApiKeyLabel?: string | null;
+      voiceIntensity?: number;
     };
 
     if (!brandName || !toneDimensions) {
@@ -37,24 +39,25 @@ export async function POST(request: NextRequest) {
     const config = resolveAnthropicConfig({ anthropicApiKeyLabel });
     const client = new Anthropic({ apiKey: config.apiKey });
 
-    // Build tone guidance at intensity 50 (neutral — shows raw brand dimensions)
-    const toneBlock = buildToneGuidance(50, {
+    // Build tone guidance at the requested intensity (defaults to 50)
+    const intensity = typeof voiceIntensity === "number" ? voiceIntensity : 50;
+    const toneBlock = buildToneGuidance(intensity, {
       brandName,
       toneDimensions,
       toneNotes,
     });
 
-    const systemPrompt = `You are a social media copywriter. Generate a 2-3 sentence post that introduces the brand "${brandName}", written in the exact tone specified by the dimensions below. Do not mention the dimensions themselves — just write in the voice they describe. Output only the post text, no labels or formatting.`;
+    const systemPrompt = `You are a social media copywriter. Generate an Instagram-length post (200-300 words) that introduces the brand "${brandName}", written in the exact tone specified by the dimensions below. Do not mention the dimensions themselves — just write in the voice they describe. Output only the post text, no labels or formatting. Include relevant hashtags at the end.`;
 
     const userPrompt = `${toneBlock}
 
 ${voiceGuidelines ? `<brand_voice_guidelines>\n${voiceGuidelines.slice(0, 2000)}\n</brand_voice_guidelines>` : ""}
 
-Write a 2-3 sentence social media post introducing ${brandName} to a new follower. Demonstrate the brand's unique voice and personality.`;
+Write an Instagram-length social media post (200-300 words) introducing ${brandName} to a new follower. Demonstrate the brand's unique voice and personality. The post should feel like a real Instagram post — engaging opening hook, storytelling or value-driven body, a call to action, and relevant hashtags.`;
 
     const response = await client.messages.create({
       model: config.model,
-      max_tokens: 300,
+      max_tokens: 800,
       temperature: 0.7,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],

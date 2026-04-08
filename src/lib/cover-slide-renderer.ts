@@ -386,24 +386,60 @@ function truncateToFit(
  */
 /**
  * Create a high-key (light, low contrast) version of an image.
+ *
+ * Two-step approach to avoid blown-out highlights:
+ *   1. Gamma compression — flattens the tonal range so highlights don't clip
+ *      when we brighten. Higher gamma values compress more aggressively.
+ *   2. High-key wash — brightness lift + white offset on the compressed image,
+ *      producing an even, readable background without harsh clipping.
+ *
  * @param intensity 0-100: 0 = original image, 100 = near-solid white. Default 70.
+ * @param keepColors When true, preserve original color saturation instead of desaturating to B&W.
  */
 async function applyHighKey(
   buffer: Buffer,
   tint?: { r: number; g: number; b: number },
-  intensity: number = 70
+  intensity: number = 70,
+  keepColors: boolean = false,
+  sourceLuminance: number = 0.3
 ): Promise<Buffer> {
   // Scale parameters by intensity (0-100)
   const t = Math.max(0, Math.min(100, intensity)) / 100;
-  const brightness = 1.0 + t * 1.0;       // 1.0 (original) → 2.0 (full wash)
-  const saturation = 1.0 - t * 0.85;      // 1.0 → 0.15
-  const contrast = 1.0 - t * 0.7;         // 1.0 → 0.3 (linear multiplier)
-  const offset = t * 180;                  // 0 → 180 (push toward white)
 
-  let pipeline = sharp(buffer)
+  // Use an ease-out curve (sqrt) so the wash builds gradually through the
+  // mid-range and only goes solid white near 90-100%.
+  const tEased = Math.sqrt(t);
+
+  // Scale gamma and brightness by source darkness. Dark images (lum ~0.1)
+  // need heavy gamma to lift; light images (lum ~0.8) need almost none.
+  // darkness: 1.0 for black, 0.0 for white
+  const darkness = 1.0 - Math.min(1, Math.max(0, sourceLuminance));
+
+  // Step 1: Gamma compression — scaled by source darkness.
+  // Dark source (darkness=1): gamma 1.8 → 3.0 (heavy lift needed)
+  // Light source (darkness=0): gamma 1.0 → 1.6 (minimal — already light)
+  const gammaBase = 1.0 + darkness * 0.8;        // 1.0 – 1.8
+  const gammaRange = 0.4 + darkness * 0.8;        // 0.4 – 1.2
+  const gammaValue = gammaBase + tEased * gammaRange;
+  const compressed = await sharp(buffer)
+    .gamma(gammaValue)
+    .toBuffer();
+
+  // Step 2: High-key wash — also scaled by source darkness.
+  // Dark source: brightness 1.0→2.6, offset 0→240 (aggressive wash)
+  // Light source: brightness 1.0→1.6, offset 0→100 (gentle wash)
+  const brightnessRange = 0.6 + darkness * 1.0;   // 0.6 – 1.6
+  const offsetRange = 100 + darkness * 140;        // 100 – 240
+  const brightness = 1.0 + tEased * brightnessRange;
+  const saturation = keepColors ? 1.0 : 1.0 - tEased * 0.9;
+  const contrast = 1.0 - tEased * (0.4 + darkness * 0.35);  // 0.6–0.25 at max
+  const offset = tEased * offsetRange;
+
+  let pipeline = sharp(compressed)
     .modulate({ brightness, saturation });
 
-  if (tint) {
+  // Skip tint when preserving original colors — tint() replaces colors with the tint hue
+  if (tint && !keepColors) {
     pipeline = pipeline.tint(tint);
   }
 
@@ -418,22 +454,25 @@ async function applyHighKey(
 /**
  * Create a low-key (dark, low contrast) version of an image.
  * @param intensity 0-100: 0 = original image, 100 = near-solid black. Default 70.
+ * @param keepColors When true, preserve original color saturation instead of desaturating to B&W.
  */
 async function applyLowKey(
   buffer: Buffer,
   tint?: { r: number; g: number; b: number },
-  intensity: number = 70
+  intensity: number = 70,
+  keepColors: boolean = false
 ): Promise<Buffer> {
   const t = Math.max(0, Math.min(100, intensity)) / 100;
   const brightness = 1.0 - t * 0.7;       // 1.0 → 0.3
-  const saturation = 1.0 - t * 0.8;       // 1.0 → 0.2
+  const saturation = keepColors ? 1.0 : 1.0 - t * 0.8;       // keepColors: full sat; default: 1.0 → 0.2
   const contrast = 1.0 - t * 0.7;         // 1.0 → 0.3
   const offset = t * 15;                  // 0 → 15
 
   let pipeline = sharp(buffer)
     .modulate({ brightness, saturation });
 
-  if (tint) {
+  // Skip tint when preserving original colors — tint() replaces colors with the tint hue
+  if (tint && !keepColors) {
     pipeline = pipeline.tint(tint);
   }
 
@@ -462,7 +501,7 @@ async function applyLowKey(
 export async function renderCoverSlide(
   options: CoverSlideRenderOptions
 ): Promise<CoverSlideRenderResult> {
-  const { template, content, width, height, imageOffset, colorSchemeOverrides, fontSizeDeltas, overlayOpacity, overlayTint, logoScale, logoOpacity: logoOpacityOverride } = options;
+  const { template, content, width, height, imageOffset, colorSchemeOverrides, fontSizeDeltas, overlayOpacity, overlayTint, keepOriginalColors, blurBackground, logoScale, logoOpacity: logoOpacityOverride } = options;
 
   // Resolve color scheme
   const scheme: ColorScheme = {
@@ -493,21 +532,45 @@ export async function renderCoverSlide(
       if (response.ok) {
         const imgBuffer = Buffer.from(await response.arrayBuffer());
 
-        // Scale to fill entire canvas
-        const resized = await sharp(imgBuffer)
+        // Scale to fill entire canvas, optionally blur for even backgrounds
+        let resized = await sharp(imgBuffer)
           .resize(width, height, { fit: "cover" })
           .toBuffer();
 
-        // Apply high-key or low-key based on background luminance
-        // overlayOpacity controls intensity: 0 = original image visible, 80 = heavy wash
-        // Default intensity is 70 (strong wash for text readability, slight texture visible)
+        if (blurBackground) {
+          resized = await sharp(resized).blur(4).toBuffer();
+        }
+
+        // Apply high-key or low-key based on background luminance.
+        // High-key (light cards): slider 0-100 maps to intensity 40-100 — text is dark,
+        //   so even the lightest setting must wash the image enough for readability.
+        // Low-key (dark cards): slider 0-100 maps to intensity 15-100 — white text is
+        //   more forgiving on dark images, so a lower floor works.
         const tintRgb = overlayTint ? hexToRgb(overlayTint) : bgRgb;
-        const intensity = typeof overlayOpacity === "number"
-          ? Math.max(0, Math.min(100, 70 + overlayOpacity * 0.3))  // slider 0→70, slider 80→94
-          : 70; // default
-        const processed = bgLum > 0.5
-          ? await applyHighKey(resized, tintRgb, intensity)
-          : await applyLowKey(resized, tintRgb, intensity);
+        const isHighKey = bgLum > 0.5;
+        const sliderVal = typeof overlayOpacity === "number"
+          ? Math.max(0, Math.min(100, overlayOpacity))
+          : 50;
+
+        // Measure source image brightness for adaptive processing.
+        const { dominant } = await sharp(resized).stats();
+        const imgLum = (0.299 * dominant.r + 0.587 * dominant.g + 0.114 * dominant.b) / 255;
+
+        // For high-key: adaptive floor based on source brightness.
+        // Dark images (lum ~0.1) → floor 55; light images (lum ~0.8) → floor 15.
+        // The applyHighKey function also uses imgLum to scale gamma/brightness.
+        let intensity: number;
+        if (isHighKey) {
+          const adaptiveFloor = Math.round(55 - imgLum * 40);  // 55 → 15
+          intensity = adaptiveFloor + (sliderVal / 100) * (100 - adaptiveFloor);
+        } else {
+          intensity = 15 + (sliderVal / 100) * 85;
+        }
+
+        const preserveColors = keepOriginalColors === true;
+        const processed = isHighKey
+          ? await applyHighKey(resized, tintRgb, intensity, preserveColors, imgLum)
+          : await applyLowKey(resized, tintRgb, intensity, preserveColors);
 
         imageComposite = { input: processed, left: 0, top: 0 };
       }
