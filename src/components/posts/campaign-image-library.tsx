@@ -16,8 +16,8 @@ interface CampaignImageLibraryProps {
   scrapedImages: ScrapedImage[];
   /** URLs already attached to the current post (to mark as "already added") */
   existingUrls: Set<string>;
-  /** Called when user clicks an image to add it */
-  onAdd: (url: string) => void;
+  /** Called when user clicks an image to add it (url + alt text as caption) */
+  onAdd: (url: string, caption?: string) => void;
 }
 
 export function CampaignImageLibrary({
@@ -59,7 +59,7 @@ export function CampaignImageLibrary({
               <button
                 key={img.url}
                 type="button"
-                onClick={() => { if (!alreadyAdded) onAdd(img.url); }}
+                onClick={() => { if (!alreadyAdded) onAdd(img.url, img.alt); }}
                 disabled={alreadyAdded}
                 title={img.alt || "Campaign image"}
                 className={cn(

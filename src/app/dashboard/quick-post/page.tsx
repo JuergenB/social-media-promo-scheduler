@@ -1025,7 +1025,7 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
                 <CampaignImageLibrary
                   scrapedImages={campaign.scrapedImages}
                   existingUrls={new Set(mediaItems.map((m) => m.url))}
-                  onAdd={(url) => media.addImageUrl(url)}
+                  onAdd={(url, caption) => media.addImageUrl(url, caption)}
                 />
               )}
               <ImageDropZone

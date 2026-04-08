@@ -79,8 +79,8 @@ export function usePostMedia({ postId, initialItems, invalidateKeys = [["campaig
     onError: () => toast.error("Failed to upload image"),
   });
 
-  const addImageUrl = (url: string) => {
-    const next = [...mediaItems, { url, caption: "" }];
+  const addImageUrl = (url: string, caption?: string) => {
+    const next = [...mediaItems, { url, caption: caption || "" }];
     setMediaItems(next);
     saveImagesMutation.mutate(next);
     toast.success(mediaItems.length === 0 ? "Image added" : `${next.length} images — carousel ready`);
