@@ -152,7 +152,8 @@ function estimateAutoHeight(
     const text = getTextContent(band, content);
     const maxFontSize = band.font.sizeRange[1];
     const maxLines = band.maxLines || 1;
-    const lineHeight = maxFontSize * 1.35;
+    const lhMultiplier = band.lineHeight || 1.1;
+    const lineHeight = maxFontSize * lhMultiplier;
     const paddingV = (band.paddingTop || 0) + (band.paddingBottom || 0);
 
     // Estimate line count from text length and available width
@@ -262,7 +263,7 @@ function buildTextElement(
         fontWeight: band.font.weight,
         fontStyle: band.font.style || "normal",
         textAlign: band.align,
-        lineHeight: 1.3,
+        lineHeight: band.lineHeight || 1.1,
         letterSpacing: band.letterSpacing || 0,
         overflow: "hidden",
       },
@@ -637,7 +638,7 @@ export async function renderCoverSlide(
             fontWeight: textBand.font.weight,
             fontStyle: textBand.font.style || "normal",
             textAlign: textBand.align,
-            lineHeight: 1.3,
+            lineHeight: textBand.lineHeight || 1.3,
             letterSpacing: textBand.letterSpacing || 0,
             flexShrink: 1,
           },
