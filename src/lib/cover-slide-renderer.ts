@@ -152,7 +152,7 @@ function estimateAutoHeight(
     const text = getTextContent(band, content);
     const maxFontSize = band.font.sizeRange[1];
     const maxLines = band.maxLines || 1;
-    const lhMultiplier = band.lineHeight || 1.1;
+    const lhMultiplier = band.lineHeight || 1.3;
     const lineHeight = maxFontSize * lhMultiplier;
     const paddingV = (band.paddingTop || 0) + (band.paddingBottom || 0);
 
@@ -263,7 +263,7 @@ function buildTextElement(
         fontWeight: band.font.weight,
         fontStyle: band.font.style || "normal",
         textAlign: band.align,
-        lineHeight: band.lineHeight || 1.1,
+        lineHeight: band.lineHeight || 1.3,
         letterSpacing: band.letterSpacing || 0,
         overflow: "hidden",
       },
@@ -462,7 +462,7 @@ async function applyLowKey(
 export async function renderCoverSlide(
   options: CoverSlideRenderOptions
 ): Promise<CoverSlideRenderResult> {
-  const { template, content, width, height, imageOffset, colorSchemeOverrides, fontSizeDeltas, overlayOpacity, overlayTint } = options;
+  const { template, content, width, height, imageOffset, colorSchemeOverrides, fontSizeDeltas, overlayOpacity, overlayTint, logoScale, logoOpacity: logoOpacityOverride } = options;
 
   // Resolve color scheme
   const scheme: ColorScheme = {
@@ -743,10 +743,10 @@ export async function renderCoverSlide(
         const brandBand = brandingBandEntry.band as BrandingBand;
         const padding = brandBand.padding;
         const maxLogoH = Math.round(brandingBandEntry.height - padding * 2);
-        const maxLogoW = Math.round(width * 0.15);
+        const maxLogoW = Math.round(width * (logoScale ?? 0.15));
 
         // Subtle logo: light enough to read as a watermark, not a stamp
-        const logoOpacity = bgLum > 0.5 ? 0.35 : 0.40;
+        const logoOpacity = logoOpacityOverride ?? (bgLum > 0.5 ? 0.35 : 0.40);
 
         const resizedLogo = await sharp(logoBuffer)
           .resize(maxLogoW, maxLogoH, { fit: "inside" })

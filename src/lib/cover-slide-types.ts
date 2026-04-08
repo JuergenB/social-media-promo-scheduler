@@ -189,6 +189,10 @@ export interface CoverSlideRenderOptions {
   overlayOpacity?: number;
   /** Overlay tint color for quotable cards (hex string). Tints the semi-transparent overlay. */
   overlayTint?: string;
+  /** Logo width as fraction of card width (default 0.15). Use higher values for gallery previews. */
+  logoScale?: number;
+  /** Logo opacity override (0-1). Default is 0.35/0.40 based on background luminance. */
+  logoOpacity?: number;
 }
 
 /** Result from the renderer */

@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listRecords, updateRecord } from "@/lib/airtable/client";
+import { listRecords, getRecord, updateRecord } from "@/lib/airtable/client";
 
 interface PostFields {
   "Zernio Post ID": string;
   Status: string;
+  Campaign?: string[]; // linked record IDs
 }
+
+interface CampaignFields {
+  Name?: string;
+  Brand?: string[]; // linked record IDs
+}
+
+interface BrandFields {
+  Name?: string;
+}
+
+const WEBHOOK_SECRET = process.env.ZERNIO_WEBHOOK_SECRET;
 
 interface WebhookPlatformResult {
   platform?: string;
@@ -37,6 +49,27 @@ interface WebhookPayload {
  */
 export async function POST(request: NextRequest) {
   try {
+    // ── Webhook authentication ───────────────────────────────────────────
+    const sourceIp = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "unknown";
+    const signature = request.headers.get("x-signature") || request.headers.get("x-webhook-signature");
+
+    if (WEBHOOK_SECRET) {
+      // Check signature header first, then query param fallback
+      const providedSecret = signature || request.nextUrl.searchParams.get("secret");
+      if (providedSecret !== WEBHOOK_SECRET) {
+        console.warn(`[webhook] Rejected: invalid secret from IP ${sourceIp}`);
+        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      }
+    } else {
+      console.warn("[webhook] ZERNIO_WEBHOOK_SECRET not set — accepting all requests. Set this env var in production.");
+    }
+
+    if (signature) {
+      console.log(`[webhook] Request from IP ${sourceIp} with signature header`);
+    } else {
+      console.log(`[webhook] Request from IP ${sourceIp} (no signature header)`);
+    }
+
     const payload: WebhookPayload = await request.json();
 
     const event = payload.event;
@@ -56,6 +89,7 @@ export async function POST(request: NextRequest) {
     // Find the Airtable post by Zernio Post ID
     const posts = await listRecords<PostFields>("Posts", {
       filterByFormula: `{Zernio Post ID} = '${zernioPostId}'`,
+      fields: ["Zernio Post ID", "Status", "Campaign"],
     });
 
     if (posts.length === 0) {
@@ -64,6 +98,28 @@ export async function POST(request: NextRequest) {
     }
 
     const airtablePost = posts[0];
+
+    // ── Brand verification ─────────────────────────────────────────────
+    let brandName = "unknown";
+    const campaignIds = (airtablePost.fields as PostFields).Campaign;
+    if (campaignIds && campaignIds.length > 0) {
+      try {
+        const campaign = await getRecord<CampaignFields>("Campaigns", campaignIds[0]);
+        const brandIds = campaign.fields.Brand;
+        if (brandIds && brandIds.length > 0) {
+          const brand = await getRecord<BrandFields>("Brands", brandIds[0]);
+          brandName = brand.fields.Name || brandIds[0];
+        } else {
+          console.warn(`[webhook] Campaign ${campaignIds[0]} has no brand linked`);
+        }
+      } catch (err) {
+        console.warn(`[webhook] Failed to resolve brand for campaign ${campaignIds[0]}:`, err);
+      }
+    } else {
+      console.warn(`[webhook] Post ${airtablePost.id} has no campaign linked`);
+    }
+    console.log(`[webhook] Brand: ${brandName} | Post: ${airtablePost.id} | Event: ${event}`);
+
     const updates: Record<string, unknown> = {};
 
     // Map Zernio event to Airtable status
