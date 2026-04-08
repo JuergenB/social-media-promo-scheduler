@@ -60,6 +60,7 @@ export async function POST(
     const sourceImageUrl: string | undefined = typeof body.sourceImageUrl === "string" ? body.sourceImageUrl : undefined;
     const overlayOpacity: number | undefined = typeof body.overlayOpacity === "number" ? body.overlayOpacity : undefined;
     const overlayTint: string | undefined = typeof body.overlayTint === "string" ? body.overlayTint : undefined;
+    const insertPosition: "prepend" | "append" = body.insertPosition === "append" ? "append" : "prepend";
 
     if (!templateId) {
       return NextResponse.json({ error: "templateId is required" }, { status: 400 });
@@ -159,14 +160,13 @@ export async function POST(
       });
     }
 
-    // Apply mode: upload and prepend to media items
+    // Apply mode: upload and insert into media items
     const coverUrl = await uploadImage("posts", id, result.buffer, "image/jpeg");
 
-    // Prepend cover slide to the CURRENT media items (preserving rendered slides)
-    const newMediaItems: MediaItem[] = [
-      { url: coverUrl, caption: "" },
-      ...currentMediaItems,
-    ];
+    // Insert cover slide into media items (prepend for lead covers, append for additional cards)
+    const newMediaItems: MediaItem[] = insertPosition === "append"
+      ? [...currentMediaItems, { url: coverUrl, caption: "" }]
+      : [{ url: coverUrl, caption: "" }, ...currentMediaItems];
 
     // Save to Airtable
     const serialized = serializeMediaItems(newMediaItems);
@@ -184,20 +184,33 @@ export async function POST(
     }
     const designedCardUrls = [...new Set([...existingDesignedUrls, coverUrl])];
 
-    const coverSlideData: CoverSlideData = {
-      templateId,
-      fields: {
-        campaignTypeLabel: content.campaignTypeLabel,
-        headline: content.headline,
-        description: content.description,
-        handle: content.handle,
-      },
-      imageOffset,
-      fontSizeDeltas,
-      showLinkInBio,
-      appliedUrl: coverUrl,
-      designedCardUrls,
-    };
+    // When appending a new card, preserve existing cover slide data (appliedUrl, fields, etc.)
+    // Only update designedCardUrls. When prepending (default), overwrite everything.
+    let coverSlideData: CoverSlideData;
+    if (insertPosition === "append" && post.fields["Cover Slide Data"]) {
+      try {
+        const existing: CoverSlideData = JSON.parse(post.fields["Cover Slide Data"]);
+        coverSlideData = { ...existing, designedCardUrls };
+      } catch {
+        coverSlideData = {
+          templateId, fields: { campaignTypeLabel: content.campaignTypeLabel, headline: content.headline, description: content.description, handle: content.handle },
+          imageOffset, fontSizeDeltas, showLinkInBio, appliedUrl: coverUrl, designedCardUrls,
+        };
+      }
+    } else {
+      coverSlideData = {
+        templateId,
+        fields: {
+          campaignTypeLabel: content.campaignTypeLabel,
+          headline: content.headline,
+          description: content.description,
+          handle: content.handle,
+        },
+        imageOffset, fontSizeDeltas, showLinkInBio,
+        appliedUrl: coverUrl,
+        designedCardUrls,
+      };
+    }
 
     await updateRecord("Posts", id, {
       "Image URL": serialized["Image URL"],

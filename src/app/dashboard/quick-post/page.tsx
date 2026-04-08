@@ -32,10 +32,13 @@ import { ContentEditor } from "@/components/posts/content-editor";
 import { Lightbox } from "@/components/posts/lightbox";
 import { CarouselPreviewOverlay } from "@/components/posts/carousel-preview-overlay";
 import { OptimizePreviewDialog } from "@/components/posts/optimize-preview-dialog";
+import { OutpaintImageSelector } from "@/components/posts/outpaint-image-selector";
+import { CardImageSelector } from "@/components/posts/card-image-selector";
 import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
 import { ImagePicker, type ScrapedImageItem } from "@/components/posts/image-picker";
 import { getToneLabel } from "@/lib/prompts/tone-guidance";
 import { toast } from "sonner";
+import { getEligibleOutpaintIndices } from "@/lib/media-items";
 import type { Campaign, Post } from "@/lib/airtable/types";
 import type { Platform } from "@/lib/late-api";
 import type { CoverSlideData } from "@/lib/cover-slide-types";
@@ -755,6 +758,9 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
   const [showAddImage, setShowAddImage] = useState(false);
   const [showCoverSlideDesigner, setShowCoverSlideDesigner] = useState(false);
   const [coverSlideKey, setCoverSlideKey] = useState(0);
+  const [showCardImageSelector, setShowCardImageSelector] = useState(false);
+  const [newCardImageIndex, setNewCardImageIndex] = useState<number | null>(null);
+  const [cardInsertPosition, setCardInsertPosition] = useState<"prepend" | "append">("prepend");
 
   // Schedule picker state
   const [showSchedulePicker, setShowSchedulePicker] = useState(false);
@@ -857,6 +863,8 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
     : carousel.slidesLocalState === "reset" ? false
     : !!post.originalMedia;
 
+  const [showOutpaintSelector, setShowOutpaintSelector] = useState(false);
+
   const canAddCoverSlide = SLIDE_PLATFORMS.includes(platformLower) && mediaImages.length >= 1 && !isPublished;
   const savedCoverSlideData: CoverSlideData | null = (() => {
     try {
@@ -873,6 +881,11 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
     && mediaImages.length >= 2
     && !slidesApplied
     && (platformLower === "bluesky" || mediaItems.some((m) => m.caption));
+
+  const eligibleOutpaintIndices = useMemo(
+    () => getEligibleOutpaintIndices(mediaItems, post.coverSlideData),
+    [mediaItems, post.coverSlideData]
+  );
 
   // ── Media toolbar ──────────────────────────────────────────────────────
 
@@ -904,17 +917,27 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           Replace
         </Button>
       )}
-      {!slidesApplied && mediaImages.length >= 1 && optimizeTarget && (
+      {!slidesApplied && eligibleOutpaintIndices.length >= 1 && optimizeTarget && (
         <Button
           variant="ghost"
           size="sm"
           className="text-xs text-muted-foreground h-7 px-2"
-          onClick={() => optimize.optimizeMutation.mutate(0)}
+          onClick={() => {
+            if (eligibleOutpaintIndices.length === 1) {
+              optimize.startBatchOptimize(eligibleOutpaintIndices);
+            } else {
+              setShowOutpaintSelector(true);
+            }
+          }}
           disabled={optimize.optimizeMutation.isPending}
           title={optimizeTooltip}
         >
           {optimize.optimizeMutation.isPending ? (
-            <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Optimizing...</>
+            <><Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              {optimize.batchProgress && optimize.batchProgress.total > 1
+                ? `Optimizing ${optimize.batchProgress.current}/${optimize.batchProgress.total}...`
+                : "Optimizing..."}
+            </>
           ) : (
             <><Sparkles className="h-3 w-3 mr-1" /> {optimizeTarget.label}</>
           )}
@@ -925,7 +948,16 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           variant="ghost"
           size="sm"
           className="text-xs text-muted-foreground h-7 px-2"
-          onClick={() => { setCoverSlideKey((k) => k + 1); setShowCoverSlideDesigner(true); }}
+          onClick={() => {
+            if (!hasCoverSlide && eligibleOutpaintIndices.length === 1) {
+              setNewCardImageIndex(null);
+              setCardInsertPosition("prepend");
+              setCoverSlideKey((k) => k + 1);
+              setShowCoverSlideDesigner(true);
+            } else {
+              setShowCardImageSelector(true);
+            }
+          }}
           title="Add a designed card — editorial covers, quote cards, and more"
         >
           <LayoutTemplate className="h-3 w-3 mr-1" /> Cards
@@ -1108,22 +1140,54 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           brandLogoLightUrl={currentBrand?.logoTransparentLight || null}
           brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}
           brandWebsiteUrl={currentBrand?.websiteUrl || null}
-          savedData={savedCoverSlideData}
-          availableImages={mediaItems.filter((_, i) => {
-            if (savedCoverSlideData?.appliedUrl && i === 0 && mediaItems[0]?.url === savedCoverSlideData.appliedUrl) return false;
-            return true;
-          })}
+          savedData={newCardImageIndex !== null ? null : savedCoverSlideData}
+          insertPosition={cardInsertPosition}
+          availableImages={
+            newCardImageIndex !== null
+              ? [mediaItems[newCardImageIndex]].filter(Boolean)
+              : mediaItems.filter((_, i) => {
+                  if (savedCoverSlideData?.appliedUrl && i === 0 && mediaItems[0]?.url === savedCoverSlideData.appliedUrl) return false;
+                  return true;
+                })
+          }
           onApply={(newMediaItems) => {
             setMediaItems(newMediaItems);
             setShowCoverSlideDesigner(false);
+            setNewCardImageIndex(null);
             queryClient.invalidateQueries({ queryKey: ["campaign"] });
           }}
           onRemove={(restoredItems) => {
             setMediaItems(restoredItems);
             setShowCoverSlideDesigner(false);
+            setNewCardImageIndex(null);
             queryClient.invalidateQueries({ queryKey: ["campaign"] });
           }}
-          onClose={() => setShowCoverSlideDesigner(false)}
+          onClose={() => { setShowCoverSlideDesigner(false); setNewCardImageIndex(null); }}
+        />
+      )}
+
+      {/* Card image selector */}
+      {showCardImageSelector && (
+        <CardImageSelector
+          mediaItems={mediaItems}
+          eligibleIndices={eligibleOutpaintIndices}
+          hasExistingCover={hasCoverSlide}
+          isOpen={showCardImageSelector}
+          onSelectImage={(idx) => {
+            setShowCardImageSelector(false);
+            setNewCardImageIndex(idx);
+            setCardInsertPosition(hasCoverSlide ? "append" : "prepend");
+            setCoverSlideKey((k) => k + 1);
+            setShowCoverSlideDesigner(true);
+          }}
+          onEditExisting={() => {
+            setShowCardImageSelector(false);
+            setNewCardImageIndex(null);
+            setCardInsertPosition("prepend");
+            setCoverSlideKey((k) => k + 1);
+            setShowCoverSlideDesigner(true);
+          }}
+          onClose={() => setShowCardImageSelector(false)}
         />
       )}
 
@@ -1155,7 +1219,21 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           platform={platformLower}
           onAccept={optimize.acceptOptimization}
           onReject={optimize.rejectOptimization}
-          onRetry={() => optimize.optimizeMutation.mutate(0)}
+          onRetry={optimize.retryCurrentOptimization}
+        />
+      )}
+
+      {showOutpaintSelector && optimizeTarget && (
+        <OutpaintImageSelector
+          mediaItems={mediaItems}
+          eligibleIndices={eligibleOutpaintIndices}
+          targetLabel={optimizeTarget.label}
+          isOpen={showOutpaintSelector}
+          onSelect={(indices) => {
+            setShowOutpaintSelector(false);
+            optimize.startBatchOptimize(indices);
+          }}
+          onClose={() => setShowOutpaintSelector(false)}
         />
       )}
     </>

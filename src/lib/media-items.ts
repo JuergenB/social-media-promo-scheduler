@@ -56,6 +56,30 @@ export function parseMediaItems(fields: {
 }
 
 /**
+ * Return indices of media items eligible for outpainting.
+ * Excludes any designed cards (cover slides, quote cards) tracked by CoverSlideData.
+ */
+export function getEligibleOutpaintIndices(
+  items: MediaItem[],
+  coverSlideDataJson?: string | null
+): number[] {
+  const designedUrls = new Set<string>();
+  if (coverSlideDataJson) {
+    try {
+      const data = JSON.parse(coverSlideDataJson);
+      if (Array.isArray(data.designedCardUrls)) {
+        for (const u of data.designedCardUrls) designedUrls.add(u);
+      }
+      if (data.appliedUrl) designedUrls.add(data.appliedUrl);
+    } catch { /* ignore parse errors */ }
+  }
+  return items
+    .map((item, idx) => ({ url: item.url, idx }))
+    .filter(({ url }) => url && !designedUrls.has(url))
+    .map(({ idx }) => idx);
+}
+
+/**
  * Serialize media items to Airtable fields.
  * Writes all three fields for backward compatibility.
  */

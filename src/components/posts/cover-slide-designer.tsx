@@ -44,6 +44,8 @@ interface CoverSlideDesignerProps {
   savedData?: CoverSlideData | null;
   /** Available source images for background selection (raw images, no rendered slides) */
   availableImages?: Array<{ url: string; caption?: string }>;
+  /** Where to insert the card: "prepend" (default, lead cover) or "append" (additional card) */
+  insertPosition?: "prepend" | "append";
   /** Called when cover slide is applied or removed */
   onApply: (mediaItems: MediaItem[]) => void;
   onRemove: (mediaItems: MediaItem[]) => void;
@@ -324,6 +326,7 @@ export function CoverSlideDesigner({
   brandWebsiteUrl,
   savedData,
   availableImages,
+  insertPosition = "prepend",
   onApply,
   onRemove,
   onClose,
@@ -475,6 +478,7 @@ export function CoverSlideDesigner({
           sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
           overlayOpacity,
           overlayTint,
+          insertPosition,
         }),
       });
       if (!res.ok) throw new Error("Failed to apply cover slide");
