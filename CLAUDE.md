@@ -110,7 +110,7 @@ social-media-promo-scheduler/
 │   │   ├── ui/                 # shadcn/ui components
 │   │   ├── shared/             # Logo, ErrorBoundary, PlatformIcon
 │   │   ├── accounts/           # Account cards
-│   │   └── posts/              # Post cards
+│   │   └── posts/              # Post cards, media selectors, carousel/card designers
 │   ├── hooks/                  # React hooks (useAccounts, usePosts, etc.)
 │   ├── lib/
 │   │   ├── late-api/           # Zernio API client & platform types
@@ -168,7 +168,7 @@ social-media-promo-scheduler/
 | Table | ID | Purpose |
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
-| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform) |
+| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform). **Scraped Images** (JSON array of `{url, alt, storyTitle?}`) populated during generation — surfaced in post editor as campaign image library |
 | Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override. **imageIndex** (integer) for catalog-based image selection, **subject** field declares who/what each post is about |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
@@ -200,7 +200,9 @@ social-media-promo-scheduler/
 - **lnk.bio integration:** After Instagram posts are published, a lnk.bio entry is auto-created with the campaign's source URL. Currently hardcoded for The Intersect brand (group ID 68052). Per-brand config tracked in #68.
 - **Zernio webhook:** `POST /api/webhooks/zernio` receives post lifecycle events and syncs status to Airtable. Auth middleware bypassed for `/api/webhooks` path. Currently registered via ngrok; permanent URL tracked in #67.
 - **LinkedIn PDF carousel:** Posts with 2+ images targeting LinkedIn are auto-assembled into a PDF at publish time using `pdf-lib`. PDF uploaded to Zernio as document media type.
-- **Cover slide designer:** Optional editorial cover slide prepended to carousel posts. Uses a horizontal band layout engine (Satori + Sharp) with Airtable-driven templates. AI generates text from post/campaign context. User can adjust font sizes, pick background colors via eyedropper, reposition the background image. Templates in Cover Slide Templates table (`tblk0l8nE9SDP0lca`). Cover slide uses the original raw image (from Original Media backup), not rendered slides.
+- **Cover slide designer:** Optional editorial cover slide prepended to carousel posts. Uses a horizontal band layout engine (Satori + Sharp) with Airtable-driven templates. AI generates text from post/campaign context. User can adjust font sizes, pick background colors via eyedropper, reposition the background image. Templates in Cover Slide Templates table (`tblk0l8nE9SDP0lca`). Cover slide uses the original raw image (from Original Media backup), not rendered slides. Supports additive card creation via `insertPosition: "append"` — new cards append to carousel without displacing the existing cover at position 0.
+- **Image selectors:** Outpainting and card creation use image selector dialogs (`OutpaintImageSelector`, `CardImageSelector`) that filter out designed cards via `CoverSlideData.designedCardUrls`. Shared filtering utility: `getEligibleOutpaintIndices()` in `media-items.ts`. Single eligible image skips the selector.
+- **Campaign image library:** Scraped images from campaign generation are surfaced as a clickable thumbnail row when adding images to posts (`CampaignImageLibrary` component). Alt text from scraping auto-fills captions — especially valuable for exhibitions with rich attribution. Data source: `Scraped Images` field on Campaigns table.
 
 ## Session Rules
 
