@@ -926,9 +926,11 @@ export function CoverSlideDesigner({
             />
           </div>
 
-          {/* Image position */}
+          {/* Image / Quote band position */}
           <div>
-            <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Image Position</span>
+            <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">
+              {selectedTemplate && !selectedTemplate.bands.some((b) => b.type === "image") ? "Quote Position" : "Image Position"}
+            </span>
             <div className="flex items-center gap-2 mt-1">
               <span className="text-white/20 text-[10px]">Top</span>
               <Slider

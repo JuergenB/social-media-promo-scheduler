@@ -638,6 +638,31 @@ export async function renderCoverSlide(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const contentChildren: any[] = [];
 
+  // For templates without an image band (quotable/podcast quote), use imageOffset
+  // to control the vertical position of the content. The offset redistributes
+  // space between the first and last spacer bands:
+  // offset=0 → band at top, offset=50 → centered, offset=100 → bottom.
+  const isBandedQuotable = !imageBandEntry;
+  const spacerBands = isBandedQuotable
+    ? resolvedBands.filter((rb) => rb.band.type === "spacer")
+    : [];
+  const hasPositionableSpacers = spacerBands.length >= 2;
+  const firstSpacerBand = hasPositionableSpacers ? spacerBands[0].band : null;
+  const lastSpacerBand = hasPositionableSpacers ? spacerBands[spacerBands.length - 1].band : null;
+
+  // Calculate total spacer budget from the template's defined spacer heights
+  let totalSpacerBudget = 0;
+  if (hasPositionableSpacers) {
+    for (const sb of spacerBands) {
+      const h = typeof sb.band.height === "string" && sb.band.height.endsWith("%")
+        ? Math.round(height * parseFloat(sb.band.height) / 100)
+        : typeof sb.band.height === "number" ? sb.band.height : 20;
+      totalSpacerBudget += h;
+    }
+  }
+  // offset 0→100 maps to how much of the spacer budget goes above the content
+  const bandOffset = typeof imageOffset === "number" ? imageOffset / 100 : 0.3;
+
   for (const rb of resolvedBands) {
     if (rb.band.type === "image" || rb.band.type === "branding") continue;
 
@@ -718,9 +743,17 @@ export async function renderCoverSlide(
       if (sepBg) sepEl.props.style.backgroundColor = sepBg;
       contentChildren.push(sepEl);
     } else if (rb.band.type === "spacer") {
-      const spacerH = typeof rb.band.height === "string" && rb.band.height.endsWith("%")
+      let spacerH = typeof rb.band.height === "string" && rb.band.height.endsWith("%")
         ? Math.round(height * parseFloat(rb.band.height) / 100)
         : typeof rb.band.height === "number" ? rb.band.height : 20;
+
+      // For banded quotable templates: redistribute spacer heights based on bandOffset
+      if (hasPositionableSpacers && rb.band === firstSpacerBand) {
+        spacerH = Math.round(totalSpacerBudget * bandOffset);
+      } else if (hasPositionableSpacers && rb.band === lastSpacerBand) {
+        spacerH = Math.round(totalSpacerBudget * (1 - bandOffset));
+      }
+
       const spacerBg = rb.band.backgroundColor ? resolveColor(rb.band.backgroundColor, scheme) : undefined;
       contentChildren.push({
         type: "div",
@@ -732,54 +765,119 @@ export async function renderCoverSlide(
     }
   }
 
-  // Assemble the full overlay: image spacer + content zone + branding spacer
+  // Assemble the full overlay
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rootElement: any = {
-    type: "div",
-    props: {
-      style: {
-        display: "flex",
-        flexDirection: "column",
-        width,
-        height,
-      },
-      children: [
-        // Image band spacer (transparent — image composited via Sharp)
-        {
-          type: "div",
-          props: {
-            style: { width, height: imageH, flexShrink: 0 },
-            children: "",
-          },
+  let rootElement: any;
+
+  if (isBandedQuotable && hasPositionableSpacers) {
+    // For banded quotable templates: rebuild content without spacers,
+    // use a single top spacer whose height is controlled by the slider.
+    // This lets the quote band slide from top (offset=0) to bottom (offset=100),
+    // including behind the branding row.
+
+    // Collect only the non-spacer content children
+    const contentOnlyChildren: typeof contentChildren = [];
+    let contentIdx = 0;
+    for (const rb of resolvedBands) {
+      if (rb.band.type === "image" || rb.band.type === "branding") continue;
+      if (rb.band.type === "spacer") { contentIdx++; continue; }
+      if (contentIdx < contentChildren.length) {
+        contentOnlyChildren.push(contentChildren[contentIdx]);
+      }
+      contentIdx++;
+    }
+
+    // Estimate content block height from resolved band heights (non-spacer, non-image, non-branding)
+    let contentBlockH = 0;
+    for (const rb of resolvedBands) {
+      if (rb.band.type === "spacer" || rb.band.type === "image" || rb.band.type === "branding") continue;
+      contentBlockH += rb.height;
+    }
+
+    // Available range: the band can move from y=0 to y=(height - contentBlockH)
+    const maxTop = Math.max(0, height - contentBlockH);
+    const topPx = Math.round(bandOffset * maxTop);
+
+    rootElement = {
+      type: "div",
+      props: {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          width,
+          height,
         },
-        // Content zone — flex column that fills remaining space
-        {
-          type: "div",
-          props: {
-            style: {
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              width,
-              height: contentZoneH,
-              flexGrow: 1,
-              flexShrink: 0,
-              overflow: "hidden",
+        children: [
+          // Dynamic top spacer — controlled by slider
+          {
+            type: "div",
+            props: {
+              style: { width, height: topPx, flexShrink: 0 },
+              children: "",
             },
-            children: contentChildren,
           },
-        },
-        // Branding band spacer
-        {
-          type: "div",
-          props: {
-            style: { width, height: brandingH, flexShrink: 0 },
-            children: "",
+          // Content bands (no spacers)
+          ...contentOnlyChildren,
+          // Flexible bottom fill
+          {
+            type: "div",
+            props: {
+              style: { width, flexGrow: 1 },
+              children: "",
+            },
           },
+        ],
+      },
+    };
+  } else {
+    // Standard layout: flex column with image spacer + content + branding
+    rootElement = {
+      type: "div",
+      props: {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          width,
+          height,
         },
-      ],
-    },
-  };
+        children: [
+          // Image band spacer (transparent — image composited via Sharp)
+          {
+            type: "div",
+            props: {
+              style: { width, height: imageH, flexShrink: 0 },
+              children: "",
+            },
+          },
+          // Content zone — flex column that fills remaining space
+          {
+            type: "div",
+            props: {
+              style: {
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                width,
+                height: contentZoneH,
+                flexGrow: 1,
+                flexShrink: 0,
+                overflow: "hidden",
+              },
+              children: contentChildren,
+            },
+          },
+          // Branding band spacer
+          {
+            type: "div",
+            props: {
+              style: { width, height: brandingH, flexShrink: 0 },
+              children: "",
+            },
+          },
+        ],
+      },
+    };
+  }
 
   const fonts = buildAllSatoriFonts();
 
@@ -810,8 +908,11 @@ export async function renderCoverSlide(
         const logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
         const brandBand = brandingBandEntry.band as BrandingBand;
         const padding = brandBand.padding;
-        const maxLogoH = Math.round(brandingBandEntry.height - padding * 2);
-        const maxLogoW = Math.round(width * (logoScale ?? 0.15));
+        // Logo sizing: use the resolved band height (which includes flex redistribution).
+        // On the original Quote Dark, flex gives ~174px band → 134px logo at 1350h.
+        // Minimum 120px height so the logo stays visible in all layout modes.
+        const maxLogoH = Math.max(120, Math.round(brandingBandEntry.height - padding * 2));
+        const maxLogoW = Math.round(width * (logoScale ?? 0.20));
 
         // Subtle logo: light enough to read as a watermark, not a stamp
         const logoOpacity = logoOpacityOverride ?? (bgLum > 0.5 ? 0.35 : 0.40);
@@ -840,7 +941,12 @@ export async function renderCoverSlide(
           logoX = padding;
         }
 
-        const logoY = brandingBandEntry.y + padding;
+        // Place logo so it fits within the card. For banded quotable, pin to bottom.
+        const logoMeta2 = await sharp(resizedLogo).metadata();
+        const actualLogoH = logoMeta2.height || maxLogoH;
+        const logoY = (isBandedQuotable && hasPositionableSpacers)
+          ? height - actualLogoH - padding
+          : brandingBandEntry.y + padding;
 
         composites.push({ input: resizedLogo, left: logoX, top: logoY });
       }
