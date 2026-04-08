@@ -712,9 +712,11 @@ export async function renderCoverSlide(
       });
     } else if (rb.band.type === "separator") {
       const sepBand = rb.band as SeparatorBand;
-      contentChildren.push(
-        buildSeparatorElement(sepBand, scheme, width, (typeof sepBand.height === "number" ? sepBand.height : 2) + (sepBand.marginY || 0) * 2)
-      );
+      const sepEl = buildSeparatorElement(sepBand, scheme, width, (typeof sepBand.height === "number" ? sepBand.height : 2) + (sepBand.marginY || 0) * 2);
+      // Apply per-band backgroundColor if set
+      const sepBg = sepBand.backgroundColor ? resolveColor(sepBand.backgroundColor, scheme) : undefined;
+      if (sepBg) sepEl.props.style.backgroundColor = sepBg;
+      contentChildren.push(sepEl);
     } else if (rb.band.type === "spacer") {
       const spacerH = typeof rb.band.height === "string" && rb.band.height.endsWith("%")
         ? Math.round(height * parseFloat(rb.band.height) / 100)

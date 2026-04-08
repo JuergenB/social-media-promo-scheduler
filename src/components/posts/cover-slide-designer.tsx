@@ -120,10 +120,28 @@ function FontSizeControls({
 // Schematic preview — CSS-based thumbnail of a template's band structure
 // ---------------------------------------------------------------------------
 
+function TemplatePreviewWithFallback({ template }: { template: CoverSlideTemplate }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  return (
+    <div className="aspect-[4/5] overflow-hidden bg-zinc-900">
+      {!imgFailed ? (
+        <img
+          src={`/template-previews/${template.slug}-wireframe.png`}
+          alt={template.name}
+          className="h-full w-full object-contain"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        <TemplateSchemPreview template={template} />
+      )}
+    </div>
+  );
+}
+
 function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
   const scheme = template.colorScheme;
   const bands = template.bands;
-  const isQuotable = template.slug.includes("quotable");
+  const isQuotable = template.slug.includes("quotable") || template.slug.includes("quote");
   const bgColor = scheme.background || "#FFFFFF";
   const primaryColor = scheme.primary || "#1A1A1A";
   const secondaryColor = scheme.secondary || "rgba(30,30,30,0.72)";
@@ -635,14 +653,8 @@ export function CoverSlideDesigner({
                   onClick={() => handleTemplateSelect(template)}
                   className="group text-left rounded-lg overflow-hidden border border-zinc-700/50 hover:border-zinc-500 transition-colors bg-zinc-800/50"
                 >
-                  {/* Preview image — wireframe schematic at 4:5 aspect ratio */}
-                  <div className="aspect-[4/5] overflow-hidden bg-zinc-900 flex items-center justify-center">
-                    <img
-                      src={`/template-previews/${template.slug}-wireframe.png`}
-                      alt={template.name}
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
+                  {/* Preview — wireframe PNG with CSS schematic fallback on error */}
+                  <TemplatePreviewWithFallback template={template} />
                   <div className="p-3">
                     <p className="text-white text-sm font-medium truncate group-hover:text-white/90">
                       {template.name}
