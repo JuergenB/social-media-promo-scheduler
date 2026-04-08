@@ -48,6 +48,8 @@ interface BandBase {
   type: string;
   /** Height: percentage string ("45%"), pixel number, or "auto" (measured from content) */
   height: string | number;
+  /** Optional solid background color for this band (hex or template variable). Renders as a filled rect behind band content. */
+  backgroundColor?: string;
 }
 
 /** Full-bleed image window band */
