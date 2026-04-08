@@ -74,11 +74,15 @@ function parseTemplate(record: AirtableRecord): CoverSlideTemplate {
     id: record.id,
     name: record.fields.Name,
     slug: record.fields.Slug,
+    previewUrl: null,
     bands: JSON.parse(record.fields["Band Layout"] || "[]"),
     colorScheme: JSON.parse(record.fields["Color Scheme"] || "{}"),
+    fontsUsed: [],
+    brandIds: [],
+    suggestedTypeIds: [],
     aspectRatios: Array.isArray(record.fields["Aspect Ratios"]) ? record.fields["Aspect Ratios"] : ["4:5", "1:1"],
     active: record.fields.Active !== false,
-    logoVariant: record.fields["Logo Variant"] as "light" | "dark" | undefined,
+    sortOrder: 0,
   };
 }
 
