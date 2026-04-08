@@ -534,6 +534,7 @@ export async function POST(
         const isEventType = fields.Type === "Event" || fields.Type === "Open Call";
         const isExhibition = fields.Type === "Exhibition";
         const isArtistProfile = fields.Type === "Artist Profile";
+        const isPodcast = fields.Type === "Podcast Episode";
 
         // Always re-scrape to preserve section structure for image-entity matching.
         // Cached scrape data doesn't include sections, which breaks per-story image assignment.
@@ -569,7 +570,7 @@ export async function POST(
         } else {
           sendEvent(controller, encoder, {
             step: 4, totalSteps, status: "running",
-            message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : isArtistProfile ? "artist profile" : "blog post"} content...`,
+            message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : isArtistProfile ? "artist profile" : isPodcast ? "podcast episode" : "blog post"} content...`,
           });
 
           blogData = isExhibition

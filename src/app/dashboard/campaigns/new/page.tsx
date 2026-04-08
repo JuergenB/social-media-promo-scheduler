@@ -79,7 +79,7 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   "Blog Post": "Turn a blog post or article into a series of social media posts. Images and key quotes are extracted and cycled through, with each post highlighting a different aspect of the article.",
   Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Auto-detects Artwork Archive embeds on gallery pages to extract structured artwork data, artist names, and images.",
   "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms.",
-  "Podcast Episode": "Promote a podcast episode using show notes, guest highlights, and key quotes. Can incorporate transcripts for deeper content extraction. (Coming soon)",
+  "Podcast Episode": "Promote a podcast episode with guest highlights, key quotes, takeaways, and curiosity hooks. Works with show notes or full transcripts — designed cards fill the visual gap.",
   Event: "Promote physical or virtual events — gallery openings, anniversary celebrations, studio tours, art fairs. Date-driven campaigns that build intensity toward the event date with RSVP/ticket CTAs.",
   "Open Call": "Promote open calls for artist submissions. Deadline-driven campaigns that build toward a submission deadline with apply/submit CTAs. (Coming soon)",
   "Public Art": "Promote public art installations, murals, and outdoor exhibitions with location-specific content and visual storytelling. (Coming soon)",

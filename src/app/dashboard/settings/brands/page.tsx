@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -256,6 +256,16 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
     setLastBrandId(brandId);
   }
 
+  // Warn before losing unsaved tone changes (browser navigation / tab close)
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
+
   const mutation = useMutation({
     mutationFn: async (updates: Record<string, unknown>) => {
       const res = await fetch("/api/brands", {
@@ -448,6 +458,19 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
             </div>
           )}
         </div>
+
+        {/* Sticky save banner — visible when changes are unsaved */}
+        {isDirty && (
+          <div className="sticky bottom-0 -mx-5 -mb-5 mt-4 px-5 py-3 bg-amber-50 dark:bg-amber-950/50 border-t border-amber-200 dark:border-amber-800 rounded-b-lg flex items-center justify-between gap-3">
+            <p className="text-xs text-amber-800 dark:text-amber-200">
+              You have unsaved tone of voice changes.
+            </p>
+            <Button size="sm" className="h-7 text-xs shrink-0" onClick={handleSave} disabled={mutation.isPending}>
+              <Save className="h-3 w-3 mr-1" />
+              {mutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
