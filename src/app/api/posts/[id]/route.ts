@@ -3,6 +3,7 @@ import { getRecord, updateRecord, deleteRecord } from "@/lib/airtable/client";
 import { deleteShortLink } from "@/lib/short-io";
 import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
 import { createBrandClient } from "@/lib/late-api/client";
+import { parseMediaItems } from "@/lib/media-items";
 
 /**
  * PATCH /api/posts/[id]
@@ -124,6 +125,75 @@ export async function PATCH(
     }
 
     await updateRecord("Posts", id, fields);
+
+    // Sync content/media changes to Zernio if the post is already scheduled
+    const contentOrMediaChanged = fields["Content"] !== undefined
+      || fields["Image URL"] !== undefined
+      || fields["Media URLs"] !== undefined
+      || fields["Media Captions"] !== undefined;
+
+    if (contentOrMediaChanged) {
+      // Fire-and-forget: don't block the response on Zernio sync
+      (async () => {
+        try {
+          const post = await getRecord<{
+            "Zernio Post ID": string;
+            "Scheduled Date": string;
+            Campaign: string[];
+            Content: string;
+            "Image URL": string;
+            "Media URLs": string;
+            "Media Captions": string;
+          }>("Posts", id);
+
+          const zernioPostId = post.fields["Zernio Post ID"];
+          if (!zernioPostId) return; // Not scheduled on Zernio — nothing to sync
+
+          // Resolve brand for API key
+          const campaignId = post.fields.Campaign?.[0];
+          if (!campaignId) return;
+          const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
+          const brandId = campaign.fields.Brand?.[0];
+          if (!brandId) return;
+          const brand = await getRecord<{ "Zernio API Key Label": string }>("Brands", brandId);
+          const client = createBrandClient({
+            zernioApiKeyLabel: brand.fields["Zernio API Key Label"] || null,
+          });
+
+          // Build update body with current content, media, AND scheduledFor
+          // Including scheduledFor is critical — omitting it causes Zernio to
+          // revert the post from "scheduled" to "draft" status.
+          const mediaItems = parseMediaItems(post.fields);
+          const updateBody: Record<string, unknown> = {};
+
+          if (post.fields.Content) {
+            updateBody.content = post.fields.Content;
+          }
+          if (mediaItems.length > 0) {
+            updateBody.mediaItems = mediaItems.map((item) => ({
+              type: "image" as const,
+              url: item.url,
+            }));
+          }
+          if (post.fields["Scheduled Date"]) {
+            updateBody.scheduledFor = post.fields["Scheduled Date"];
+          }
+
+          const { error } = await client.posts.updatePost({
+            path: { postId: zernioPostId },
+            body: updateBody,
+          });
+
+          if (error) {
+            console.warn(`[posts] Zernio sync failed for ${zernioPostId}:`, error);
+          } else {
+            console.log(`[posts] Synced changes to Zernio post ${zernioPostId}`);
+          }
+        } catch (err) {
+          console.warn("[posts] Zernio sync error:", err);
+        }
+      })();
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

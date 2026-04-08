@@ -44,6 +44,7 @@ interface CampaignFields {
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
   Tone: number;
+  "Scraped Images": string;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -102,6 +103,13 @@ function mapCampaignFields(id: string, fields: CampaignFields): Campaign {
     maxVariantsPerPlatform: fields["Max Variants Per Platform"] ?? undefined,
     platformCadence: parseCadenceJson(fields["Platform Cadence"]),
     voiceIntensity: fields.Tone ?? undefined,
+    scrapedImages: (() => {
+      try {
+        if (!fields["Scraped Images"]) return undefined;
+        const parsed = JSON.parse(fields["Scraped Images"]);
+        return Array.isArray(parsed) ? parsed : undefined;
+      } catch { return undefined; }
+    })(),
   };
 }
 

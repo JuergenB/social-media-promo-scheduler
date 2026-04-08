@@ -604,10 +604,15 @@ export function CampaignPostDetail({
             </>
           )}
           {post.status === "Scheduled" && (
-            <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
-              <Send className="mr-1 h-3 w-3" />
-              Scheduled
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
+                <Send className="mr-1 h-3 w-3" />
+                Scheduled
+              </Badge>
+              <span className="text-[10px] text-muted-foreground">
+                Edits auto-sync to Zernio
+              </span>
+            </div>
           )}
           {post.status === "Failed" && (
             <div className="flex items-center gap-1">
