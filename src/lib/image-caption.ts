@@ -14,8 +14,8 @@ const DEFAULT_DIMENSIONS = SLIDE_DIMENSIONS.instagram;
 
 /** Margin around the source image as a fraction of slide width. */
 const SIDE_MARGIN_FRAC = 0.05;
-/** Caption area height scales with slide height. */
-const CAPTION_AREA_FRAC = 0.09;
+/** Caption area height scales with slide height. Must accommodate text + 50px bottom padding for IG dots. */
+const CAPTION_AREA_FRAC = 0.13;
 /** Edge sample thickness in pixels for dominant color detection. */
 const EDGE_SAMPLE_PX = 5;
 
