@@ -32,13 +32,27 @@
 # GET  /v1/analytics/posting-frequency — Frequency vs engagement
 #
 # Validation:
-# POST /v1/tools/validate/post — Dry-run post validation
-# POST /v1/tools/validate/post-length — Character count per platform
-# POST /v1/tools/validate/media — Check media URL accessibility
+# POST /v1/tools/validate/post — Dry-run full post validation pipeline (same body as POST /v1/posts)
+# POST /v1/tools/validate/post-length — Weighted character count per platform
+# POST /v1/tools/validate/media — Validate public media URL against per-platform size limits
+# GET  /v1/tools/validate/subreddit — Check subreddit existence/info (query: name)
 #
 # Webhooks:
-# Events: post.scheduled, post.published, post.failed, post.partial, post.recycled,
+# Events: post.scheduled, post.published, post.failed, post.partial, post.cancelled, post.recycled,
 #         account.connected, account.disconnected, message.received, comment.received
+#
+# Additional API domains (273+ total endpoints, see https://zernio.com/api-docs for full reference):
+# - Contacts CRM: /v1/contacts, /v1/contacts/custom-fields, /v1/contacts/bulk
+# - Broadcasts: /v1/broadcasts (mass messaging, scheduling, recipient management)
+# - Sequences: /v1/sequences (drip campaigns, enrollment management)
+# - Automations: /v1/automations (comment-to-DM, trigger-based flows)
+# - Inbox: /v1/messages, /v1/comments, /v1/reviews, /v1/conversations
+# - Ads: /v1/ads, /v1/ad-campaigns, /v1/ad-audiences
+# - Queue: /v1/queue/slots, /v1/queue/preview, /v1/queue/next-slot
+# - WhatsApp: /v1/whatsapp (templates, messages)
+# - Google Business: /v1/gmb (posts, reviews, Q&A)
+# - Connect: /v1/connect (OAuth flows for all platforms)
+# - Twitter Engagement: /v1/twitter (retweet, like, bookmark, follow)
 #
 # Key features for campaign scheduling:
 # - Per-platform customContent and customMedia
