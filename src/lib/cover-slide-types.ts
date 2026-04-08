@@ -80,6 +80,8 @@ export interface TextBand extends BandBase {
   transform?: "uppercase" | "lowercase" | "capitalize" | "none";
   /** Letter spacing in pixels */
   letterSpacing?: number;
+  /** Line height multiplier (e.g. 1.15 for tight, 1.35 for normal). Defaults to 1.3 */
+  lineHeight?: number;
   /** Padding in pixels */
   paddingTop?: number;
   paddingBottom?: number;
