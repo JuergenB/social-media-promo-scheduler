@@ -152,8 +152,8 @@ ${scrapedContent ? scrapedContent.slice(0, 4000) : "No scraped content available
 <post_length_guidance>
 Follow the Ideal Length from <platform_best_practices> above. Write at the FULL recommended length.
 - Instagram Feed: Write LONG captions (800-1500 chars). Multiple paragraphs with hook → story → question → CTA. No hashtags in postText — put them in firstComment.
-- LinkedIn: Thought-leadership (1000-1500 chars). Heavy line breaks. Bold opening, insight paragraphs, closing question.
-- Facebook: Either short + punchy (200-500 chars) OR long storytelling (1500-2500 chars).
+- LinkedIn: Thought-leadership (1000-1500 chars). Heavy line breaks. Bold opening, insight paragraphs, closing question. No hashtags in postText — put 3-5 professional hashtags in firstComment.
+- Facebook: Either short + punchy (200-500 chars) OR long storytelling (1500-2500 chars). No hashtags in postText — put 2-4 hashtags in firstComment.
 - Threads: Conversational, 200-300 chars.
 - Bluesky: Concise, 200-275 chars.
 - Pinterest: Search-optimized, 200-300 chars.
@@ -170,7 +170,7 @@ Respond with ONLY this JSON — no markdown, no explanation:
     {
       "platform": "${platformKey}",
       "postText": "The full post text",
-      "firstComment": "For Instagram ONLY: engagement hook + 10-20 hashtags. Empty string for other platforms."
+      "firstComment": "Instagram: hook + 10-20 hashtags. LinkedIn: hook + 3-5 professional hashtags. Facebook: hook + 2-4 hashtags. All others: empty string."
     }
   ]
 }

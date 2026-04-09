@@ -371,8 +371,8 @@ ${imageInstructions}
 <post_length_guidance>
 Follow the Ideal Length from <platform_best_practices> above for each platform. These are target ranges, not hard limits.
 - Instagram Feed: Write LONG captions (800-1500 chars). Use multiple paragraphs with hook → story → question → CTA. Use emojis as visual breaks. Do NOT put hashtags in the caption — they go in firstComment.
-- LinkedIn: Write thought-leadership content (1000-1500 chars). Heavy line breaks. Bold opening, 2-3 insight paragraphs, closing question.
-- Facebook: Either short + punchy (200-500 chars) OR long storytelling (1500-2500 chars). Mid-length underperforms.
+- LinkedIn: Write thought-leadership content (1000-1500 chars). Heavy line breaks. Bold opening, 2-3 insight paragraphs, closing question. Do NOT put hashtags in the caption — they go in firstComment (3-5 professional/industry hashtags).
+- Facebook: Either short + punchy (200-500 chars) OR long storytelling (1500-2500 chars). Mid-length underperforms. Do NOT put hashtags in the caption — they go in firstComment (2-4 hashtags).
 - Threads: Conversational, 200-300 chars.
 - Bluesky: Concise, 200-275 chars (hard limit 300).
 - X/Twitter: Use full 280 chars.
@@ -394,8 +394,8 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
       "sectionIndex": 0,
       "imageIndex": 0,
       "subject": "",
-      "postText": "The full post text — NO hashtags for Instagram (put them in firstComment instead)",
-      "firstComment": "For Instagram ONLY: a brief engagement summary + 10-20 relevant hashtags. Leave empty string for other platforms.",
+      "postText": "The full post text — NO hashtags in the caption for Instagram, LinkedIn, or Facebook (put them in firstComment instead)",
+      "firstComment": "Engagement hook + hashtags for platforms that support first comments. See firstComment rules below.",
       "imageUrl": "",
       "linkUrl": "${blogData.url}"
     }
@@ -405,7 +405,14 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
 sectionIndex: Set to the section number (1-based) that this variant is about. Set to 0 if the post is about the article as a whole.
 imageIndex: The image number from the available_images catalog that matches this post's content. Set to 0 for the event hero/general image. THIS IS THE PRIMARY IMAGE SELECTION MECHANISM.
 subject: The name of the person/entity this post focuses on, or "" if generic.
-firstComment: For Instagram posts ONLY — write a brief 1-sentence engagement hook followed by 10-20 relevant hashtags. Example: "The future of mobile photography could be modular — and we're here for it. #TechInnovation #MobilePhotography #CreativeTech". For all other platforms, set to "".
+firstComment: Write a brief 1-sentence engagement hook followed by relevant hashtags. Platform-specific rules:
+- Instagram: engagement hook + 10-20 hashtags. Do NOT put hashtags in postText.
+- LinkedIn: engagement hook + 3-5 industry/topic hashtags. LinkedIn hashtags are professional — use industry terms, not trending tags. Do NOT put hashtags in postText.
+- Facebook: engagement hook + 2-4 hashtags. Keep it light — Facebook hashtags are less impactful but still useful for discoverability. Do NOT put hashtags in postText.
+- Threads: empty string "" (hashtags go inline in postText for Threads).
+- Bluesky: empty string "" (no first comment support).
+- X/Twitter: empty string "" (hashtags go inline in postText).
+- Pinterest: empty string "" (hashtags go inline in description).
 </output_format>
 
 CRITICAL REMINDERS (read these before generating):
