@@ -188,6 +188,8 @@ export interface Post {
   notes: string;
   originalMedia: string;
   coverSlideData: string;
+  /** First comment text (hashtags + engagement hook for Instagram/Facebook/LinkedIn) */
+  firstComment: string;
   /** Airtable record creation timestamp (ISO 8601) */
   createdAt?: string;
 }
