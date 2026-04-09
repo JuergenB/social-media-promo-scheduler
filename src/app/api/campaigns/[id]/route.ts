@@ -59,6 +59,7 @@ interface PostFields {
   "Original Media": string;
   "Cover Slide Data": string;
   "First Comment": string;
+  "Sort Order": number | null;
 }
 
 export async function GET(
@@ -152,6 +153,7 @@ export async function GET(
       originalMedia: r.fields["Original Media"] || "",
       coverSlideData: r.fields["Cover Slide Data"] || "",
       firstComment: r.fields["First Comment"] || "",
+      sortOrder: r.fields["Sort Order"] ?? null,
       createdAt: r.createdTime || "",
     }));
 

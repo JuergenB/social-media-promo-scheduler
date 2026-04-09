@@ -22,6 +22,7 @@ interface PostFields {
   "Original Media": string;
   "Cover Slide Data": string;
   "First Comment": string;
+  "Sort Order": number | null;
 }
 
 interface CampaignFields {
@@ -79,6 +80,7 @@ function mapPostFields(id: string, fields: PostFields): Post {
     originalMedia: fields["Original Media"] || "",
     coverSlideData: fields["Cover Slide Data"] || "",
     firstComment: fields["First Comment"] || "",
+    sortOrder: fields["Sort Order"] ?? null,
   };
 }
 

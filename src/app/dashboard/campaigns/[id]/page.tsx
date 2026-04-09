@@ -34,6 +34,23 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { PlatformIcon, PlatformBadge } from "@/components/shared/platform-icon";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
 import { CampaignTimeline } from "@/components/campaigns/campaign-timeline";
@@ -93,6 +110,7 @@ import {
   Layers,
   Send,
   CalendarX2,
+  GripVertical,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -447,6 +465,23 @@ export default function CampaignDetailPage() {
     return result;
   }, [actionablePosts, platformFilter, statusFilter]);
 
+  // Drag-reorder state: whether we're showing the reorderable view
+  const isReorderMode = statusFilter === "Approved" || statusFilter === "Modified";
+
+  // Approved posts sorted by sortOrder (for drag-and-drop reordering)
+  const sortedApprovedPosts = useMemo(() => {
+    if (!isReorderMode) return [];
+    return [...filteredPosts].sort((a, b) => {
+      const aOrder = a.sortOrder ?? Infinity;
+      const bOrder = b.sortOrder ?? Infinity;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      // Fall back to createdAt descending
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+  }, [filteredPosts, isReorderMode]);
+
   // Filter-aware approved posts for scheduling
   const hasActiveFilter = platformFilter.size > 0 || statusFilter !== null;
   const filteredApprovedPosts = useMemo(() => {
@@ -532,6 +567,52 @@ export default function CampaignDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
     } catch {}
+  };
+
+  // ── Drag-to-reorder for approved posts ───────────────────────────────
+  const [reorderList, setReorderList] = useState<Post[]>([]);
+  const [isReordering, setIsReordering] = useState(false);
+
+  // Sync reorderList when sortedApprovedPosts changes (fresh data from server)
+  useEffect(() => {
+    if (isReorderMode && sortedApprovedPosts.length > 0 && !isReordering) {
+      setReorderList(sortedApprovedPosts);
+    }
+  }, [sortedApprovedPosts, isReorderMode, isReordering]);
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = reorderList.findIndex((p) => p.id === active.id);
+    const newIndex = reorderList.findIndex((p) => p.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newList = arrayMove(reorderList, oldIndex, newIndex);
+    setReorderList(newList);
+    setIsReordering(true);
+
+    try {
+      const res = await fetch("/api/posts/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postIds: newList.map((p) => p.id) }),
+      });
+      if (!res.ok) throw new Error("Reorder failed");
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      toast.success("Post order saved");
+    } catch {
+      // Revert on failure
+      setReorderList(sortedApprovedPosts);
+      toast.error("Failed to save order");
+    } finally {
+      setIsReordering(false);
+    }
   };
 
   const quickUnschedule = async (postId: string) => {
@@ -1459,8 +1540,47 @@ export default function CampaignDetailPage() {
                 );
               })()}
 
-              {/* Posts grouped by date */}
-              {filteredPosts.length > 0 ? (
+              {/* Posts — reorderable list or grouped by date */}
+              {isReorderMode && reorderList.length > 0 ? (
+              <div>
+                <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg mb-2">
+                  <GripVertical className="h-4 w-4 text-blue-500" />
+                  <span className="text-xs text-blue-700 dark:text-blue-300">
+                    Drag to reorder — posts scheduled first appear at the top
+                  </span>
+                  {isReordering && <Loader2 className="h-3 w-3 animate-spin text-blue-500 ml-auto" />}
+                </div>
+                <DndContext
+                  sensors={dndSensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={reorderList.map((p) => p.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="divide-y divide-border border rounded-lg">
+                      {reorderList.map((post, index) => (
+                        <SortablePostRow
+                          key={post.id}
+                          post={post}
+                          index={index}
+                          campaignStatus={campaign.status}
+                          isNewPost={isNew(post.id)}
+                          onClick={() => { dismissNew(post.id); setSelectedPost(post); }}
+                          onApprove={() => quickApprove(post.id)}
+                          onDismiss={() => quickDismiss(post.id)}
+                          onUnapprove={() => quickUnapprove(post.id)}
+                          onRetry={() => quickRetry(post.id)}
+                          onDelete={() => quickDelete(post.id)}
+                          onUnschedule={() => quickUnschedule(post.id)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </div>
+              ) : filteredPosts.length > 0 ? (
               <div className="space-y-1">
                 {sortedDateKeys.map((dateKey) => {
                   const datePosts = postsByDate[dateKey];
@@ -1713,6 +1833,139 @@ function PublishButton({ campaignId, queuedCount }: { campaignId: string; queued
         </>
       )}
     </Button>
+  );
+}
+
+function SortablePostRow({
+  post,
+  index,
+  campaignStatus,
+  isNewPost,
+  onClick,
+  onApprove,
+  onDismiss,
+  onUnapprove,
+  onRetry,
+  onDelete,
+  onUnschedule,
+}: {
+  post: Post;
+  index: number;
+  campaignStatus: CampaignStatus;
+  isNewPost?: boolean;
+  onClick: () => void;
+  onApprove?: () => void;
+  onDismiss?: () => void;
+  onUnapprove?: () => void;
+  onRetry?: () => void;
+  onDelete?: () => void;
+  onUnschedule?: () => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: post.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    position: "relative" as const,
+  };
+
+  const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
+  const platformLower = toPlatformId(post.platform);
+  const mediaUrlCount = post.mediaUrls ? post.mediaUrls.split("\n").filter((u) => u.trim()).length : 0;
+  const totalImages = (post.imageUrl ? 1 : 0) + mediaUrlCount;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        "w-full text-left hover:bg-accent/50 transition-colors cursor-pointer",
+        isDragging && "bg-accent shadow-lg ring-2 ring-primary/20 rounded-lg"
+      )}
+    >
+      <div className="px-4 py-3 flex items-start gap-3">
+        {/* Drag handle + order number */}
+        <div className="flex flex-col items-center gap-0.5 shrink-0 pt-1">
+          <span className="text-[10px] font-semibold text-muted-foreground tabular-nums w-5 text-center">
+            {index + 1}
+          </span>
+          <button
+            className="touch-none cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground p-0.5"
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Image thumbnail */}
+        {post.imageUrl ? (
+          <div
+            className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-muted relative group"
+            onClick={onClick}
+          >
+            <img src={post.imageUrl} alt="" className="h-full w-full object-cover" />
+            {totalImages > 1 && (
+              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-medium px-1 py-0.5 rounded flex items-center gap-0.5">
+                <Layers className="h-2.5 w-2.5" />
+                {totalImages}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div
+            className="h-14 w-14 shrink-0 rounded-lg bg-muted flex items-center justify-center"
+            onClick={onClick}
+          >
+            <PlatformIcon platform={platformLower} size="md" showColor />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 min-w-0" onClick={onClick}>
+          <div className="flex items-center gap-2 mb-1">
+            <PlatformIcon platform={platformLower} size="xs" showColor />
+            <span className="text-xs font-medium">{post.platform}</span>
+            <Badge
+              variant={statusConfig.variant}
+              className={cn("text-[10px] px-1.5 py-0", statusConfig.className)}
+            >
+              {post.status}
+            </Badge>
+            {isNewPost && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-700 dark:bg-violet-950/30 dark:text-violet-400"
+              >
+                New
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm line-clamp-2">{post.content || "(No content)"}</p>
+        </div>
+
+        {/* Actions */}
+        {post.status === "Approved" && onUnapprove && (
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={onUnapprove}
+              className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors"
+            >
+              Unapprove
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
