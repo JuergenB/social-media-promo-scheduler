@@ -449,10 +449,12 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
           </div>
           {previewText && (
             <div className="rounded-md border bg-muted/30 p-3">
-              <p className="text-sm italic leading-relaxed text-foreground/80">
-                {previewText}
-              </p>
-              <p className="text-[10px] text-muted-foreground mt-2">
+              <div className="text-sm leading-relaxed text-foreground/80 space-y-3">
+                {previewText.split("\n").filter(Boolean).map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-3">
                 This is how your brand sounds at these settings
               </p>
             </div>
