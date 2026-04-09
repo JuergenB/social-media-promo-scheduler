@@ -32,6 +32,7 @@ interface PostFields {
   "Link URL": string;
   "First Comment": string;
   "Zernio Post ID": string;
+  "Sort Order": number | null;
 }
 
 interface BrandFields {
@@ -162,6 +163,7 @@ export async function POST(
     const posts = approvedPosts.map((p) => ({
       id: p.id,
       platform: PLATFORM_MAP[p.fields.Platform] || p.fields.Platform.toLowerCase(),
+      sortOrder: p.fields["Sort Order"] ?? null,
     }));
 
     // Generate the schedule

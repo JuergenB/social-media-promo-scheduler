@@ -29,6 +29,7 @@ export interface ScheduleInput {
   posts: Array<{
     id: string;
     platform: string;
+    sortOrder?: number | null;
   }>;
   startDate: Date;
   durationDays: number;
@@ -163,12 +164,19 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
 
   if (posts.length === 0 || durationDays <= 0) return [];
 
-  // Group posts by platform
-  const byPlatform = new Map<string, Array<{ id: string; platform: string }>>();
+  // Group posts by platform, then sort by sortOrder (ascending, nulls last)
+  const byPlatform = new Map<string, Array<{ id: string; platform: string; sortOrder?: number | null }>>();
   for (const post of posts) {
     const existing = byPlatform.get(post.platform) || [];
     existing.push(post);
     byPlatform.set(post.platform, existing);
+  }
+  for (const [, platformPosts] of byPlatform) {
+    platformPosts.sort((a, b) => {
+      const aOrder = a.sortOrder ?? Infinity;
+      const bOrder = b.sortOrder ?? Infinity;
+      return aOrder - bOrder;
+    });
   }
 
   // Generate the tapering curve

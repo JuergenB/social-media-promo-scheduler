@@ -190,6 +190,8 @@ export interface Post {
   coverSlideData: string;
   /** First comment text (hashtags + engagement hook for Instagram/Facebook/LinkedIn) */
   firstComment: string;
+  /** User-defined display/scheduling priority (lower = earlier). Null = auto-order by createdAt. */
+  sortOrder: number | null;
   /** Airtable record creation timestamp (ISO 8601) */
   createdAt?: string;
 }

@@ -122,6 +122,11 @@ export async function PATCH(
       fields["Scheduled Date"] = body.scheduledDate;
     }
 
+    // Sort order (user-defined priority for approved posts)
+    if (body.sortOrder !== undefined) {
+      fields["Sort Order"] = body.sortOrder;
+    }
+
     if (Object.keys(fields).length === 0) {
       return NextResponse.json(
         { error: "No valid fields to update" },
