@@ -90,6 +90,7 @@ social-media-promo-scheduler/
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
 │   │   │   ├── posts/           # PATCH [id] update post fields, DELETE [id], POST [id]/image, POST [id]/publish, POST [id]/cover-slide (preview/apply/delete), POST [id]/cover-slide-content (AI text gen)
+│   │   │   ├── posts/reorder/    # POST — bulk reorder (accepts { postIds: string[] }, writes Sort Order indices)
 │   │   │   ├── cover-slide-templates/ # GET active templates (filtered by brand)
 │   │   │   ├── webhooks/zernio/ # POST — Zernio webhook receiver (post.published/failed/partial status sync)
 │   │   │   ├── platform-settings/ # GET platform best practices from Airtable
@@ -169,7 +170,7 @@ social-media-promo-scheduler/
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
 | Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform). **Scraped Images** (JSON array of `{url, alt, storyTitle?}`) populated during generation — surfaced in post editor as campaign image library |
-| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override. **imageIndex** (integer) for catalog-based image selection, **subject** field declares who/what each post is about |
+| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override. **imageIndex** (integer) for catalog-based image selection, **subject** field declares who/what each post is about, **Sort Order** (integer) for user-defined scheduling priority |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
 | Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 11 records: type definitions, descriptions, icons, status, scraper strategy (includes "Open Call" — Coming Soon) |
@@ -203,6 +204,7 @@ social-media-promo-scheduler/
 - **LinkedIn PDF carousel:** Posts with 2+ images targeting LinkedIn are auto-assembled into a PDF at publish time using `pdf-lib`. PDF uploaded to Zernio as document media type.
 - **Cover slide designer:** Optional editorial cover slide prepended to carousel posts. Uses a horizontal band layout engine (Satori + Sharp) with Airtable-driven templates. AI generates text from post/campaign context. User can adjust font sizes, pick background colors via eyedropper, reposition the background image. Templates in Cover Slide Templates table (`tblk0l8nE9SDP0lca`). Cover slide uses the original raw image (from Original Media backup), not rendered slides. Supports additive card creation via `insertPosition: "append"` — new cards append to carousel without displacing the existing cover at position 0.
 - **Image selectors:** Outpainting and card creation use image selector dialogs (`OutpaintImageSelector`, `CardImageSelector`) that filter out designed cards via `CoverSlideData.designedCardUrls`. Shared filtering utility: `getEligibleOutpaintIndices()` in `media-items.ts`. Single eligible image skips the selector.
+- **Post reordering:** Approved posts can be drag-reordered in the campaign detail view (when Approved/Modified status filter is active). Uses `@dnd-kit/core` + `@dnd-kit/sortable`. Sort order is persisted to the `Sort Order` field on the Posts table via `POST /api/posts/reorder`. The scheduling algorithm respects `sortOrder` (ascending, nulls last) — lower sort order = earlier scheduled date.
 - **Campaign image library:** Scraped images from campaign generation are surfaced as a clickable thumbnail row when adding images to posts (`CampaignImageLibrary` component). Alt text from scraping auto-fills captions — especially valuable for exhibitions with rich attribution. Data source: `Scraped Images` field on Campaigns table.
 
 ## Session Rules
