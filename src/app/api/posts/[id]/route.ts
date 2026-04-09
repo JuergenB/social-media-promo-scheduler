@@ -112,6 +112,11 @@ export async function PATCH(
       }
     }
 
+    // First comment (hashtags + engagement hook)
+    if (body.firstComment !== undefined) {
+      fields["First Comment"] = body.firstComment;
+    }
+
     // Scheduled date
     if (body.scheduledDate !== undefined) {
       fields["Scheduled Date"] = body.scheduledDate;
@@ -126,11 +131,12 @@ export async function PATCH(
 
     await updateRecord("Posts", id, fields);
 
-    // Sync content/media changes to Zernio if the post is already scheduled
+    // Sync content/media/firstComment changes to Zernio if the post is already scheduled
     const contentOrMediaChanged = fields["Content"] !== undefined
       || fields["Image URL"] !== undefined
       || fields["Media URLs"] !== undefined
-      || fields["Media Captions"] !== undefined;
+      || fields["Media Captions"] !== undefined
+      || fields["First Comment"] !== undefined;
 
     if (contentOrMediaChanged) {
       // Fire-and-forget: don't block the response on Zernio sync
@@ -144,6 +150,8 @@ export async function PATCH(
             "Image URL": string;
             "Media URLs": string;
             "Media Captions": string;
+            "First Comment": string;
+            Platform: string;
           }>("Posts", id);
 
           const zernioPostId = post.fields["Zernio Post ID"];
@@ -177,6 +185,16 @@ export async function PATCH(
           }
           if (post.fields["Scheduled Date"]) {
             updateBody.scheduledFor = post.fields["Scheduled Date"];
+          }
+
+          // Sync first comment to Zernio (Instagram/Facebook/LinkedIn)
+          if (post.fields["First Comment"]) {
+            const platform = (post.fields.Platform || "").toLowerCase();
+            if (["instagram", "facebook", "linkedin"].includes(platform)) {
+              updateBody.platformSpecificData = {
+                firstComment: post.fields["First Comment"],
+              };
+            }
           }
 
           const { error } = await client.posts.updatePost({

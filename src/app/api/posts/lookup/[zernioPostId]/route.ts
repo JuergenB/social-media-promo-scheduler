@@ -21,6 +21,7 @@ interface PostFields {
   Notes: string;
   "Original Media": string;
   "Cover Slide Data": string;
+  "First Comment": string;
 }
 
 interface CampaignFields {
@@ -77,6 +78,7 @@ function mapPostFields(id: string, fields: PostFields): Post {
     notes: fields.Notes || "",
     originalMedia: fields["Original Media"] || "",
     coverSlideData: fields["Cover Slide Data"] || "",
+    firstComment: fields["First Comment"] || "",
   };
 }
 

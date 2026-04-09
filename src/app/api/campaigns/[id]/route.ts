@@ -58,6 +58,7 @@ interface PostFields {
   Notes: string;
   "Original Media": string;
   "Cover Slide Data": string;
+  "First Comment": string;
 }
 
 export async function GET(
@@ -150,6 +151,7 @@ export async function GET(
       notes: r.fields.Notes || "",
       originalMedia: r.fields["Original Media"] || "",
       coverSlideData: r.fields["Cover Slide Data"] || "",
+      firstComment: r.fields["First Comment"] || "",
       createdAt: r.createdTime || "",
     }));
 
