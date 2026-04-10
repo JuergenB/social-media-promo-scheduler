@@ -910,12 +910,14 @@ export async function renderCoverSlide(
         const padding = brandBand.padding;
         // Logo sizing: use the resolved band height (which includes flex redistribution).
         // On the original Quote Dark, flex gives ~174px band → 134px logo at 1350h.
-        // Minimum 120px height so the logo stays visible in all layout modes.
-        const maxLogoH = Math.max(120, Math.round(brandingBandEntry.height - padding * 2));
-        const maxLogoW = Math.round(width * (logoScale ?? 0.20));
+        // Square (1:1) layouts get a smaller logo to avoid overcrowding the branding band.
+        const isSquare = Math.abs(width - height) < 50;
+        const defaultLogoScale = isSquare ? 0.14 : 0.20;
+        const maxLogoH = Math.max(isSquare ? 80 : 120, Math.round(brandingBandEntry.height - padding * 2));
+        const maxLogoW = Math.round(width * (logoScale ?? defaultLogoScale));
 
         // Subtle logo: light enough to read as a watermark, not a stamp
-        const logoOpacity = logoOpacityOverride ?? (bgLum > 0.5 ? 0.35 : 0.40);
+        const logoOpacity = logoOpacityOverride ?? (bgLum > 0.5 ? 0.26 : 0.40);
 
         const resizedLogo = await sharp(logoBuffer)
           .resize(maxLogoW, maxLogoH, { fit: "inside" })
@@ -942,11 +944,13 @@ export async function renderCoverSlide(
         }
 
         // Place logo so it fits within the card. For banded quotable, pin to bottom.
+        // Clamp Y so logo never extends past the canvas edge.
         const logoMeta2 = await sharp(resizedLogo).metadata();
         const actualLogoH = logoMeta2.height || maxLogoH;
-        const logoY = (isBandedQuotable && hasPositionableSpacers)
+        const rawLogoY = (isBandedQuotable && hasPositionableSpacers)
           ? height - actualLogoH - padding
           : brandingBandEntry.y + padding;
+        const logoY = Math.min(rawLogoY, height - actualLogoH - padding);
 
         composites.push({ input: resizedLogo, left: logoX, top: logoY });
       }
