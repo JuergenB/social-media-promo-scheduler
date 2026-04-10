@@ -60,6 +60,7 @@ interface PostFields {
   "Cover Slide Data": string;
   "First Comment": string;
   "Sort Order": number | null;
+  "Platform Post URL": string;
 }
 
 export async function GET(
@@ -154,6 +155,7 @@ export async function GET(
       coverSlideData: r.fields["Cover Slide Data"] || "",
       firstComment: r.fields["First Comment"] || "",
       sortOrder: r.fields["Sort Order"] ?? null,
+      platformPostUrl: r.fields["Platform Post URL"] || "",
       createdAt: r.createdTime || "",
     }));
 

@@ -440,6 +440,21 @@ export function CampaignPostDetail({
           </div>
         </div>
 
+        {/* View on platform — shown for published posts with a platform URL */}
+        {isPublished && post.platformPostUrl && (
+          <div className="px-6 pb-2">
+            <a
+              href={post.platformPostUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline"
+            >
+              <ExternalLink className="h-3 w-3" />
+              View on {post.platform}
+            </a>
+          </div>
+        )}
+
         {/* First Comment / Hashtags — own section with separator */}
         {showFirstComment && post.firstComment && (() => {
           const hashtagCount = (post.firstComment.match(/#\w+/g) || []).length;

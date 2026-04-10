@@ -192,6 +192,8 @@ export interface Post {
   firstComment: string;
   /** User-defined display/scheduling priority (lower = earlier). Null = auto-order by createdAt. */
   sortOrder: number | null;
+  /** Public URL of the published post on the platform (populated after publish via webhook or backfill). */
+  platformPostUrl: string;
   /** Airtable record creation timestamp (ISO 8601) */
   createdAt?: string;
 }

@@ -124,9 +124,17 @@ export async function POST(request: NextRequest) {
 
     // Map Zernio event to Airtable status
     switch (event) {
-      case "post.published":
+      case "post.published": {
         updates.Status = "Published";
+        // Capture the published URL from the first platform that has one
+        const publishedUrl = payload.post?.platforms
+          ?.map((p) => p.publishedUrl)
+          .find((url) => url);
+        if (publishedUrl) {
+          updates["Platform Post URL"] = publishedUrl;
+        }
         break;
+      }
 
       case "post.failed": {
         updates.Status = "Failed";
@@ -152,6 +160,12 @@ export async function POST(request: NextRequest) {
           );
         } else {
           updates.Status = "Published";
+          const partialUrl = payload.post?.platforms
+            ?.map((p) => p.publishedUrl)
+            .find((url) => url);
+          if (partialUrl) {
+            updates["Platform Post URL"] = partialUrl;
+          }
         }
         break;
       }
