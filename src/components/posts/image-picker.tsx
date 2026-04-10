@@ -15,6 +15,7 @@ import { Check, ImageIcon, Layers, Star } from "lucide-react";
 export interface ScrapedImageItem {
   url: string;
   alt?: string;
+  caption?: string;
   featured?: boolean;
 }
 
@@ -44,10 +45,10 @@ export function ImagePicker({ images, onSelect, onSkip, isOpen }: ImagePickerPro
 
   const handleContinue = () => {
     if (selected.length > 0) {
-      // Map selected URLs to { url, caption } using alt text from scraped images
+      // Map selected URLs to { url, caption } — prefer figcaption over alt text
       const result: SelectedImage[] = selected.map((url) => {
         const img = images.find((i) => i.url === url);
-        return { url, caption: img?.alt || "" };
+        return { url, caption: img?.caption || img?.alt || "" };
       });
       onSelect(result);
     }

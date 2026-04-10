@@ -367,7 +367,7 @@ export function CampaignPostDetail({
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto min-h-0">
         {/* Image gallery */}
-        <div className="px-6 pb-3 space-y-2">
+        <div className="px-6 pt-3 pb-3 space-y-2">
           <MediaGallery
             mediaItems={mediaItems}
             mediaImages={mediaImages}
@@ -442,12 +442,12 @@ export function CampaignPostDetail({
 
         {/* View on platform — shown for published posts with a platform URL */}
         {isPublished && post.platformPostUrl && (
-          <div className="px-6 pb-2">
+          <div className="px-6 pb-2 flex">
             <a
               href={post.platformPostUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline"
+              className="ml-auto inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline"
             >
               <ExternalLink className="h-3 w-3" />
               View on {post.platform}

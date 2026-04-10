@@ -38,7 +38,10 @@ export function MediaGallery({
   const platformLower = platform.toLowerCase();
   const showCaptions = platformLower !== "bluesky" && !slidesApplied;
 
-  if (mediaImages.length === 0) return null;
+  if (mediaImages.length === 0) {
+    // No images — still render the toolbar so user can add images
+    return toolbarSlot ? <div className={cn("space-y-2", className)}>{toolbarSlot}</div> : null;
+  }
 
   return (
     <div className={cn("space-y-2", className)}>

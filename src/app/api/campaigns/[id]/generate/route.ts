@@ -38,12 +38,14 @@ function findImageBySubject(
   // Extract potential artwork titles from post text (quoted or title-case phrases)
   const artworkHints = extractArtworkTitles(postText || "", lowerSubject);
 
-  // Try matching artwork title in alt text first (most specific match)
+  // Helper: get the best searchable text for an image (caption preferred over alt)
+  const imageText = (img: ScrapedImage) => (img.caption || img.alt || "").toLowerCase();
+
+  // Try matching artwork title in caption/alt text first (most specific match)
   if (artworkHints.length > 0) {
     for (const title of artworkHints) {
       for (const img of images) {
-        const lowerAlt = (img.alt || "").toLowerCase();
-        if (lowerAlt.includes(title)) {
+        if (imageText(img).includes(title)) {
           return img;
         }
       }
@@ -55,18 +57,18 @@ function findImageBySubject(
   const candidates: ScrapedImage[] = [];
 
   for (const img of images) {
-    const lowerAlt = (img.alt || "").toLowerCase();
-    if (!lowerAlt) continue;
+    const text = imageText(img);
+    if (!text) continue;
 
     // Full substring match
-    if (lowerAlt.includes(lowerSubject)) {
+    if (text.includes(lowerSubject)) {
       candidates.push(img);
       continue;
     }
 
     // Word overlap match (at least 2 words)
     if (lowerSubjectWords.length >= 2) {
-      const matchCount = lowerSubjectWords.filter((w) => lowerAlt.includes(w)).length;
+      const matchCount = lowerSubjectWords.filter((w) => text.includes(w)).length;
       if (matchCount >= 2) {
         candidates.push(img);
       }
@@ -92,8 +94,8 @@ function findImageBySubject(
   if (postText) {
     const lowerPost = postText.toLowerCase();
     for (const img of candidates) {
-      const altParts = (img.alt || "").toLowerCase().split(/\s+by\s+/);
-      const artworkTitle = altParts[0]?.trim();
+      const textParts = imageText(img).split(/\s+by\s+/);
+      const artworkTitle = textParts[0]?.trim();
       if (artworkTitle && artworkTitle.length > 3 && lowerPost.includes(artworkTitle)) {
         return img;
       }
@@ -194,13 +196,14 @@ function extractEntitiesFromContent(blogData: ScrapedBlogData): Set<string> {
     }
   }
 
-  // Image alt text from primary page
+  // Image caption/alt text from primary page (prefer caption for entity extraction)
   for (const img of blogData.images) {
-    if (img.alt && img.alt.length > 3) {
-      entities.add(img.alt.toLowerCase().trim());
-      // Also extract individual multi-word names from alt text
+    const text = img.caption || img.alt || "";
+    if (text && text.length > 3) {
+      entities.add(text.toLowerCase().trim());
+      // Also extract individual multi-word names from text
       // e.g., "Bee Geometric by Shepard Fairey" → "Shepard Fairey", "Bee Geometric"
-      const byParts = img.alt.split(/\s+by\s+/i);
+      const byParts = text.split(/\s+by\s+/i);
       for (const part of byParts) {
         if (part.trim().length > 3) entities.add(part.trim().toLowerCase());
       }
@@ -227,28 +230,28 @@ function extractEntitiesFromContent(blogData: ScrapedBlogData): Set<string> {
  * Returns true if the image's alt text or filename overlaps with known entities.
  */
 function imageMatchesPrimaryEntities(img: ScrapedImage, entities: Set<string>): boolean {
-  const alt = (img.alt || "").toLowerCase().trim();
+  const text = (img.caption || img.alt || "").toLowerCase().trim();
   const filename = (img.url.split("/").pop()?.split("?")[0] || "")
     .toLowerCase()
     .replace(/[-_]/g, " ")
     .replace(/\.[a-z]+$/, "");
 
-  // Direct alt text match
-  if (alt && entities.has(alt)) return true;
+  // Direct caption/alt text match
+  if (text && entities.has(text)) return true;
 
-  // Check if any entity appears within the alt text
+  // Check if any entity appears within the caption/alt text
   for (const entity of entities) {
-    if (entity.length > 4 && alt.includes(entity)) return true;
+    if (entity.length > 4 && text.includes(entity)) return true;
     if (entity.length > 4 && filename.includes(entity)) return true;
   }
 
-  // Check if alt text words overlap significantly with any entity
-  const altWords = alt.split(/\s+/).filter((w) => w.length > 3);
-  if (altWords.length >= 2) {
+  // Check if caption/alt text words overlap significantly with any entity
+  const textWords = text.split(/\s+/).filter((w) => w.length > 3);
+  if (textWords.length >= 2) {
     for (const entity of entities) {
       const entityWords = entity.split(/\s+/).filter((w) => w.length > 3);
       if (entityWords.length < 2) continue;
-      const overlap = altWords.filter((w) => entityWords.includes(w)).length;
+      const overlap = textWords.filter((w) => entityWords.includes(w)).length;
       if (overlap >= 2) return true;
     }
   }

@@ -132,8 +132,15 @@ export default function QuickPostPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
   const [url, setUrl] = useState("");
   const [editorialDirection, setEditorialDirection] = useState("");
-  const [voiceIntensity, setVoiceIntensity] = useState(50);
+  const [voiceIntensity, setVoiceIntensity] = useState(currentBrand?.defaultVoiceIntensity ?? 50);
   const [generateSectionOpen, setGenerateSectionOpen] = useState(true);
+
+  // Sync voice intensity when brand changes
+  React.useEffect(() => {
+    if (currentBrand?.defaultVoiceIntensity != null) {
+      setVoiceIntensity(currentBrand.defaultVoiceIntensity);
+    }
+  }, [currentBrand?.id, currentBrand?.defaultVoiceIntensity]);
 
   // ── Phantom campaign + post state ──────────────────────────────────────
   const [campaign, setCampaign] = useState<Campaign | null>(null);

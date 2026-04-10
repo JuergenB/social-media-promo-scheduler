@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // Build deduplicated image list
     const seen = new Set<string>();
-    const images: Array<{ url: string; alt: string; featured: boolean }> = [];
+    const images: Array<{ url: string; alt: string; caption?: string; featured: boolean }> = [];
 
     // og:image / hero first (marked as featured)
     const ogUrl = blogData.ogImage || blogData.heroImage?.url || "";
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
       images.push({
         url: img.url,
         alt: img.alt || "",
+        ...(img.caption ? { caption: img.caption } : {}),
         featured: false,
       });
     }
