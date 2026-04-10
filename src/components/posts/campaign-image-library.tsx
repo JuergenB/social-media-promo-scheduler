@@ -8,6 +8,7 @@ import { Check, ChevronDown, ChevronUp, ImageIcon } from "lucide-react";
 interface ScrapedImage {
   url: string;
   alt: string;
+  caption?: string;
   storyTitle?: string;
 }
 
@@ -59,9 +60,9 @@ export function CampaignImageLibrary({
               <button
                 key={img.url}
                 type="button"
-                onClick={() => { if (!alreadyAdded) onAdd(img.url, img.alt); }}
+                onClick={() => { if (!alreadyAdded) onAdd(img.url, img.caption || img.alt); }}
                 disabled={alreadyAdded}
-                title={img.alt || "Campaign image"}
+                title={img.caption || img.alt || "Campaign image"}
                 className={cn(
                   "relative shrink-0 w-16 h-16 rounded-md overflow-hidden border transition-all group",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",

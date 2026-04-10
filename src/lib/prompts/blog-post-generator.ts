@@ -195,7 +195,7 @@ export function buildUserPrompt(params: UserPromptParams): string {
       .slice(0, 8) // Cap at 8 sections to avoid prompt bloat
       .map((s, i) => {
         const imgList = s.images.length > 0
-          ? `\nAvailable images: ${s.images.map((img) => `[${img.alt || "image"}](${img.url})`).join(", ")}`
+          ? `\nAvailable images: ${s.images.map((img) => `[${img.caption || img.alt || "image"}](${img.url})`).join(", ")}`
           : "";
         return `<section index="${i + 1}" heading="${s.heading}">
 ${s.content.slice(0, 1500)}${imgList}
@@ -253,13 +253,15 @@ ${contentSections.slice(0, 12).map((s, i) => `  Section ${i + 1}: ${s.heading}`)
     const sectionCatalogImages: { url: string; label: string }[] = [];
     for (const s of contentSections.slice(0, 12)) {
       for (const img of s.images) {
-        // Use section heading when alt is missing, generic, or unreliable (duplicated)
+        // Priority: caption (from figcaption/HTML) > usable alt text > section heading
         const altUsable = img.alt && img.alt !== "image" && img.alt !== "untitled" && !altIsUnreliable;
         // Strip markdown bold markers and zero-width spaces from heading
         const cleanHeading = s.heading.replace(/\*\*/g, "").replace(/\u200B/g, "").trim();
-        const label = altUsable
-          ? img.alt
-          : `Image from section: ${cleanHeading}`;
+        const label = img.caption
+          ? img.caption
+          : altUsable
+            ? img.alt
+            : `Image from section: ${cleanHeading}`;
         sectionCatalogImages.push({ url: img.url, label });
       }
     }
@@ -311,6 +313,10 @@ ${blogData.content}
 
     const imageCatalog = catalogImages
       .map((img, i) => {
+        // Priority: caption (from figcaption/HTML) > usable alt text > filename
+        if (img.caption) {
+          return `Image ${i + 1}: "${img.caption}"`;
+        }
         if (singleAltUnreliable || !img.alt || img.alt === "image" || img.alt === "untitled") {
           // Fall back to filename-derived label
           const filenameMatch = img.url.match(/\/([^/?]+?)(?:_[a-f0-9]{10,})?(?:_\d+)?\.\w+(?:\?|$)/);

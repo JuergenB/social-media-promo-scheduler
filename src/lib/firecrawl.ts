@@ -25,6 +25,10 @@ function getApiKey(): string {
 export interface ScrapedImage {
   url: string;
   alt: string;
+  /** Caption extracted from <figcaption>, adjacent text, or similar HTML patterns.
+   *  More specific than alt text — e.g., artwork title vs. generic article description.
+   *  Preferred over `alt` for display labels and image catalog descriptions. */
+  caption?: string;
   /** Anchor fragment for newsletters (e.g., "VSObpak" from Curated.co) */
   anchor?: string;
   /** Story title associated with this image (for newsletters) */
@@ -178,9 +182,14 @@ function normalizeImageUrlForDedup(url: string): string {
   return normalized;
 }
 
-/** Extract images from a markdown string, filtering out non-content elements */
+/** Extract images from a markdown string, filtering out non-content elements.
+ *  Captures trailing text after `![alt](url)` as a markdown-derived caption.
+ *  Firecrawl renders <figcaption> content as text immediately after the image
+ *  (e.g., `![alt](url)'Jennifer'`). We capture this regardless of quoting style. */
 function extractImagesFromMarkdown(markdown: string): ScrapedImage[] {
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  // Capture: group 1 = alt, group 2 = url, group 3 = optional trailing caption text
+  // Trailing caption: text on the same line after ), excluding markdown headings/links
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)([^\n#!\[]*)?/g;
   const allImages: ScrapedImage[] = [];
   let match;
 
@@ -188,7 +197,12 @@ function extractImagesFromMarkdown(markdown: string): ScrapedImage[] {
     const fullUrl = match[2];
     const alt = match[1] || "";
     if (isNonContentImage(fullUrl, alt)) continue;
-    allImages.push({ url: fullUrl, alt });
+    // Clean trailing caption: strip surrounding quotes (single, double, smart quotes)
+    const rawCaption = (match[3] || "").trim();
+    const caption = rawCaption
+      ? rawCaption.replace(/^[''""'"`\u2018\u2019\u201C\u201D]+|[''""'"`\u2018\u2019\u201C\u201D]+$/g, "").trim()
+      : undefined;
+    allImages.push({ url: fullUrl, alt, ...(caption ? { caption } : {}) });
   }
 
   // Deduplicate by normalized URL (collapses dimension variants into one entry).
@@ -209,6 +223,98 @@ function extractImagesFromMarkdown(markdown: string): ScrapedImage[] {
     }
   }
   return [...seen.values()];
+}
+
+/** Extract captions from HTML by parsing <figure>/<figcaption> and similar patterns.
+ *  Returns a Map of image URL → caption text. Matches by URL basename to handle
+ *  srcset/responsive variants. Also handles non-figure captions (wp-caption, etc.). */
+function extractCaptionsFromHtml(html: string): Map<string, string> {
+  const captions = new Map<string, string>();
+  if (!html) return captions;
+
+  // Pattern 1: <figure> containing <img> and <figcaption>
+  const figureRegex = /<figure[^>]*>([\s\S]*?)<\/figure>/gi;
+  let figMatch;
+  while ((figMatch = figureRegex.exec(html)) !== null) {
+    const figureHtml = figMatch[1];
+    // Extract image src(s) from within the figure
+    const imgSrcRegex = /src="([^"]+)"/g;
+    let srcMatch;
+    const urls: string[] = [];
+    while ((srcMatch = imgSrcRegex.exec(figureHtml)) !== null) {
+      urls.push(srcMatch[1]);
+    }
+    // Extract figcaption text (strip HTML tags within it)
+    const captionMatch = figureHtml.match(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/i);
+    if (captionMatch) {
+      const captionText = captionMatch[1]
+        .replace(/<[^>]+>/g, "") // strip nested HTML tags
+        .replace(/&#?\w+;/g, (m) => { // decode common HTML entities
+          const entities: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&apos;": "'" };
+          return entities[m] || m;
+        })
+        .replace(/\s+/g, " ") // normalize whitespace (multi-line figcaptions)
+        .replace(/^[''""'"`\u2018\u2019\u201C\u201D]+|[''""'"`\u2018\u2019\u201C\u201D]+$/g, "") // strip surrounding quotes (ASCII + smart quotes)
+        .trim();
+      if (captionText) {
+        for (const url of urls) {
+          captions.set(url, captionText);
+        }
+      }
+    }
+  }
+
+  // Pattern 2: WordPress wp-caption / gallery-caption divs
+  const wpCaptionRegex = /<div[^>]*class="[^"]*wp-caption[^"]*"[^>]*>([\s\S]*?)<\/div>/gi;
+  let wpMatch;
+  while ((wpMatch = wpCaptionRegex.exec(html)) !== null) {
+    const block = wpMatch[1];
+    const imgSrc = block.match(/src="([^"]+)"/);
+    const captionP = block.match(/<p[^>]*class="[^"]*wp-caption-text[^"]*"[^>]*>([\s\S]*?)<\/p>/i);
+    if (imgSrc && captionP) {
+      const text = captionP[1].replace(/<[^>]+>/g, "").trim();
+      if (text && !captions.has(imgSrc[1])) {
+        captions.set(imgSrc[1], text);
+      }
+    }
+  }
+
+  return captions;
+}
+
+/** Enrich ScrapedImage array with captions from HTML figcaption extraction.
+ *  Matches by URL basename to handle responsive/srcset variants. */
+function enrichImagesWithHtmlCaptions(images: ScrapedImage[], htmlCaptions: Map<string, string>): void {
+  if (htmlCaptions.size === 0) return;
+
+  // Build a lookup by basename for fuzzy matching (responsive images have different dimensions)
+  const basenameLookup = new Map<string, string>();
+  for (const [url, caption] of htmlCaptions) {
+    // Extract basename: last path segment without query string
+    const basename = url.split("/").pop()?.split("?")[0] || "";
+    // Also store without dimension suffixes for matching across srcset variants
+    const normalized = basename.replace(/[_-]\d{1,4}x\d{1,4}(?=\.[a-z]+$)/i, "");
+    basenameLookup.set(basename, caption);
+    if (normalized !== basename) basenameLookup.set(normalized, caption);
+    // Store full URL too for exact matches
+    basenameLookup.set(url, caption);
+  }
+
+  for (const img of images) {
+    if (img.caption) continue; // markdown-derived caption already set, but HTML takes priority below
+
+    const imgBasename = img.url.split("/").pop()?.split("?")[0] || "";
+    const imgNormalized = imgBasename.replace(/[_-]\d{1,4}x\d{1,4}(?=\.[a-z]+$)/i, "");
+
+    // Try exact URL, then basename, then normalized basename
+    const caption = basenameLookup.get(img.url)
+      || basenameLookup.get(imgBasename)
+      || basenameLookup.get(imgNormalized);
+
+    if (caption) {
+      img.caption = caption;
+    }
+  }
 }
 
 /** Extract width x height from a URL if dimension pattern is present */
@@ -374,7 +480,7 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
     },
     body: JSON.stringify({
       url,
-      formats: ["markdown"],
+      formats: ["markdown", "html"],
       // onlyMainContent: false because it silently disables excludeTags
       onlyMainContent: false,
       // Strip known non-content elements (works across CMS platforms)
@@ -409,9 +515,14 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
 
   const metadata = page.metadata || {};
   const markdown = page.markdown || "";
+  const html = page.html || "";
 
   // ── Image extraction using shared utility ──────────────────────────
   const images = extractImagesFromMarkdown(markdown);
+
+  // Enrich with HTML-based figcaptions (authoritative, overrides markdown-derived captions)
+  const htmlCaptions = extractCaptionsFromHtml(html);
+  enrichImagesWithHtmlCaptions(images, htmlCaptions);
 
   // Add og:image as featured image if not already in the list
   const ogImage = metadata.ogImage || metadata["og:image"] || null;
@@ -422,6 +533,10 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
   // ── Parse into semantic sections ───────────────────────────────────
   // For multi-artist posts, increase content limit so sections aren't truncated
   const sections = parseSections(markdown);
+  // Enrich section images with HTML captions too
+  for (const section of sections) {
+    enrichImagesWithHtmlCaptions(section.images, htmlCaptions);
+  }
   const isMultiSection = sections.filter((s) => !s.isPreamble).length > 1;
 
   // Increase limit for multi-section posts so each section gets representation
