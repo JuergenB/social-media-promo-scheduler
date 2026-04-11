@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useTheme } from "next-themes";
 import { differenceInDays, parseISO } from "date-fns";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,32 @@ import {
 } from "lucide-react";
 import type { GenerationRule, CampaignTypeRule } from "@/lib/airtable/types";
 
+/** Per-type color config for visually distinctive tiles */
+const CAMPAIGN_TYPE_COLORS: Record<CampaignType, {
+  base: string;       // Base hue color (hex)
+  lightBg: string;    // Light mode default bg
+  lightHover: string; // Light mode hover bg
+  lightActive: string;// Light mode selected bg
+  darkBg: string;     // Dark mode default bg
+  darkHover: string;  // Dark mode hover bg
+  darkActive: string; // Dark mode selected bg
+  border: string;     // Selected border color
+  icon: string;       // Icon color (muted)
+  iconActive: string; // Icon color (selected/hover)
+}> = {
+  Newsletter:       { base: "#4f46e5", lightBg: "rgba(79,70,229,0.06)",  lightHover: "rgba(79,70,229,0.12)",  lightActive: "rgba(79,70,229,0.15)",  darkBg: "rgba(99,102,241,0.08)",  darkHover: "rgba(99,102,241,0.16)",  darkActive: "rgba(99,102,241,0.22)",  border: "#6366f1", icon: "#818cf8",  iconActive: "#6366f1" },
+  "Blog Post":      { base: "#059669", lightBg: "rgba(5,150,105,0.06)",  lightHover: "rgba(5,150,105,0.12)",  lightActive: "rgba(5,150,105,0.15)",  darkBg: "rgba(16,185,129,0.08)",  darkHover: "rgba(16,185,129,0.16)",  darkActive: "rgba(16,185,129,0.22)",  border: "#10b981", icon: "#34d399",  iconActive: "#10b981" },
+  Exhibition:       { base: "#7c3aed", lightBg: "rgba(124,58,237,0.06)", lightHover: "rgba(124,58,237,0.12)", lightActive: "rgba(124,58,237,0.15)", darkBg: "rgba(139,92,246,0.08)", darkHover: "rgba(139,92,246,0.16)", darkActive: "rgba(139,92,246,0.22)", border: "#8b5cf6", icon: "#a78bfa",  iconActive: "#8b5cf6" },
+  "Artist Profile": { base: "#e11d48", lightBg: "rgba(225,29,72,0.06)",  lightHover: "rgba(225,29,72,0.12)",  lightActive: "rgba(225,29,72,0.15)",  darkBg: "rgba(244,63,94,0.08)",  darkHover: "rgba(244,63,94,0.16)",  darkActive: "rgba(244,63,94,0.22)",  border: "#f43f5e", icon: "#fb7185",  iconActive: "#f43f5e" },
+  "Podcast Episode":{ base: "#d97706", lightBg: "rgba(217,119,6,0.06)",  lightHover: "rgba(217,119,6,0.12)",  lightActive: "rgba(217,119,6,0.15)",  darkBg: "rgba(245,158,11,0.08)", darkHover: "rgba(245,158,11,0.16)", darkActive: "rgba(245,158,11,0.22)", border: "#f59e0b", icon: "#fbbf24",  iconActive: "#f59e0b" },
+  Event:            { base: "#0891b2", lightBg: "rgba(8,145,178,0.06)",  lightHover: "rgba(8,145,178,0.12)",  lightActive: "rgba(8,145,178,0.15)",  darkBg: "rgba(6,182,212,0.08)",  darkHover: "rgba(6,182,212,0.16)",  darkActive: "rgba(6,182,212,0.22)",  border: "#06b6d4", icon: "#22d3ee",  iconActive: "#06b6d4" },
+  "Open Call":      { base: "#dc2626", lightBg: "rgba(220,38,38,0.06)",  lightHover: "rgba(220,38,38,0.12)",  lightActive: "rgba(220,38,38,0.15)",  darkBg: "rgba(239,68,68,0.08)",  darkHover: "rgba(239,68,68,0.16)",  darkActive: "rgba(239,68,68,0.22)",  border: "#ef4444", icon: "#f87171",  iconActive: "#ef4444" },
+  "Public Art":     { base: "#475569", lightBg: "rgba(71,85,105,0.06)",  lightHover: "rgba(71,85,105,0.12)",  lightActive: "rgba(71,85,105,0.15)",  darkBg: "rgba(100,116,139,0.08)",darkHover: "rgba(100,116,139,0.16)",darkActive: "rgba(100,116,139,0.22)",border: "#64748b", icon: "#94a3b8",  iconActive: "#64748b" },
+  "Video/Film":     { base: "#0284c7", lightBg: "rgba(2,132,199,0.06)",  lightHover: "rgba(2,132,199,0.12)",  lightActive: "rgba(2,132,199,0.15)",  darkBg: "rgba(14,165,233,0.08)", darkHover: "rgba(14,165,233,0.16)", darkActive: "rgba(14,165,233,0.22)", border: "#0ea5e9", icon: "#38bdf8",  iconActive: "#0ea5e9" },
+  Institutional:    { base: "#6b7280", lightBg: "rgba(107,114,128,0.06)",lightHover: "rgba(107,114,128,0.12)",lightActive: "rgba(107,114,128,0.15)",darkBg: "rgba(156,163,175,0.08)",darkHover: "rgba(156,163,175,0.16)",darkActive: "rgba(156,163,175,0.22)",border: "#9ca3af", icon: "#9ca3af",  iconActive: "#6b7280" },
+  Custom:           { base: "#ca8a04", lightBg: "rgba(202,138,4,0.06)",  lightHover: "rgba(202,138,4,0.12)",  lightActive: "rgba(202,138,4,0.15)",  darkBg: "rgba(234,179,8,0.08)",  darkHover: "rgba(234,179,8,0.16)",  darkActive: "rgba(234,179,8,0.22)",  border: "#eab308", icon: "#facc15",  iconActive: "#eab308" },
+};
+
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Newsletter: Mail,
   "Blog Post": FileText,
@@ -90,6 +117,8 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
 
 export default function NewCampaignPage() {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const { currentBrand, brands, switchBrand } = useBrand();
 
   const [url, setUrl] = useState("");
@@ -452,8 +481,38 @@ export default function NewCampaignPage() {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {CAMPAIGN_TYPES.map((t) => {
               const Icon = CAMPAIGN_TYPE_ICONS[t];
+              const c = CAMPAIGN_TYPE_COLORS[t];
               const isSelected = type === t;
               const isEnabled = ENABLED_CAMPAIGN_TYPES.includes(t);
+              const isPreviewing = previewType === t;
+
+              // Compute theme-aware background and border
+              const bg = isSelected
+                ? (isDark ? c.darkActive : c.lightActive)
+                : isPreviewing
+                  ? (isDark ? c.darkHover : c.lightHover)
+                  : (isDark ? c.darkBg : c.lightBg);
+
+              const borderColor = isSelected
+                ? c.border
+                : isPreviewing
+                  ? `${c.border}66`
+                  : isEnabled
+                    ? `${c.border}30`
+                    : 'transparent';
+
+              const iconColor = isSelected
+                ? c.iconActive
+                : isEnabled || isPreviewing
+                  ? c.icon
+                  : `${c.icon}80`;
+
+              const textColor = isSelected
+                ? c.iconActive
+                : isPreviewing
+                  ? (isDark ? '#d1d5db' : '#6b7280')
+                  : undefined;
+
               return (
                 <button
                   key={t}
@@ -467,18 +526,25 @@ export default function NewCampaignPage() {
                     }
                   }}
                   className={cn(
-                    "flex flex-col items-center gap-1.5 rounded-lg border p-3 text-xs font-medium transition-colors",
-                    isSelected
-                      ? "border-primary bg-primary/5 text-primary"
-                      : previewType === t
-                        ? "border-muted-foreground/40 bg-muted/50 text-muted-foreground"
-                        : isEnabled
-                          ? "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-                          : "border-border/50 text-muted-foreground/50 opacity-60 hover:opacity-80 hover:border-border"
+                    "group flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-xs font-medium transition-all duration-200",
+                    !isSelected && !isPreviewing && isEnabled && "hover:scale-[1.02] hover:shadow-sm",
+                    !isEnabled && !isPreviewing && "opacity-55 hover:opacity-75"
                   )}
+                  style={{
+                    backgroundColor: bg,
+                    borderColor: borderColor,
+                  }}
                 >
-                  <Icon className="h-5 w-5" />
-                  <span className="text-center leading-tight">{t}</span>
+                  <Icon
+                    className="h-5 w-5 transition-colors duration-200"
+                    style={{ color: iconColor }}
+                  />
+                  <span
+                    className="text-center leading-tight transition-colors duration-200"
+                    style={{ color: textColor }}
+                  >
+                    {t}
+                  </span>
                 </button>
               );
             })}
