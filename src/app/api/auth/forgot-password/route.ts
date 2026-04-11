@@ -15,7 +15,10 @@ export async function POST(request: NextRequest) {
   const stored = await storeResetToken(email.toLowerCase().trim(), token)
 
   if (stored) {
-    await sendPasswordResetEmail(email, token)
+    const sent = await sendPasswordResetEmail(email, token)
+    console.log(`[forgot-password] email=${email} stored=${stored} sent=${sent} resendKeySet=${!!process.env.RESEND_API_KEY} appUrl=${process.env.NEXT_PUBLIC_APP_URL}`)
+  } else {
+    console.log(`[forgot-password] email=${email} stored=false (user not found)`)
   }
 
   // Always return success regardless of whether the email exists
