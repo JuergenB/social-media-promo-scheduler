@@ -2,18 +2,20 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns/format";
 import { parseISO } from "date-fns/parseISO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Calendar as CalendarWidget } from "@/components/ui/calendar";
 import { Heading, Subheading } from "@/components/catalyst/heading";
 import { Text } from "@/components/catalyst/text";
-import { Divider } from "@/components/catalyst/divider";
 import { PlatformIcon } from "@/components/shared/platform-icon";
+import { Logo } from "@/components/shared";
 import { useBrand } from "@/lib/brand-context";
-import { useAccounts, useAccountsHealth } from "@/hooks";
+import { useAccountsHealth } from "@/hooks";
 import type { Platform } from "@/lib/late-api";
 import type { CampaignType, PostStatus } from "@/lib/airtable/types";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,8 @@ import {
   FileText,
   Mail,
   CalendarDays,
+  Sparkles,
+  Send,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -86,6 +90,22 @@ interface DashboardStats {
     platform: string;
     status: PostStatus;
   }>;
+  summary: {
+    totalPosts: number;
+    totalPublished: number;
+    totalCampaigns: number;
+    platformsUsed: number;
+    platformCounts: Record<string, number>;
+  };
+  upcoming: Array<{
+    id: string;
+    platform: string;
+    content: string;
+    scheduledDate: string;
+    imageUrl: string;
+    campaignName: string;
+  }>;
+  postDates: Record<string, { scheduled: number; published: number; pending: number }>;
 }
 
 const CAMPAIGN_TYPE_ICONS: Record<string, typeof FileText> = {
@@ -133,6 +153,7 @@ const CAMPAIGN_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline
 // ── Page ───────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { currentBrand, isLoading: isBrandLoading } = useBrand();
   const queryClient = useQueryClient();
   const [pipelineWindow, setPipelineWindow] = useState<"30d" | "90d" | "ytd" | "all">("90d");
@@ -185,7 +206,24 @@ export default function DashboardPage() {
     },
   });
 
-  // Show loading spinner while session/brands are still loading
+  // All hooks must be called unconditionally (before early returns)
+  const postDateEntries = data?.postDates || {};
+  const datesWithPosts = useMemo(() => {
+    const dates: Date[] = [];
+    for (const dateStr of Object.keys(postDateEntries)) {
+      dates.push(parseISO(dateStr));
+    }
+    return dates;
+  }, [postDateEntries]);
+
+  const platformDistribution = useMemo(() => {
+    const counts = data?.summary?.platformCounts || {};
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6);
+  }, [data?.summary]);
+
+  // Early returns (after all hooks)
   if (isBrandLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
@@ -222,21 +260,69 @@ export default function DashboardPage() {
   const pendingCount = (data.posts.byStatus["Pending"] || 0) + (data.posts.byStatus["Modified"] || 0);
   const pipelineStatuses = ["Pending", "Approved", "Queued", "Scheduled", "Published"];
   const pipelineTotal = pipelineStatuses.reduce((sum, s) => sum + (data.posts.byStatus[s] || 0), 0);
+  const totalPlatformPosts = platformDistribution.reduce((sum, [, c]) => sum + c, 0);
+
+  const PLATFORM_COLORS: Record<string, string> = {
+    Instagram: "bg-pink-500",
+    "X/Twitter": "bg-zinc-800 dark:bg-zinc-300",
+    LinkedIn: "bg-blue-700",
+    Facebook: "bg-blue-600",
+    Threads: "bg-zinc-700 dark:bg-zinc-400",
+    Bluesky: "bg-sky-500",
+    Pinterest: "bg-red-600",
+    TikTok: "bg-zinc-900 dark:bg-zinc-200",
+  };
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-8">
-      {/* Brand header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <Heading>{currentBrand.name}</Heading>
-          <Text>Campaign operations overview</Text>
+
+      {/* ── Hero Section ───────────────────────────────────────── */}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/5 via-background to-primary/10 p-6">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <Logo size="md" showText={false} />
+              <div>
+                <h1 className="text-xl font-semibold tracking-tight">
+                  {currentBrand.name}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Turn any URL into a multi-platform social media campaign — automated, scheduled, ready to publish.
+                </p>
+              </div>
+            </div>
+            {data.summary && (
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-1 text-sm">
+                <span className="flex items-center gap-1.5">
+                  <Send className="h-3.5 w-3.5 text-green-500" />
+                  <span className="font-semibold">{data.summary.totalPublished}</span>
+                  <span className="text-muted-foreground">published</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-semibold">{data.summary.totalPosts}</span>
+                  <span className="text-muted-foreground">total posts</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Megaphone className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-semibold">{data.summary.totalCampaigns}</span>
+                  <span className="text-muted-foreground">{data.summary.totalCampaigns === 1 ? "campaign" : "campaigns"}</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-semibold">{data.summary.platformsUsed}</span>
+                  <span className="text-muted-foreground">{data.summary.platformsUsed === 1 ? "platform" : "platforms"}</span>
+                </span>
+              </div>
+            )}
+          </div>
+          <Button asChild className="shrink-0">
+            <Link href="/dashboard/campaigns/new">
+              <Plus className="h-4 w-4 mr-1.5" />
+              New Campaign
+            </Link>
+          </Button>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/campaigns/new">
-            <Plus className="h-4 w-4 mr-1.5" />
-            New Campaign
-          </Link>
-        </Button>
       </div>
 
       {/* Account health warning */}
@@ -449,24 +535,6 @@ export default function DashboardPage() {
             </Card>
           )}
 
-        </div>
-
-        {/* Right column */}
-        <div className="space-y-6">
-
-          {/* Quick Links */}
-          <Card>
-            <div className="px-5 pt-5 pb-3">
-              <Subheading>Quick Actions</Subheading>
-            </div>
-            <CardContent className="pt-0 space-y-1">
-              <QuickLink href="/dashboard/campaigns/new" icon={<Plus className="h-4 w-4" />} label="New Campaign" />
-              <QuickLink href="/dashboard/calendar" icon={<Calendar className="h-4 w-4" />} label="Calendar" />
-              <QuickLink href="/dashboard/queue" icon={<Clock className="h-4 w-4" />} label="Queue" />
-              <QuickLink href="/dashboard/settings/brands" icon={<Megaphone className="h-4 w-4" />} label="Brand Settings" />
-            </CardContent>
-          </Card>
-
           {/* Campaign Status Board */}
           <Card>
             <div className="px-5 pt-5 pb-3">
@@ -531,6 +599,112 @@ export default function DashboardPage() {
                     );
                   })
               )}
+            </CardContent>
+          </Card>
+
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-6">
+
+          {/* ── Mini Calendar ──────────────────────────────────── */}
+          <Card>
+            <div className="px-5 pt-5 pb-1">
+              <div className="flex items-center justify-between">
+                <Subheading className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Schedule
+                </Subheading>
+                <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
+                  <Link href="/dashboard/calendar">Full Calendar</Link>
+                </Button>
+              </div>
+            </div>
+            <CardContent className="pt-0 flex justify-center">
+              <CalendarWidget
+                mode="single"
+                modifiers={{ hasPost: datesWithPosts }}
+                modifiersClassNames={{
+                  hasPost: "relative after:absolute after:bottom-0.5 after:left-1/2 after:-translate-x-1/2 after:h-1 after:w-1 after:rounded-full after:bg-primary",
+                }}
+                onDayClick={(day) => {
+                  const dateStr = format(day, "yyyy-MM-dd");
+                  router.push(`/dashboard/calendar?date=${dateStr}`);
+                }}
+                className="p-0"
+              />
+            </CardContent>
+          </Card>
+
+          {/* ── Next Up ────────────────────────────────────────── */}
+          {data.upcoming && data.upcoming.length > 0 && (
+            <Card>
+              <div className="px-5 pt-5 pb-3">
+                <Subheading className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-primary" />
+                  Next Up
+                </Subheading>
+              </div>
+              <CardContent className="pt-0 space-y-2">
+                {data.upcoming.map((post) => (
+                  <div
+                    key={post.id}
+                    className="flex items-center gap-3 rounded-lg border border-border p-2.5 hover:bg-muted/50 transition-colors"
+                  >
+                    <PlatformIcon platform={toPlatformId(post.platform)} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs truncate">{post.content}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {post.scheduledDate && format(parseISO(post.scheduledDate), "MMM d, h:mm a")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Platform Distribution ──────────────────────────── */}
+          {platformDistribution.length > 0 && (
+            <Card>
+              <div className="px-5 pt-5 pb-3">
+                <Subheading>Platforms</Subheading>
+              </div>
+              <CardContent className="pt-0 space-y-2">
+                {platformDistribution.map(([platform, count]) => {
+                  const pct = totalPlatformPosts > 0 ? Math.round((count / totalPlatformPosts) * 100) : 0;
+                  return (
+                    <div key={platform} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <PlatformIcon platform={toPlatformId(platform)} size="sm" />
+                          <span>{platform}</span>
+                        </div>
+                        <span className="text-muted-foreground">{count} ({pct}%)</span>
+                      </div>
+                      <div className="flex h-1.5 rounded-full overflow-hidden bg-muted">
+                        <div
+                          className={cn("rounded-full transition-all", PLATFORM_COLORS[platform] || "bg-primary")}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Quick Actions (compact) */}
+          <Card>
+            <div className="px-5 pt-5 pb-3">
+              <Subheading>Quick Actions</Subheading>
+            </div>
+            <CardContent className="pt-0 space-y-1">
+              <QuickLink href="/dashboard/campaigns/new" icon={<Plus className="h-4 w-4" />} label="New Campaign" />
+              <QuickLink href="/dashboard/calendar" icon={<Calendar className="h-4 w-4" />} label="Calendar" />
+              <QuickLink href="/dashboard/queue" icon={<Clock className="h-4 w-4" />} label="Queue" />
+              <QuickLink href="/dashboard/settings/brands" icon={<Megaphone className="h-4 w-4" />} label="Brand Settings" />
             </CardContent>
           </Card>
 

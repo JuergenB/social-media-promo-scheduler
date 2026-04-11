@@ -203,6 +203,51 @@ export async function GET(request: NextRequest) {
         status: p.fields.Status,
       }));
 
+    // Platform distribution (non-dismissed posts)
+    const platformCounts: Record<string, number> = {};
+    for (const p of posts) {
+      if (p.fields.Status === "Dismissed") continue;
+      const plat = p.fields.Platform || "Unknown";
+      platformCounts[plat] = (platformCounts[plat] || 0) + 1;
+    }
+
+    // Summary stats for hero section
+    const totalPostsAllTime = posts.filter((p) => p.fields.Status !== "Dismissed").length;
+    const totalPublished = posts.filter((p) => p.fields.Status === "Published").length;
+    const platformsUsed = Object.keys(platformCounts).length;
+
+    // Upcoming scheduled posts (next 5, sorted by date)
+    const upcomingPosts = posts
+      .filter((p) => {
+        const d = p.fields["Scheduled Date"];
+        if (!d) return false;
+        return new Date(d) >= now && ["Approved", "Queued", "Scheduled"].includes(p.fields.Status);
+      })
+      .sort((a, b) => (a.fields["Scheduled Date"] || "").localeCompare(b.fields["Scheduled Date"] || ""))
+      .slice(0, 5)
+      .map((p) => {
+        const campaign = campaigns.find((c) => p.fields.Campaign?.includes(c.id));
+        return {
+          id: p.id,
+          platform: p.fields.Platform,
+          content: (p.fields.Content || "").slice(0, 80),
+          scheduledDate: p.fields["Scheduled Date"],
+          imageUrl: p.fields["Image URL"],
+          campaignName: campaign?.fields.Name || "Unknown",
+        };
+      });
+
+    // Dates with posts (for calendar dot indicators)
+    const postDates: Record<string, { scheduled: number; published: number; pending: number }> = {};
+    for (const p of posts) {
+      const d = p.fields["Scheduled Date"]?.split("T")[0];
+      if (!d) continue;
+      if (!postDates[d]) postDates[d] = { scheduled: 0, published: 0, pending: 0 };
+      if (p.fields.Status === "Published") postDates[d].published++;
+      else if (p.fields.Status === "Pending" || p.fields.Status === "Modified") postDates[d].pending++;
+      else if (["Approved", "Queued", "Scheduled"].includes(p.fields.Status)) postDates[d].scheduled++;
+    }
+
     return NextResponse.json({
       campaigns: {
         total: campaigns.length,
@@ -221,6 +266,15 @@ export async function GET(request: NextRequest) {
         publishedThisMonth,
       },
       timeline,
+      summary: {
+        totalPosts: totalPostsAllTime,
+        totalPublished,
+        totalCampaigns: campaigns.filter((c) => c.fields.Status !== "Archived").length,
+        platformsUsed,
+        platformCounts,
+      },
+      upcoming: upcomingPosts,
+      postDates,
     });
   } catch (err) {
     console.error("[dashboard] Error:", err);
