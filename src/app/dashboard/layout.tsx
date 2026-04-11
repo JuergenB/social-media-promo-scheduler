@@ -51,7 +51,7 @@ const mainNav = [
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Megaphone },
   { label: "Quick Post", href: "/dashboard/quick-post", icon: PenSquare },
   { label: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3, disabled: true },
+  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
 ];
 
 const settingsSubNav = [
@@ -191,7 +191,7 @@ export default function DashboardLayout({
               pathname={pathname}
             />
             {mainNav.map((item) => (
-              <NavLink key={item.href} {...item} pathname={pathname} disabled={item.disabled} />
+              <NavLink key={item.href} {...item} pathname={pathname} />
             ))}
           </div>
         </nav>

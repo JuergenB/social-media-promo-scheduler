@@ -176,6 +176,26 @@ export default function DashboardPage() {
     (a: { status: string }) => a.status === "needs_reconnect"
   ).length;
 
+  // Analytics summary (Zernio engagement)
+  const { data: analyticsData } = useQuery<{
+    engagement: {
+      totalImpressions: number;
+      totalLikes: number;
+      totalComments: number;
+      totalClicks: number;
+      postsTracked: number;
+    };
+  }>({
+    queryKey: ["analytics-summary", currentBrand?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/dashboard/analytics?brandId=${currentBrand!.id}`);
+      if (!res.ok) throw new Error("Failed to load analytics");
+      return res.json();
+    },
+    enabled: !!currentBrand?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Approve post inline
   const approveMutation = useMutation({
     mutationFn: async (postId: string) => {
@@ -663,6 +683,46 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Engagement Summary ──────────────────────────────── */}
+          {analyticsData?.engagement && (
+            <Card>
+              <div className="px-5 pt-5 pb-3">
+                <div className="flex items-center justify-between">
+                  <Subheading className="flex items-center gap-2">
+                    <Eye className="h-4 w-4 text-primary" />
+                    Engagement
+                  </Subheading>
+                  <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
+                    <Link href="/dashboard/analytics">Details</Link>
+                  </Button>
+                </div>
+              </div>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-lg font-semibold">{analyticsData.engagement.totalImpressions.toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground">Impressions</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-lg font-semibold">{analyticsData.engagement.totalLikes.toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground">Likes</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-lg font-semibold">{analyticsData.engagement.totalComments.toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground">Comments</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-center">
+                    <p className="text-lg font-semibold">{analyticsData.engagement.totalClicks.toLocaleString()}</p>
+                    <p className="text-[10px] text-muted-foreground">Clicks</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center mt-2">
+                  {analyticsData.engagement.postsTracked} posts tracked
+                </p>
               </CardContent>
             </Card>
           )}
