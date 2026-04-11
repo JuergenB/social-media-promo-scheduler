@@ -8,7 +8,7 @@
  * Now also supports per-brand tone dimensions (8 sliders, 1-10 each)
  * that are scaled by the campaign's master intensity.
  *
- * @see https://github.com/JuergenB/social-media-promo-scheduler/issues/32
+ * @see https://github.com/JuergenB/polywiz-app/issues/32
  */
 
 import type { ToneDimensions } from "@/lib/airtable/types";

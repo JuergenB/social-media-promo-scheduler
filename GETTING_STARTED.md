@@ -5,7 +5,7 @@ This document outlines the phased development plan and how to start contributing
 ## Quick Start
 
 ```bash
-cd social-media-promo-scheduler
+cd polywiz-app
 npm install
 # Edit .env.local with your API keys (see .env.example)
 npm run dev

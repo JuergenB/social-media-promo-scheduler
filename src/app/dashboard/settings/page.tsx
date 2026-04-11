@@ -374,7 +374,7 @@ export default function SettingsPage() {
             </p>
             <p className="mt-2">
               <a
-                href="https://github.com/JuergenB/social-media-promo-scheduler"
+                href="https://github.com/JuergenB/polywiz-app"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-4 hover:text-foreground"
@@ -383,7 +383,7 @@ export default function SettingsPage() {
               </a>
               {" · "}
               <a
-                href="https://github.com/JuergenB/social-media-promo-scheduler/issues"
+                href="https://github.com/JuergenB/polywiz-app/issues"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline underline-offset-4 hover:text-foreground"

@@ -80,7 +80,7 @@ Then READ the screenshot file to evaluate it visually.
 ## Project Structure
 
 ```
-social-media-promo-scheduler/
+polywiz-app/
 ├── src/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/

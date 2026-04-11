@@ -53,7 +53,7 @@ PolyWiz is a Next.js 16 social media campaign generator. Brand switching with pe
 | Elise | (TBD) | curator | Artsville USA |
 
 ### Vercel
-- Already deployed at `https://social-media-promo-scheduler.vercel.app`
+- Already deployed at `https://app.polywiz.polymash.com`
 - Not configured with per-brand env vars yet
 - Not tested with multi-user auth
 
@@ -195,7 +195,7 @@ Deploy to Vercel with all per-brand env vars and multi-user auth working.
    - `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID`
    - `FIRECRAWL_API_KEY`
    - `AUTH_SECRET`, `AUTH_USERS` (all team members with passwords)
-   - `NEXT_PUBLIC_APP_URL=https://social-media-promo-scheduler.vercel.app`
+   - `NEXT_PUBLIC_APP_URL=https://app.polywiz.polymash.com`
    - `AUTH_TRUST_HOST=true`
 
 2. **Verify build** — `npm run build` locally first

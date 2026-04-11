@@ -6,7 +6,7 @@ Copy everything below this line and paste it to start the next session.
 
 ## Context
 
-We're building the Social Media Promo Scheduler. The repo is at https://github.com/JuergenB/social-media-promo-scheduler (private). Read the README.md, GETTING_STARTED.md, and CLAUDE.md first — they contain all project decisions, phased plan, and standing rules.
+We're building PolyWiz. The repo is at https://github.com/JuergenB/polywiz-app (private). Read the README.md, GETTING_STARTED.md, and CLAUDE.md first — they contain all project decisions, phased plan, and standing rules.
 
 The app is a Next.js 16 fork of LateWiz (Zernio social media scheduler) with Auth.js v5 working. It runs on port 3025. Dev server is `npm run dev`.
 

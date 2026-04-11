@@ -8,7 +8,7 @@ PolyWiz is a Next.js 16 social media campaign generator. It scrapes blog posts/n
 
 ## Goal
 
-Build a dynamic, Airtable-backed rules system for campaign types. Full spec is in GitHub issue #39 on repo `JuergenB/social-media-promo-scheduler`. Read it first — it has the complete Airtable schema, UI wireframes, migration path, and example rules.
+Build a dynamic, Airtable-backed rules system for campaign types. Full spec is in GitHub issue #39 on repo `JuergenB/polywiz-app`. Read it first — it has the complete Airtable schema, UI wireframes, migration path, and example rules.
 
 ## What Exists Today
 
