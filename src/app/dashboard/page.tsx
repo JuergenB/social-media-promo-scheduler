@@ -281,8 +281,8 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Logo size="sm" showText={true} />
-            <span className="text-muted-foreground">·</span>
-            <h1 className="text-lg font-semibold tracking-tight">
+            <span className="text-muted-foreground/60 text-sm">·</span>
+            <h1 className="text-base font-medium text-muted-foreground">
               {currentBrand.name}
             </h1>
           </div>
