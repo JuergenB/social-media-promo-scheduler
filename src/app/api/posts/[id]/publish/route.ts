@@ -17,6 +17,8 @@ interface PostFields {
   "First Comment": string;
   Status: string;
   "Zernio Post ID": string;
+  Collaborators: string;
+  "User Tags": string;
 }
 
 interface CampaignFields {
@@ -192,17 +194,41 @@ export async function POST(
       ? new Date(userScheduledFor).toISOString()
       : new Date(Date.now() + 2 * 60 * 1000).toISOString();
 
-    // Build platform entry with platformSpecificData for first comment
+    // Build platform entry with platformSpecificData
     const platformEntry: Record<string, unknown> = {
       platform: platform as "instagram" | "twitter" | "linkedin" | "facebook" | "threads" | "bluesky" | "pinterest",
       accountId: (account as { _id: string })._id,
     };
 
-    // First comment must be inside platformSpecificData per Zernio API spec
+    // Build platformSpecificData (firstComment + Instagram collaboration fields)
+    const psd: Record<string, unknown> = {};
+
     if (post.fields["First Comment"]) {
-      platformEntry.platformSpecificData = {
-        firstComment: post.fields["First Comment"],
-      };
+      psd.firstComment = post.fields["First Comment"];
+    }
+
+    // Instagram-only: collaborators and user tags
+    if (platform === "instagram") {
+      try {
+        const collabs: string[] = post.fields.Collaborators
+          ? JSON.parse(post.fields.Collaborators)
+          : [];
+        const cleaned = collabs.map((u) => u.replace(/^@/, ""));
+        if (cleaned.length > 0) psd.collaborators = cleaned;
+      } catch { /* ignore malformed JSON */ }
+
+      try {
+        const tags: string[] = post.fields["User Tags"]
+          ? JSON.parse(post.fields["User Tags"])
+          : [];
+        if (tags.length > 0) {
+          psd.userTags = tags.map((u) => ({ username: u.replace(/^@/, ""), x: 0.5, y: 0.5 }));
+        }
+      } catch { /* ignore malformed JSON */ }
+    }
+
+    if (Object.keys(psd).length > 0) {
+      platformEntry.platformSpecificData = psd;
     }
 
     const createBody: Record<string, unknown> = {

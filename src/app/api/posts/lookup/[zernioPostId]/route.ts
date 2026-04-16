@@ -24,6 +24,8 @@ interface PostFields {
   "First Comment": string;
   "Sort Order": number | null;
   "Platform Post URL": string;
+  Collaborators: string;
+  "User Tags": string;
 }
 
 interface CampaignFields {
@@ -83,6 +85,8 @@ function mapPostFields(id: string, fields: PostFields): Post {
     firstComment: fields["First Comment"] || "",
     sortOrder: fields["Sort Order"] ?? null,
     platformPostUrl: fields["Platform Post URL"] || "",
+    collaborators: fields["Collaborators"] || "",
+    userTags: fields["User Tags"] || "",
   };
 }
 
