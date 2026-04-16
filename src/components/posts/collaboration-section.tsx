@@ -87,6 +87,7 @@ export function CollaborationSection({
   const [tagsInput, setTagsInput] = useState(initialUserTags.map(ensureAt).join(", "));
   const [chipVersion, setChipVersion] = useState(0);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const dirtyRef = useRef(false);
 
   const parsedCollabs = parseUsernames(collabInput);
   const parsedTags = parseUsernames(tagsInput);
@@ -148,11 +149,12 @@ export function CollaborationSection({
   }, [postId]);
 
   const handleBlur = useCallback(() => {
-    // Short delay so chip clicks register before blur fires
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      // Re-check hasChanges at save time (captured via closure won't work, so just always save — the mutation is idempotent)
-      saveMutation.mutate();
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        saveMutation.mutate();
+      }
     }, 500);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId]);
@@ -164,9 +166,10 @@ export function CollaborationSection({
 
   const handleChipAdd = (setter: (v: string) => void, currentInput: string, handle: string) => {
     setter(appendHandle(currentInput, handle));
-    // Save after a short delay to let state update
+    dirtyRef.current = true;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
+      dirtyRef.current = false;
       saveMutation.mutate();
     }, 300);
   };
@@ -177,7 +180,8 @@ export function CollaborationSection({
         onClick={() => {
           const opening = !expanded;
           setExpanded(opening);
-          if (!opening && hasChanges && !isPublished && parsedCollabs.length <= 3) {
+          if (!opening && dirtyRef.current && !isPublished && parsedCollabs.length <= 3) {
+            dirtyRef.current = false;
             triggerSave();
           } else if (opening) {
             requestAnimationFrame(() => {
@@ -214,7 +218,7 @@ export function CollaborationSection({
                 <label className="text-[10px] text-muted-foreground">Collaborators (max 3)</label>
                 <input
                   value={collabInput}
-                  onChange={(e) => setCollabInput(e.target.value)}
+                  onChange={(e) => { setCollabInput(e.target.value); dirtyRef.current = true; }}
                   onBlur={handleBlur}
                   placeholder="@username1, @username2 (comma-separated)"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
@@ -249,7 +253,7 @@ export function CollaborationSection({
                 <label className="text-[10px] text-muted-foreground">Image Tags</label>
                 <input
                   value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
+                  onChange={(e) => { setTagsInput(e.target.value); dirtyRef.current = true; }}
                   onBlur={handleBlur}
                   placeholder="@artistname, @galleryname (comma-separated)"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"

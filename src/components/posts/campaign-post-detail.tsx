@@ -471,6 +471,7 @@ export function CampaignPostDetail({
         {/* Instagram collaboration — collaborators & image tags */}
         {isInstagram && (
           <CollaborationSection
+            key={post.id}
             postId={post.id}
             collaborators={collaborators}
             userTags={userTags}
