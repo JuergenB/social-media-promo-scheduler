@@ -117,6 +117,16 @@ export async function PATCH(
       fields["First Comment"] = body.firstComment;
     }
 
+    // Collaborators (Instagram collab invites — JSON string array)
+    if (body.collaborators !== undefined) {
+      fields["Collaborators"] = body.collaborators;
+    }
+
+    // User Tags (Instagram image tags — JSON string array)
+    if (body.userTags !== undefined) {
+      fields["User Tags"] = body.userTags;
+    }
+
     // Scheduled date
     if (body.scheduledDate !== undefined) {
       fields["Scheduled Date"] = body.scheduledDate;
@@ -141,7 +151,9 @@ export async function PATCH(
       || fields["Image URL"] !== undefined
       || fields["Media URLs"] !== undefined
       || fields["Media Captions"] !== undefined
-      || fields["First Comment"] !== undefined;
+      || fields["First Comment"] !== undefined
+      || fields["Collaborators"] !== undefined
+      || fields["User Tags"] !== undefined;
 
     if (contentOrMediaChanged) {
       // Fire-and-forget: don't block the response on Zernio sync
@@ -157,6 +169,8 @@ export async function PATCH(
             "Media Captions": string;
             "First Comment": string;
             Platform: string;
+            Collaborators: string;
+            "User Tags": string;
           }>("Posts", id);
 
           const zernioPostId = post.fields["Zernio Post ID"];
@@ -192,10 +206,35 @@ export async function PATCH(
             updateBody.scheduledFor = post.fields["Scheduled Date"];
           }
 
-          // Sync first comment to Zernio (Instagram/Facebook/LinkedIn)
-          if (post.fields["First Comment"]) {
-            const platform = (post.fields.Platform || "").toLowerCase();
-            if (["instagram", "facebook", "linkedin"].includes(platform)) {
+          // Sync firstComment + collaboration fields to Zernio (Instagram-specific)
+          const platform = (post.fields.Platform || "").toLowerCase();
+          if (platform === "instagram") {
+            const psd: Record<string, unknown> = {};
+            if (post.fields["First Comment"]) {
+              psd.firstComment = post.fields["First Comment"];
+            }
+            // Collaborators: JSON array of usernames
+            try {
+              const collabs: string[] = post.fields.Collaborators
+                ? JSON.parse(post.fields.Collaborators)
+                : [];
+              if (collabs.length > 0) psd.collaborators = collabs;
+            } catch { /* ignore malformed JSON */ }
+            // User Tags: JSON array of usernames → {username, x, y} objects
+            try {
+              const tags: string[] = post.fields["User Tags"]
+                ? JSON.parse(post.fields["User Tags"])
+                : [];
+              if (tags.length > 0) {
+                psd.userTags = tags.map((username) => ({ username, x: 0.5, y: 0.5 }));
+              }
+            } catch { /* ignore malformed JSON */ }
+            if (Object.keys(psd).length > 0) {
+              updateBody.platformSpecificData = psd;
+            }
+          } else if (["facebook", "linkedin"].includes(platform)) {
+            // Non-Instagram platforms: firstComment only
+            if (post.fields["First Comment"]) {
               updateBody.platformSpecificData = {
                 firstComment: post.fields["First Comment"],
               };
