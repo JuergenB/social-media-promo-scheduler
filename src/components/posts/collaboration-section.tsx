@@ -37,21 +37,14 @@ export function CollaborationSection({
   const [expanded, setExpanded] = useState(false);
   const [collabInput, setCollabInput] = useState(initialCollaborators.join(", "));
   const [tagsInput, setTagsInput] = useState(initialUserTags.join(", "));
-  const [editing, setEditing] = useState(false);
-
-  const scrollIntoView = () => {
-    requestAnimationFrame(() => {
-      contentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-  };
 
   const parsedCollabs = parseUsernames(collabInput);
   const parsedTags = parseUsernames(tagsInput);
   const collabError = parsedCollabs.length > 3 ? "Maximum 3 collaborators allowed" : null;
 
-  // Summary for header — use saved (initial) values, or current input if editing
-  const displayCollabs = editing ? parsedCollabs : initialCollaborators;
-  const displayTags = editing ? parsedTags : initialUserTags;
+  // Summary for header — use current input values for live feedback
+  const displayCollabs = expanded ? parsedCollabs : initialCollaborators;
+  const displayTags = expanded ? parsedTags : initialUserTags;
   const parts: string[] = [];
   if (displayCollabs.length > 0) {
     parts.push(`${displayCollabs.length} collaborator${displayCollabs.length > 1 ? "s" : ""}`);
@@ -78,7 +71,7 @@ export function CollaborationSection({
       if (!res.ok) throw new Error("Failed to save collaboration settings");
     },
     onSuccess: () => {
-      setEditing(false);
+      setExpanded(false);
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
       toast.success("Collaboration settings saved");
     },
@@ -91,11 +84,15 @@ export function CollaborationSection({
         onClick={() => {
           const opening = !expanded;
           setExpanded(opening);
-          // When empty and not published, go straight to edit mode — no intermediate "click to add" step
-          if (opening && !isPublished && initialCollaborators.length === 0 && initialUserTags.length === 0) {
-            setEditing(true);
+          if (!opening) {
+            // Collapsing — reset inputs to saved values
+            setCollabInput(initialCollaborators.join(", "));
+            setTagsInput(initialUserTags.join(", "));
+          } else {
+            requestAnimationFrame(() => {
+              contentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            });
           }
-          if (opening) scrollIntoView();
         }}
         className="flex items-center gap-1.5 w-full px-6 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
@@ -108,7 +105,19 @@ export function CollaborationSection({
       </button>
       {expanded && (
         <div ref={contentRef} className="px-6 pb-3">
-          {editing && !isPublished ? (
+          {isPublished ? (
+            <div className="text-xs leading-relaxed text-muted-foreground">
+              {initialCollaborators.length > 0 && (
+                <div>Collaborators: {initialCollaborators.map(u => `@${u}`).join(", ")}</div>
+              )}
+              {initialUserTags.length > 0 && (
+                <div>Image tags: {initialUserTags.map(u => `@${u}`).join(", ")}</div>
+              )}
+              {initialCollaborators.length === 0 && initialUserTags.length === 0 && (
+                <span className="italic">None</span>
+              )}
+            </div>
+          ) : (
             <div className="space-y-3">
               <div className="space-y-1">
                 <label className="text-[10px] text-muted-foreground">Collaborators (max 3)</label>
@@ -131,51 +140,16 @@ export function CollaborationSection({
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              {hasChanges && (
                 <Button
                   size="sm"
                   className="h-6 text-xs"
-                  disabled={!hasChanges || !!collabError || saveMutation.isPending}
+                  disabled={!!collabError || saveMutation.isPending}
                   onClick={() => saveMutation.mutate()}
                 >
                   <Save className="h-3 w-3 mr-1" />
                   {saveMutation.isPending ? "Saving..." : "Save"}
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={() => {
-                    setEditing(false);
-                    setCollabInput(initialCollaborators.join(", "));
-                    setTagsInput(initialUserTags.join(", "));
-                    // If nothing was saved, collapse entirely — don't show empty read-only state
-                    if (initialCollaborators.length === 0 && initialUserTags.length === 0) {
-                      setExpanded(false);
-                    }
-                  }}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div
-              className={`text-xs leading-relaxed text-muted-foreground${!isPublished ? " cursor-pointer hover:text-foreground" : ""}`}
-              onClick={() => { if (!isPublished) { setEditing(true); scrollIntoView(); } }}
-              title={isPublished ? undefined : "Click to edit"}
-            >
-              {initialCollaborators.length > 0 || initialUserTags.length > 0 ? (
-                <div className="space-y-1">
-                  {initialCollaborators.length > 0 && (
-                    <div>Collaborators: {initialCollaborators.map(u => `@${u}`).join(", ")}</div>
-                  )}
-                  {initialUserTags.length > 0 && (
-                    <div>Image tags: {initialUserTags.map(u => `@${u}`).join(", ")}</div>
-                  )}
-                </div>
-              ) : (
-                <span className="italic">Click to add collaborators or image tags</span>
               )}
             </div>
           )}
