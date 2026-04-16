@@ -61,6 +61,8 @@ interface PostFields {
   "First Comment": string;
   "Sort Order": number | null;
   "Platform Post URL": string;
+  Collaborators: string;
+  "User Tags": string;
 }
 
 export async function GET(
@@ -156,6 +158,8 @@ export async function GET(
       firstComment: r.fields["First Comment"] || "",
       sortOrder: r.fields["Sort Order"] ?? null,
       platformPostUrl: r.fields["Platform Post URL"] || "",
+      collaborators: r.fields["Collaborators"] || "",
+      userTags: r.fields["User Tags"] || "",
       createdAt: r.createdTime || "",
     }));
 

@@ -194,6 +194,10 @@ export interface Post {
   sortOrder: number | null;
   /** Public URL of the published post on the platform (populated after publish via webhook or backfill). */
   platformPostUrl: string;
+  /** JSON string array of Instagram usernames invited as collaborators (max 3). */
+  collaborators: string;
+  /** JSON string array of Instagram usernames tagged on the image (center-positioned). */
+  userTags: string;
   /** Airtable record creation timestamp (ISO 8601) */
   createdAt?: string;
 }
