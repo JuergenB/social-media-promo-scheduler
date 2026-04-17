@@ -28,7 +28,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette, Calendar, BookOpen, Lock, Users } from "lucide-react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
@@ -90,7 +90,7 @@ export default function SettingsPage() {
 
   const handleLogout = () => {
     logout();
-    router.push("/");
+    signOut({ callbackUrl: "https://polywiz.polymash.com" });
   };
 
   const maskedApiKey = apiKey

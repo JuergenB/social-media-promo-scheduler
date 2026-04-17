@@ -169,7 +169,7 @@ export default function DashboardLayout({
   const currentProfile = profiles.find((p: any) => p._id === defaultProfileId) || profiles[0];
 
   const handleLogout = () => {
-    signOut({ callbackUrl: "/login" });
+    signOut({ callbackUrl: "https://polywiz.polymash.com" });
   };
 
   return (
