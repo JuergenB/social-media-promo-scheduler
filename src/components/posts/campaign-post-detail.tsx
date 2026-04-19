@@ -8,6 +8,14 @@ import { parseISO } from "date-fns/parseISO";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +52,7 @@ import type { Campaign, Post } from "@/lib/airtable/types";
 import type { CoverSlideData } from "@/lib/cover-slide-types";
 import {
   ArrowLeft,
+  CalendarIcon,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -683,27 +692,18 @@ export function CampaignPostDetail({
           {post.status === "Approved" && (
             <>
               {actions.showSchedulePicker ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="datetime-local"
-                    value={actions.scheduleDateTime}
-                    onChange={(e) => actions.setScheduleDateTime(e.target.value)}
-                    className="text-xs border border-border rounded px-2 py-1 bg-background"
-                    min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
-                  />
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => actions.publishNowMutation.mutate(new Date(actions.scheduleDateTime).toISOString())}
-                    disabled={actions.publishNowMutation.isPending || !actions.scheduleDateTime}
-                  >
-                    {actions.publishNowMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1 h-3.5 w-3.5" />}
-                    {actions.publishNowMutation.isPending ? "" : "Schedule"}
-                  </Button>
-                  <Button variant="ghost" size="sm" className="text-xs" onClick={() => { actions.setShowSchedulePicker(false); actions.setScheduleDateTime(""); }}>
-                    Cancel
-                  </Button>
-                </div>
+                <SchedulePopover
+                  initialValue={actions.scheduleDateTime}
+                  isPending={actions.publishNowMutation.isPending}
+                  onSchedule={(combined) => {
+                    actions.setScheduleDateTime(combined);
+                    actions.publishNowMutation.mutate(new Date(combined).toISOString());
+                  }}
+                  onCancel={() => {
+                    actions.setShowSchedulePicker(false);
+                    actions.setScheduleDateTime("");
+                  }}
+                />
               ) : (
                 <div className="flex items-center gap-1">
                   <Button
@@ -750,6 +750,22 @@ export function CampaignPostDetail({
               <span className="text-[10px] text-muted-foreground">
                 Edits auto-sync to Zernio
               </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => {
+                  if (confirm("Unschedule this post? It will be cancelled on Zernio and removed from lnk.bio (if applicable), then return to your Approved pool.")) {
+                    actions.updateStatus("Approved", { clearZernioState: true }).then(() => {
+                      import("sonner").then(({ toast }) => toast.success("Post unscheduled — back in Approved pool"));
+                      onClose();
+                    });
+                  }
+                }}
+              >
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                Unschedule
+              </Button>
             </div>
           )}
           {post.status === "Failed" && (
@@ -850,5 +866,190 @@ export function CampaignPostDetail({
         />
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SchedulePopover — Calendar + time picker with explicit Schedule action
+// inside the popover overlay (replaces the confusing native datetime-local)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SchedulePopoverProps {
+  /** datetime-local style string ("YYYY-MM-DDTHH:MM"), may be empty */
+  initialValue: string;
+  isPending: boolean;
+  /** Called with a datetime-local style string on confirm */
+  onSchedule: (combined: string) => void;
+  onCancel: () => void;
+}
+
+function pad2(n: number) {
+  return n.toString().padStart(2, "0");
+}
+
+function formatLocalDate(d: Date): string {
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+function combineLocal(date: Date | undefined, time: string): string {
+  if (!date || !time) return "";
+  return `${formatLocalDate(date)}T${time}`;
+}
+
+function parseInitialValue(value: string): { date: Date | undefined; time: string } {
+  if (!value) return { date: undefined, time: "" };
+  const [datePart, timePart] = value.split("T");
+  if (!datePart) return { date: undefined, time: "" };
+  const [y, m, d] = datePart.split("-").map(Number);
+  const date = new Date(y, (m || 1) - 1, d || 1);
+  return { date, time: timePart || "" };
+}
+
+function SchedulePopover({
+  initialValue,
+  isPending,
+  onSchedule,
+  onCancel,
+}: SchedulePopoverProps) {
+  const initial = React.useMemo(() => parseInitialValue(initialValue), [initialValue]);
+  const [open, setOpen] = useState(true);
+  const [date, setDate] = useState<Date | undefined>(initial.date);
+  const [time, setTime] = useState<string>(initial.time);
+
+  const combined = combineLocal(date, time);
+  const triggerLabel = combined
+    ? format(new Date(combined), "MMM d, yyyy 'at' h:mm a")
+    : "Pick date & time";
+
+  const setQuickPick = (offsetDays: number, hour: number, minute = 0) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offsetDays);
+    d.setHours(hour, minute, 0, 0);
+    setDate(d);
+    setTime(`${pad2(hour)}:${pad2(minute)}`);
+  };
+
+  const setNextMonday = (hour: number, minute = 0) => {
+    const d = new Date();
+    const daysUntilMonday = (8 - d.getDay()) % 7 || 7;
+    d.setDate(d.getDate() + daysUntilMonday);
+    d.setHours(hour, minute, 0, 0);
+    setDate(d);
+    setTime(`${pad2(hour)}:${pad2(minute)}`);
+  };
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const handleSchedule = () => {
+    if (!combined) return;
+    setOpen(false);
+    onSchedule(combined);
+  };
+
+  const handleCancel = () => {
+    setOpen(false);
+    onCancel();
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) onCancel();
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="text-xs">
+          <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+          {triggerLabel}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-auto p-0">
+        <div className="space-y-3 p-3">
+          {/* Quick picks */}
+          <div className="flex flex-wrap gap-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setQuickPick(1, 9)}
+            >
+              Tomorrow 9 AM
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setQuickPick(1, 18)}
+            >
+              Tomorrow 6 PM
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setNextMonday(10)}
+            >
+              Next Monday 10 AM
+            </Button>
+          </div>
+
+          <div className="border-t" />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <Calendar
+              mode="single"
+              selected={date}
+              onSelect={setDate}
+              disabled={(d) => d < todayStart}
+              initialFocus
+            />
+            <div className="space-y-2 sm:w-40">
+              <Label className="text-xs">Time</Label>
+              <Input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="h-9"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Local time
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-3 py-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleCancel}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={handleSchedule}
+            disabled={isPending || !combined}
+          >
+            {isPending ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="mr-1 h-3.5 w-3.5" />
+            )}
+            {isPending ? "Scheduling..." : "Schedule"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

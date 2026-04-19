@@ -26,6 +26,17 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
     for (const key of invalidateKeys) {
       queryClient.invalidateQueries({ queryKey: key });
     }
+    queryClient.invalidateQueries({
+      predicate: (q) => {
+        const root = q.queryKey[0];
+        return typeof root === "string" && (
+          root === "campaigns" ||
+          root === "campaign-posts" ||
+          root === "post-lookup" ||
+          root === "calendar"
+        );
+      },
+    });
   };
 
   const approveMutation = useMutation({
