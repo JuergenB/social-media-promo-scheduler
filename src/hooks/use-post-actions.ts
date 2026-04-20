@@ -33,7 +33,8 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
           root === "campaigns" ||
           root === "campaign-posts" ||
           root === "post-lookup" ||
-          root === "calendar"
+          root === "calendar" ||
+          root === "dashboard-stats"
         );
       },
     });

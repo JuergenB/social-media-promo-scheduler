@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns/format";
 import { parseISO } from "date-fns/parseISO";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarWidget } from "@/components/ui/calendar";
 import { Heading, Subheading } from "@/components/catalyst/heading";
 import { Text } from "@/components/catalyst/text";
@@ -18,8 +19,8 @@ import { useBrand } from "@/lib/brand-context";
 import { useAccountsHealth } from "@/hooks";
 import type { Platform } from "@/lib/late-api";
 import type { CampaignType, PostStatus } from "@/lib/airtable/types";
+import { POST_STATUS_CONFIG } from "@/lib/platform-constants";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import {
   AlertCircle,
   ArrowRight,
@@ -38,9 +39,24 @@ import {
   CalendarDays,
   Sparkles,
   Send,
+  CalendarOff,
+  Pencil,
+  Wrench,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
+
+interface AttentionPost {
+  id: string;
+  platform: string;
+  content: string;
+  scheduledDate: string;
+  imageUrl: string;
+  campaignId: string;
+  campaignName: string;
+  status: PostStatus;
+  createdTime: string;
+}
 
 interface DashboardStats {
   campaigns: {
@@ -83,6 +99,16 @@ interface DashboardStats {
       campaignName: string;
       zernioPostId: string;
     }>;
+    approvedUnscheduled: AttentionPost[];
+    modified: AttentionPost[];
+    richAssetInFlight: AttentionPost[];
+    failed: AttentionPost[];
+    attentionCounts: {
+      approvedUnscheduled: number;
+      failed: number;
+      modified: number;
+      richAssetInFlight: number;
+    };
     scheduledThisWeek: number;
     publishedThisMonth: number;
   };
@@ -156,7 +182,6 @@ const CAMPAIGN_STATUS_VARIANT: Record<string, "default" | "secondary" | "outline
 export default function DashboardPage() {
   const router = useRouter();
   const { currentBrand, isLoading: isBrandLoading } = useBrand();
-  const queryClient = useQueryClient();
   const [pipelineWindow, setPipelineWindow] = useState<"30d" | "90d" | "ytd" | "all">("90d");
 
   const { data, isLoading, error } = useQuery<DashboardStats>({
@@ -194,37 +219,6 @@ export default function DashboardPage() {
     },
     enabled: !!currentBrand?.id,
     staleTime: 5 * 60 * 1000,
-  });
-
-  // Approve post inline
-  const approveMutation = useMutation({
-    mutationFn: async (postId: string) => {
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Approved" }),
-      });
-      if (!res.ok) throw new Error("Failed to approve");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast.success("Post approved");
-    },
-  });
-
-  const dismissMutation = useMutation({
-    mutationFn: async (postId: string) => {
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "Dismissed" }),
-      });
-      if (!res.ok) throw new Error("Failed to dismiss");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
-      toast.success("Post dismissed");
-    },
   });
 
   // All hooks must be called unconditionally (before early returns)
@@ -458,105 +452,8 @@ export default function DashboardPage() {
         {/* Left column (span 2) */}
         <div className="lg:col-span-2 space-y-6">
 
-          {/* Approval Queue */}
-          <Card>
-            <div className="px-5 pt-5 pb-3">
-              <div className="flex items-center justify-between">
-                <Subheading className="flex items-center gap-2">
-                  <Eye className="h-4 w-4 text-amber-500" />
-                  Needs Your Attention
-                  {pendingCount > 0 && (
-                    <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-amber-500 text-white text-xs font-medium">
-                      {pendingCount}
-                    </span>
-                  )}
-                </Subheading>
-              </div>
-            </div>
-            <CardContent className="pt-0 space-y-2">
-              {data.posts.pendingReview.length === 0 ? (
-                <div className="flex items-center gap-3 py-6 justify-center text-green-600 dark:text-green-400">
-                  <CheckCircle2 className="h-5 w-5" />
-                  <Text className="!text-green-600 dark:!text-green-400">All caught up</Text>
-                </div>
-              ) : (
-                data.posts.pendingReview.map((post) => (
-                  <Link
-                    key={post.id}
-                    href={`/dashboard/campaigns/${post.campaignId}?postId=${post.id}`}
-                    className="flex items-start gap-3 rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors cursor-pointer"
-                  >
-                    {post.imageUrl && (
-                      <img src={post.imageUrl} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <PlatformIcon platform={toPlatformId(post.platform)} size="sm" />
-                        <span className="text-xs text-muted-foreground truncate">{post.campaignName}</span>
-                      </div>
-                      <p className="text-sm truncate">{post.content}</p>
-                      {post.scheduledDate && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {format(parseISO(post.scheduledDate), "MMM d, h:mm a")}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex gap-1 shrink-0" onClick={(e) => e.preventDefault()}>
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-7 px-2 text-xs"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); approveMutation.mutate(post.id); }}
-                        disabled={approveMutation.isPending}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2 text-xs text-muted-foreground"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); dismissMutation.mutate(post.id); }}
-                        disabled={dismissMutation.isPending}
-                      >
-                        Dismiss
-                      </Button>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Failed Posts Alert */}
-          {data.posts.failedPosts.length > 0 && (
-            <Card className="border-red-200 dark:border-red-900">
-              <div className="px-5 pt-5 pb-3">
-                <Subheading className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <XCircle className="h-4 w-4" />
-                  Failed Posts
-                  <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-medium">
-                    {data.posts.failedPosts.length}
-                  </span>
-                </Subheading>
-              </div>
-              <CardContent className="pt-0 space-y-2">
-                {data.posts.failedPosts.map((post) => (
-                  <Link
-                    key={post.id}
-                    href={`/dashboard/campaigns/${post.campaignId}?postId=${post.id}`}
-                    className="flex items-center gap-3 rounded-lg bg-red-50 dark:bg-red-950/30 p-3 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors cursor-pointer"
-                  >
-                    <PlatformIcon platform={toPlatformId(post.platform)} size="sm" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{post.content}</p>
-                      <p className="text-xs text-muted-foreground">{post.campaignName}</p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-red-400 shrink-0" />
-                  </Link>
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          {/* Needs Your Attention — consolidated tabbed panel (#146) */}
+          <NeedsAttentionPanel posts={data.posts} />
 
           {/* Campaign Status Board */}
           <Card>
@@ -831,6 +728,193 @@ function StatCard({
   );
 
   return href ? <Link href={href}>{content}</Link> : content;
+}
+
+// ── Needs Attention Panel (#146) ──────────────────────────────────
+//
+// Tabbed triage hub. Information-only — clicking a row opens the existing
+// post detail modal at /dashboard/campaigns/{campaignId}?postId={id}.
+//
+// Tab order (priority): Approved-unscheduled, Failed, Modified, Rich-asset.
+// Default-selected tab is the highest-priority tab with a non-zero count.
+
+type AttentionTabId = "approvedUnscheduled" | "failed" | "modified" | "richAssetInFlight";
+
+const RICH_ASSETS_BADGE_CLASS =
+  "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300";
+
+const ATTENTION_TABS: Array<{
+  id: AttentionTabId;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  emptyText: string;
+  /** Tailwind class applied to the count badge when count > 0. Falls back to muted when count === 0. */
+  activeBadgeClass: string;
+  /** When true, badge uses Badge variant="destructive" instead of activeBadgeClass. */
+  destructive?: boolean;
+}> = [
+  {
+    id: "approvedUnscheduled",
+    label: "Approved",
+    icon: CalendarOff,
+    emptyText: "No posts here — nice.",
+    activeBadgeClass: POST_STATUS_CONFIG.Approved.className!,
+  },
+  {
+    id: "richAssetInFlight",
+    label: "Rich assets",
+    icon: Wrench,
+    emptyText: "No posts here — nice.",
+    activeBadgeClass: RICH_ASSETS_BADGE_CLASS,
+  },
+  {
+    id: "failed",
+    label: "Failed",
+    icon: XCircle,
+    emptyText: "No posts here — nice.",
+    activeBadgeClass: "",
+    destructive: true,
+  },
+  {
+    id: "modified",
+    label: "Modified",
+    icon: Pencil,
+    emptyText: "No posts here — nice.",
+    activeBadgeClass: POST_STATUS_CONFIG.Modified.className!,
+  },
+];
+
+function groupByCampaign(rows: AttentionPost[]): Array<{ campaignId: string; campaignName: string; posts: AttentionPost[] }> {
+  const map = new Map<string, { campaignId: string; campaignName: string; posts: AttentionPost[] }>();
+  for (const row of rows) {
+    const existing = map.get(row.campaignId);
+    if (existing) existing.posts.push(row);
+    else map.set(row.campaignId, { campaignId: row.campaignId, campaignName: row.campaignName || "Uncategorised", posts: [row] });
+  }
+  return Array.from(map.values());
+}
+
+function NeedsAttentionPanel({ posts }: { posts: DashboardStats["posts"] }) {
+  const counts = posts.attentionCounts || { approvedUnscheduled: 0, failed: 0, modified: 0, richAssetInFlight: 0 };
+
+  // Default tab = first non-zero in priority order, else first tab
+  const defaultTab: AttentionTabId =
+    (ATTENTION_TABS.find((t) => counts[t.id] > 0)?.id) || "approvedUnscheduled";
+
+  const tabRows: Record<AttentionTabId, AttentionPost[]> = {
+    approvedUnscheduled: posts.approvedUnscheduled || [],
+    failed: posts.failed || [],
+    modified: posts.modified || [],
+    richAssetInFlight: posts.richAssetInFlight || [],
+  };
+
+  return (
+    <Card>
+      <div className="px-5 pt-5 pb-3">
+        <div className="flex items-center justify-between">
+          <Subheading className="flex items-center gap-2">
+            <Eye className="h-4 w-4 text-amber-500" />
+            Needs Your Attention
+          </Subheading>
+        </div>
+      </div>
+      <CardContent className="pt-0">
+        <Tabs defaultValue={defaultTab} className="gap-3">
+          <TabsList className="mb-4 h-auto w-full p-1">
+            {ATTENTION_TABS.map((tab) => {
+              const Icon = tab.icon;
+              const count = counts[tab.id];
+              const badgeClass =
+                count === 0
+                  ? "bg-muted/60 text-muted-foreground"
+                  : tab.destructive
+                    ? "bg-destructive text-destructive-foreground"
+                    : tab.activeBadgeClass;
+              return (
+                <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5 text-xs">
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span
+                    className={cn(
+                      "ml-1 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-medium",
+                      badgeClass
+                    )}
+                  >
+                    {count}
+                  </span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+          {ATTENTION_TABS.map((tab) => {
+            const rows = tabRows[tab.id];
+            return (
+              <TabsContent key={tab.id} value={tab.id} className="space-y-4">
+                {rows.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 py-10 justify-center text-muted-foreground">
+                    <CheckCircle2 className="h-6 w-6 text-green-500/70" />
+                    <Text className="!text-muted-foreground text-sm">{tab.emptyText}</Text>
+                  </div>
+                ) : (
+                  groupByCampaign(rows).map((group) => (
+                    <div key={group.campaignId} className="space-y-2">
+                      <div className="flex items-baseline gap-2 px-1">
+                        <Link
+                          href={`/dashboard/campaigns/${group.campaignId}`}
+                          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors truncate"
+                        >
+                          {group.campaignName}
+                        </Link>
+                        <span className="text-[10px] text-muted-foreground/60">· {group.posts.length}</span>
+                      </div>
+                      {group.posts.map((row) => (
+                        <AttentionPostRow key={row.id} row={row} tabId={tab.id} />
+                      ))}
+                    </div>
+                  ))
+                )}
+              </TabsContent>
+            );
+          })}
+        </Tabs>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AttentionPostRow({ row, tabId }: { row: AttentionPost; tabId: AttentionTabId }) {
+  const isFailed = tabId === "failed";
+  return (
+    <Link
+      href={`/dashboard/campaigns/${row.campaignId}?postId=${row.id}`}
+      className={cn(
+        "flex items-start gap-3 rounded-lg border p-3 transition-colors cursor-pointer",
+        isFailed
+          ? "border-red-200 bg-red-50/50 hover:bg-red-100 hover:border-red-300 dark:border-red-900 dark:bg-red-950/20 dark:hover:bg-red-950/40"
+          : "border-border hover:bg-muted hover:border-muted-foreground/20"
+      )}
+    >
+      {row.imageUrl ? (
+        <img src={row.imageUrl} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
+      ) : (
+        <div className="h-10 w-10 rounded bg-muted shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <PlatformIcon platform={toPlatformId(row.platform)} size="sm" />
+          {/* Plain-text campaign tag for now — Badge styling lands in #148 */}
+          <span className="text-xs text-muted-foreground truncate">{row.campaignName}</span>
+        </div>
+        <p className="text-sm truncate">{row.content}</p>
+        {row.scheduledDate && (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {format(parseISO(row.scheduledDate), "MMM d, h:mm a")}
+          </p>
+        )}
+      </div>
+      <ArrowRight className={cn("h-4 w-4 shrink-0 mt-1", isFailed ? "text-red-400" : "text-muted-foreground")} />
+    </Link>
+  );
 }
 
 function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {

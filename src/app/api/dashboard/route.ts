@@ -22,6 +22,9 @@ interface PostFields {
   "Short URL": string;
   Campaign: string[];
   "Zernio Post ID": string;
+  "Media URLs": string;
+  "Original Media": string;
+  "Cover Slide Data": string;
 }
 
 /**
@@ -57,7 +60,7 @@ export async function GET(request: NextRequest) {
     // Fetch all posts (we'll filter by campaign IDs in memory)
     // Airtable doesn't support efficient IN-list filtering, so fetch all non-archived posts
     const allPosts = await listRecords<PostFields>("Posts", {
-      fields: ["Content", "Platform", "Status", "Scheduled Date", "Image URL", "Short URL", "Campaign", "Zernio Post ID"],
+      fields: ["Content", "Platform", "Status", "Scheduled Date", "Image URL", "Short URL", "Campaign", "Zernio Post ID", "Media URLs", "Original Media", "Cover Slide Data"],
     });
 
     // Filter to posts belonging to this brand's campaigns
@@ -171,6 +174,83 @@ export async function GET(request: NextRequest) {
         };
       });
 
+    // ── Attention buckets (Issue #146) ───────────────────────────────────
+    // Helper to build a row payload (consistent shape across all attention tabs)
+    const buildAttentionRow = (p: typeof posts[number]) => {
+      const campaign = campaigns.find((c) => p.fields.Campaign?.includes(c.id));
+      return {
+        id: p.id,
+        platform: p.fields.Platform,
+        content: (p.fields.Content || "").slice(0, 120),
+        scheduledDate: p.fields["Scheduled Date"] || "",
+        imageUrl: p.fields["Image URL"] || "",
+        campaignId: campaign?.id || "",
+        campaignName: campaign?.fields.Name || "Unknown",
+        status: p.fields.Status,
+        createdTime: (p as { createdTime?: string }).createdTime || "",
+      };
+    };
+
+    // Newest-first sort by Airtable createdTime, with id as a stable tiebreaker
+    const sortByCreatedDesc = (a: typeof posts[number], b: typeof posts[number]) => {
+      const ta = (a as { createdTime?: string }).createdTime || "";
+      const tb = (b as { createdTime?: string }).createdTime || "";
+      if (ta !== tb) return tb.localeCompare(ta);
+      return b.id.localeCompare(a.id);
+    };
+
+    // 1. Approved → not scheduled (the killer view)
+    const approvedUnscheduledPosts = posts.filter(
+      (p) =>
+        p.fields.Status === "Approved" &&
+        !p.fields["Scheduled Date"]
+    );
+    const approvedUnscheduled = [...approvedUnscheduledPosts]
+      .sort(sortByCreatedDesc)
+      .slice(0, 50)
+      .map(buildAttentionRow);
+
+    // 2. Failed (full list, separate from the 5-post failedPosts above)
+    const failedAllPosts = posts.filter((p) => p.fields.Status === "Failed");
+    const failedAttention = [...failedAllPosts]
+      .sort(sortByCreatedDesc)
+      .slice(0, 50)
+      .map(buildAttentionRow);
+
+    // 3. Modified (literal — text edits not re-approved)
+    const modifiedPosts = posts.filter((p) => p.fields.Status === "Modified");
+    const modified = [...modifiedPosts]
+      .sort(sortByCreatedDesc)
+      .slice(0, 50)
+      .map(buildAttentionRow);
+
+    // 4. Rich-asset work in flight — derived signal
+    //    has carousel (Media URLs has 2+ entries) OR cover slide data OR original media (image swap)
+    //    AND status is NOT Scheduled or Published
+    const TERMINAL_STATUSES: PostStatus[] = ["Scheduled", "Published"];
+    const richAssetPosts = posts.filter((p) => {
+      if (TERMINAL_STATUSES.includes(p.fields.Status)) return false;
+      const mediaUrls = (p.fields["Media URLs"] || "")
+        .split("\n")
+        .map((u) => u.trim())
+        .filter(Boolean);
+      const hasCarousel = mediaUrls.length > 1;
+      const hasCoverSlide = !!(p.fields["Cover Slide Data"] || "").trim();
+      const hasOriginalMedia = !!(p.fields["Original Media"] || "").trim();
+      return hasCarousel || hasCoverSlide || hasOriginalMedia;
+    });
+    const richAssetInFlight = [...richAssetPosts]
+      .sort(sortByCreatedDesc)
+      .slice(0, 50)
+      .map(buildAttentionRow);
+
+    const attentionCounts = {
+      approvedUnscheduled: approvedUnscheduledPosts.length,
+      failed: failedAllPosts.length,
+      modified: modifiedPosts.length,
+      richAssetInFlight: richAssetPosts.length,
+    };
+
     // Time-based stats
     const weekFromNow = new Date(now.getTime() + 7 * 86400000);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -263,6 +343,11 @@ export async function GET(request: NextRequest) {
         byStatus: postsByStatus,
         pendingReview,
         failedPosts,
+        approvedUnscheduled,
+        modified,
+        richAssetInFlight,
+        failed: failedAttention,
+        attentionCounts,
         scheduledThisWeek,
         publishedThisMonth,
       },
