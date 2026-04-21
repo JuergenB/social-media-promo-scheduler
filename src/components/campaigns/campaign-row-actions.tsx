@@ -126,7 +126,9 @@ export function CampaignRowActions({ campaign }: Props) {
             className="text-destructive focus:text-destructive"
             onClick={(e) => {
               stopPropagation(e);
-              window.location.href = `/dashboard/campaigns/${campaign.id}`;
+              // Pass tab=settings so the detail page auto-opens the Settings
+              // tab where the delete section lives, then scrolls to it.
+              window.location.href = `/dashboard/campaigns/${campaign.id}?tab=settings#delete-campaign-section`;
             }}
           >
             Delete…

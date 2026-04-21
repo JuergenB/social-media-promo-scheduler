@@ -39,6 +39,7 @@ import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
 import { ImagePicker, type ScrapedImageItem } from "@/components/posts/image-picker";
 import { CollaborationSection } from "@/components/posts/collaboration-section";
 import { PostFirstComment } from "@/components/posts/post-first-comment";
+import { CampaignRowActions } from "@/components/campaigns/campaign-row-actions";
 import { getToneLabel } from "@/lib/prompts/tone-guidance";
 import { toast } from "sonner";
 import { getEligibleOutpaintIndices } from "@/lib/media-items";
@@ -726,6 +727,7 @@ export default function QuickPostPage() {
                           {qp.createdAt ? ` · ${new Date(qp.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : ""}
                         </p>
                       </div>
+                      <CampaignRowActions campaign={qp} />
                     </Link>
                   );
                 })}
@@ -1009,7 +1011,10 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
   ) : null;
 
   return (
-    <>
+    // `relative` is required so the CoverSlideDesigner template gallery
+    // (absolute inset-0) stays contained to the editor area instead of
+    // escaping to the viewport. See #156.
+    <div className="relative">
       <Card>
         <CardContent className="pt-5 space-y-4">
           {/* Media gallery */}
@@ -1280,6 +1285,6 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
           onClose={() => setShowOutpaintSelector(false)}
         />
       )}
-    </>
+    </div>
   );
 }

@@ -203,7 +203,24 @@ export default function CampaignDetailPage() {
   const [genVoiceIntensity, setGenVoiceIntensity] = useState<number>(50);
   const [genVoiceInitialized, setGenVoiceInitialized] = useState(false);
   const [settingsUnsaved, setSettingsUnsaved] = useState(false);
-  const [activeTab, setActiveTab] = useState("posts");
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get("tab");
+    return t === "settings" ? "settings" : "posts";
+  });
+  // If the URL also has a hash (e.g. #delete-campaign-section), scroll there
+  // once the tab content has mounted.
+  useEffect(() => {
+    if (activeTab !== "settings") return;
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (!hash) return;
+    const id = hash.replace(/^#/, "");
+    const attempt = () => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    };
+    // Two frames: one for tab to render, one for content to layout.
+    requestAnimationFrame(() => requestAnimationFrame(attempt));
+  }, [activeTab]);
   const queryClient = useQueryClient();
   const { markNew, dismissNew, isNew } = useNewPosts();
 
@@ -848,7 +865,20 @@ export default function CampaignDetailPage() {
           </Link>
         </Button>
         <h1 className="text-xl font-bold truncate flex-1">{displayName}</h1>
-        <CampaignHeaderActions campaign={campaign} posts={posts} />
+        <CampaignHeaderActions
+          campaign={campaign}
+          posts={posts}
+          onDeleteRequest={() => {
+            setActiveTab("settings");
+            // Wait for the tab content to mount before scrolling.
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                const el = document.getElementById("delete-campaign-section");
+                if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+              });
+            });
+          }}
+        />
       </div>
 
       {campaign.archivedAt && (
@@ -2933,7 +2963,15 @@ function ArchivedBanner({ campaign }: { campaign: Campaign }) {
 
 // ── Campaign header actions (archive/cleanup menu) ─────────────────────
 
-function CampaignHeaderActions({ campaign, posts }: { campaign: Campaign; posts: Post[] }) {
+function CampaignHeaderActions({
+  campaign,
+  posts,
+  onDeleteRequest,
+}: {
+  campaign: Campaign;
+  posts: Post[];
+  onDeleteRequest: () => void;
+}) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [archiveOpen, setArchiveOpen] = useState(false);
@@ -3010,12 +3048,9 @@ function CampaignHeaderActions({ campaign, posts }: { campaign: Campaign; posts:
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
-            onClick={() => {
-              const el = document.getElementById("delete-campaign-section");
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
+            onClick={onDeleteRequest}
           >
-            Scroll to delete
+            <Trash2 className="h-4 w-4 mr-2" /> Delete…
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
