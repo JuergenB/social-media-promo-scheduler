@@ -29,6 +29,7 @@ interface CampaignFields {
   Tone: number;
   "Scraped Images": string;
   "Artist Handle": string;
+  "Archived At": string;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -126,6 +127,7 @@ export async function GET(
         } catch { return undefined; }
       })(),
       artistHandle: record.fields["Artist Handle"] || undefined,
+      archivedAt: record.fields["Archived At"] || undefined,
     };
 
     // Fetch posts linked to this campaign

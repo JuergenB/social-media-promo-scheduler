@@ -283,6 +283,7 @@ interface CampaignFields {
   "Max Variants Per Platform": number;
   "Platform Cadence": string;
   Tone: number;
+  "Archived At": string;
 }
 
 interface BrandFields {
@@ -443,8 +444,11 @@ export async function POST(
         }
 
         // Update status to Scraping (skip in additive mode — campaign stays Active/Review)
+        // Also clear Archived At: regenerating = re-engaging with the campaign.
         if (!isAdditive) {
-          await updateRecord("Campaigns", campaignId, { Status: "Scraping" });
+          await updateRecord("Campaigns", campaignId, { Status: "Scraping", "Archived At": null });
+        } else if (fields["Archived At"]) {
+          await updateRecord("Campaigns", campaignId, { "Archived At": null });
         }
 
         sendEvent(controller, encoder, {

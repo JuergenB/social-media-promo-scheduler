@@ -163,6 +163,8 @@ export interface Campaign {
   scrapedImages?: Array<{ url: string; alt: string; storyTitle?: string }>;
   /** Artist Profile: Instagram handle of the featured artist (without @) */
   artistHandle?: string;
+  /** ISO timestamp when the campaign was archived. Null = active. */
+  archivedAt?: string;
 }
 
 export const POST_STATUSES = [

@@ -25,6 +25,7 @@ interface CampaignFields {
   "Platform Cadence": string;
   Tone: number;
   "Artist Handle": string;
+  "Archived At": string;
 }
 
 function parseCadenceJson(raw: string | undefined | null): PlatformCadenceConfig | null {
@@ -84,9 +85,10 @@ async function fetchPageMetadata(url: string): Promise<{ title: string | null; d
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const access = await getUserBrandAccess();
+    const statusFilter = request.nextUrl.searchParams.get("status") ?? "active";
 
     const records = await listRecords<CampaignFields>("Campaigns", {
       sort: [{ field: "Created At", direction: "desc" }],
@@ -115,12 +117,20 @@ export async function GET() {
       platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
       voiceIntensity: r.fields.Tone ?? undefined,
       artistHandle: r.fields["Artist Handle"] || undefined,
+      archivedAt: r.fields["Archived At"] || undefined,
     }));
 
     // Filter by user's allowed brands
     if (access && !access.isSuperAdmin) {
       campaigns = campaigns.filter((c) => hasCampaignAccess(access, c.brandIds));
     }
+
+    if (statusFilter === "active") {
+      campaigns = campaigns.filter((c) => !c.archivedAt);
+    } else if (statusFilter === "archived") {
+      campaigns = campaigns.filter((c) => !!c.archivedAt);
+    }
+    // "all" returns everything
 
     return NextResponse.json({ campaigns });
   } catch (error) {

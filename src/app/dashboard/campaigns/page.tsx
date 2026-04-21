@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useBrand } from "@/lib/brand-context";
+import { CampaignRowActions } from "@/components/campaigns/campaign-row-actions";
+import { cn } from "@/lib/utils";
 import {
   Megaphone,
   Plus,
@@ -27,6 +30,8 @@ import {
   Archive,
 } from "lucide-react";
 import type { Campaign, CampaignType, CampaignStatus } from "@/lib/airtable/types";
+
+type CampaignView = "active" | "archived" | "all";
 
 const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Newsletter: Mail,
@@ -75,11 +80,12 @@ function getActionLabel(status: CampaignStatus): { label: string; icon: React.El
 
 export default function CampaignsPage() {
   const { currentBrand } = useBrand();
+  const [view, setView] = useState<CampaignView>("active");
 
   const { data, isLoading } = useQuery<{ campaigns: Campaign[] }>({
-    queryKey: ["campaigns", currentBrand?.id],
+    queryKey: ["campaigns", currentBrand?.id, "all"],
     queryFn: async () => {
-      const res = await fetch("/api/campaigns");
+      const res = await fetch("/api/campaigns?status=all");
       if (!res.ok) throw new Error("Failed to fetch campaigns");
       return res.json();
     },
@@ -87,10 +93,23 @@ export default function CampaignsPage() {
 
   // Filter campaigns by current brand, exclude Quick Posts
   const allCampaigns = data?.campaigns ?? [];
-  const campaigns = (currentBrand
+  const brandScoped = (currentBrand
     ? allCampaigns.filter((c) => c.brandIds?.includes(currentBrand.id))
     : allCampaigns
   ).filter((c) => !c.name?.startsWith("Quick Post:"));
+
+  const counts = {
+    active: brandScoped.filter((c) => !c.archivedAt).length,
+    archived: brandScoped.filter((c) => !!c.archivedAt).length,
+    all: brandScoped.length,
+  };
+
+  const campaigns =
+    view === "active"
+      ? brandScoped.filter((c) => !c.archivedAt)
+      : view === "archived"
+      ? brandScoped.filter((c) => !!c.archivedAt)
+      : brandScoped;
 
   return (
     <div className="space-y-6">
@@ -111,6 +130,24 @@ export default function CampaignsPage() {
         </Button>
       </div>
 
+      <div className="flex items-center gap-1 border-b">
+        {(["active", "archived", "all"] as const).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={cn(
+              "px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
+              view === v
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <span className="capitalize">{v}</span>
+            <span className="ml-1.5 text-xs text-muted-foreground">({counts[v]})</span>
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
           {[1, 2].map((i) => (
@@ -127,20 +164,42 @@ export default function CampaignsPage() {
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <div className="rounded-full bg-muted p-4 mb-4">
-              <Megaphone className="h-8 w-8 text-muted-foreground" />
+              {view === "archived" ? (
+                <Archive className="h-8 w-8 text-muted-foreground" />
+              ) : (
+                <Megaphone className="h-8 w-8 text-muted-foreground" />
+              )}
             </div>
-            <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
-            <p className="text-sm text-muted-foreground max-w-sm mb-6">
-              Create your first campaign from a newsletter, blog post, or any
-              content worth promoting. You set the direction — the system handles
-              the scheduling.
-            </p>
-            <Button asChild>
-              <Link href="/dashboard/campaigns/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Campaign
-              </Link>
-            </Button>
+            {view === "archived" ? (
+              <>
+                <h3 className="text-lg font-semibold mb-2">No archived campaigns</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mb-6">
+                  Campaigns you archive will appear here. Archive one from its
+                  overflow menu when you&rsquo;re done with it — it stays
+                  available if you want to come back to it later.
+                </p>
+                {counts.active > 0 && (
+                  <Button variant="outline" onClick={() => setView("active")}>
+                    View active campaigns
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-semibold mb-2">No campaigns yet</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mb-6">
+                  Create your first campaign from a newsletter, blog post, or any
+                  content worth promoting. You set the direction — the system handles
+                  the scheduling.
+                </p>
+                <Button asChild>
+                  <Link href="/dashboard/campaigns/new">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Campaign
+                  </Link>
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -188,12 +247,15 @@ export default function CampaignsPage() {
                         <h3 className="font-semibold text-sm leading-tight line-clamp-2">
                           {displayName}
                         </h3>
-                        <Badge
-                          variant="outline"
-                          className={`shrink-0 text-[11px] border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
-                        >
-                          {campaign.status}
-                        </Badge>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge
+                            variant="outline"
+                            className={`text-[11px] border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
+                          >
+                            {campaign.status}
+                          </Badge>
+                          <CampaignRowActions campaign={campaign} />
+                        </div>
                       </div>
 
                       {/* Meta row */}

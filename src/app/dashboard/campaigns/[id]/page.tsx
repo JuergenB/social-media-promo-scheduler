@@ -79,6 +79,15 @@ import { toPlatformId, POST_STATUS_CONFIG } from "@/lib/platform-constants";
 import { CampaignPostDetail } from "@/components/posts/campaign-post-detail";
 import { useNewPosts } from "@/hooks/use-new-posts";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ArchiveCampaignDialog } from "@/components/campaigns/archive-campaign-dialog";
+import { countPostsByBucket } from "@/components/campaigns/campaign-row-actions";
+import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
@@ -100,6 +109,9 @@ import {
   ChevronDown,
   ChevronUp,
   Archive,
+  ArchiveRestore,
+  Eraser,
+  MoreHorizontal,
   Save,
   Trash2,
   X,
@@ -835,8 +847,13 @@ export default function CampaignDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold truncate">{displayName}</h1>
+        <h1 className="text-xl font-bold truncate flex-1">{displayName}</h1>
+        <CampaignHeaderActions campaign={campaign} posts={posts} />
       </div>
+
+      {campaign.archivedAt && (
+        <ArchivedBanner campaign={campaign} />
+      )}
 
       {/* Header card */}
       <Card className="overflow-hidden !py-0 !gap-0">
@@ -1325,7 +1342,6 @@ export default function CampaignDetailPage() {
                         );
                         if (applyRes.ok) {
                           const result = await applyRes.json();
-                          queryClient.invalidateQueries({ queryKey: ["campaign"] });
                           if (result.failedPosts > 0) {
                             const failDetails = result.results
                               ?.filter((r: { success: boolean }) => !r.success)
@@ -1348,6 +1364,9 @@ export default function CampaignDetailPage() {
                               { description: dates, duration: 8000 }
                             );
                           }
+                          // Hard refresh so the post list reflects new statuses.
+                          // Cache invalidation alone doesn't reliably pick up the Airtable writes here.
+                          setTimeout(() => window.location.reload(), 1500);
                         } else {
                           const errData = await applyRes.json().catch(() => ({}));
                           toast.error(`Failed to schedule: ${errData.error || applyRes.statusText}`, { duration: 10000 });
@@ -2802,7 +2821,7 @@ function DeleteCampaignSection({
   };
 
   return (
-    <Card className="mt-6 border-destructive/30">
+    <Card id="delete-campaign-section" className="mt-6 border-destructive/30">
       <CardContent className="pt-6">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -2867,6 +2886,153 @@ function SettingsField({
       </dt>
       <dd>{children}</dd>
     </div>
+  );
+}
+
+// ── Archived banner ────────────────────────────────────────────────────
+
+function ArchivedBanner({ campaign }: { campaign: Campaign }) {
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  const archivedDate = campaign.archivedAt
+    ? format(parseISO(campaign.archivedAt), "MMM d, yyyy")
+    : null;
+
+  async function handleUnarchive() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/unarchive`, { method: "POST" });
+      if (!res.ok) throw new Error("Unarchive failed");
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["campaign", campaign.id] });
+      toast.success("Campaign restored");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to unarchive");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-md border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm dark:border-zinc-800 dark:bg-zinc-900/40">
+      <Archive className="h-4 w-4 text-muted-foreground shrink-0" />
+      <span className="flex-1 text-muted-foreground">
+        This campaign is <strong className="text-foreground">archived</strong>
+        {archivedDate && <> — hidden from the main list since {archivedDate}</>}.
+      </span>
+      <Button size="sm" variant="outline" onClick={handleUnarchive} disabled={busy}>
+        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : (
+          <><ArchiveRestore className="h-3.5 w-3.5 mr-1.5" /> Unarchive</>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+// ── Campaign header actions (archive/cleanup menu) ─────────────────────
+
+function CampaignHeaderActions({ campaign, posts }: { campaign: Campaign; posts: Post[] }) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [busy, setBusy] = useState<"unarchive" | "cleanup" | null>(null);
+
+  const isArchived = Boolean(campaign.archivedAt);
+  const counts = countPostsByBucket(posts);
+
+  async function handleUnarchive() {
+    setBusy("unarchive");
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/unarchive`, { method: "POST" });
+      if (!res.ok) throw new Error("Unarchive failed");
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["campaign", campaign.id] });
+      toast.success("Campaign restored");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to unarchive campaign");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleCleanup() {
+    if (counts.pending === 0) {
+      toast.info("No pending posts to clean up");
+      return;
+    }
+    if (!confirm(`Delete ${counts.pending} pending post${counts.pending === 1 ? "" : "s"}? This cannot be undone.`)) {
+      return;
+    }
+    setBusy("cleanup");
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}/cleanup`, { method: "POST" });
+      if (!res.ok) throw new Error("Cleanup failed");
+      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      await queryClient.invalidateQueries({ queryKey: ["campaign", campaign.id] });
+      toast.success(`Cleaned up ${counts.pending} post${counts.pending === 1 ? "" : "s"}`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to clean up posts");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Campaign actions">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {isArchived ? (
+            <DropdownMenuItem onClick={handleUnarchive}>
+              <ArchiveRestore className="h-4 w-4 mr-2" /> Unarchive
+            </DropdownMenuItem>
+          ) : (
+            <>
+              <DropdownMenuItem onClick={handleCleanup} disabled={counts.pending === 0}>
+                <Eraser className="h-4 w-4 mr-2" /> Clean up drafts
+                {counts.pending > 0 && (
+                  <span className="ml-auto text-xs text-muted-foreground">{counts.pending}</span>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setArchiveOpen(true)}>
+                <Archive className="h-4 w-4 mr-2" /> Archive
+              </DropdownMenuItem>
+            </>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={() => {
+              const el = document.getElementById("delete-campaign-section");
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >
+            Scroll to delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <ArchiveCampaignDialog
+        campaign={campaign}
+        pendingCount={counts.pending}
+        keptCounts={{
+          approved: counts.approved,
+          scheduled: counts.scheduled,
+          published: counts.published,
+        }}
+        open={archiveOpen}
+        onOpenChange={setArchiveOpen}
+        onArchived={() => router.push("/dashboard/campaigns")}
+      />
+    </>
   );
 }
 

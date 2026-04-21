@@ -85,7 +85,7 @@ polywiz-app/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
-│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset, POST [id]/schedule (?postIds= optional filter), POST [id]/publish, POST/DELETE [id]/image, POST [id]/sync (Zernio schedule sync)
+│   │   │   ├── campaigns/      # GET list (?status=active|archived|all, default active), POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE, auto-unarchives), POST [id]/reset, POST [id]/schedule (?postIds= optional filter), POST [id]/publish, POST [id]/archive ({cleanupDrafts?}), POST [id]/unarchive, POST [id]/cleanup (deletes Pending+Dismissed), POST/DELETE [id]/image, POST [id]/sync (Zernio schedule sync)
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
@@ -107,7 +107,7 @@ polywiz-app/
 │   │   ├── callback/           # OAuth callbacks
 │   │   └── login/              # Auth login page
 │   ├── components/
-│   │   ├── campaigns/          # FrequencyPreview bar chart
+│   │   ├── campaigns/          # FrequencyPreview, ArchiveCampaignDialog, CampaignRowActions (overflow menu)
 │   │   ├── ui/                 # shadcn/ui components
 │   │   ├── shared/             # Logo, ErrorBoundary, PlatformIcon
 │   │   ├── accounts/           # Account cards
@@ -128,6 +128,7 @@ polywiz-app/
 │   │   ├── brand-access.ts     # Server-side brand access helpers (user-brand mapping)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── scheduling.ts       # Tapering schedule algorithm, date assignment with collision avoidance
+│   │   ├── campaign-post-cleanup.ts # Shared helper — delete campaign posts (optionally filtered by status) with cascading Short.io/lnk.bio/Zernio cleanup
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
 │   │   ├── prompts/            # Generation prompt templates + dynamic compose-prompt.ts
 │   │   └── brand-context.tsx   # BrandProvider + useBrand() hook
@@ -169,7 +170,7 @@ polywiz-app/
 | Table | ID | Purpose |
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links. **lnk.bio fields:** `Lnk.Bio Enabled` (checkbox), `Lnk.Bio Group ID`, `Lnk.Bio Username`, `Lnk.Bio Client ID Label`, `Lnk.Bio Client Secret Label` (label fields name per-brand env vars for OAuth credentials) |
-| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform). **Scraped Images** (JSON array of `{url, alt, storyTitle?}`) populated during generation — surfaced in post editor as campaign image library |
+| Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform). **Scraped Images** (JSON array of `{url, alt, storyTitle?}`) populated during generation — surfaced in post editor as campaign image library. **Archived At** (dateTime) — null = active, timestamp = hidden from default views (user-initiated archive, orthogonal to Status lifecycle) |
 | Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override. **imageIndex** (integer) for catalog-based image selection, **subject** field declares who/what each post is about, **Sort Order** (integer) for user-defined scheduling priority, **Platform Post URL** for published post permalink, **Collaborators** (JSON array of Instagram usernames for collab invites), **User Tags** (JSON array of Instagram usernames for image tagging) |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
@@ -200,6 +201,7 @@ polywiz-app/
 - **Image-Text Integrity Rule:** Constraint hierarchy — editorial direction cannot override integrity rules. Claude must not guess names, attribute artwork to wrong artists, or fabricate attribution. This is enforced in prompt templates.
 - **Image filtering:** Thumbnails <200px in URL paths are rejected. Dimension-aware dedup keeps the largest version. Supplemental URL images are filtered by entity overlap with the main URL content.
 - **lnk.bio integration:** Per-brand link-in-bio sync, gated by the `Lnk.Bio Enabled` toggle on each Brand record (The Intersect, Not Real Art, Artsville USA currently enabled; Sugar Press Art toggled off). Instagram-only scope — lnk.bio entries are created on schedule/publish and kept in sync across 7 lifecycle transitions: post delete, revert-to-draft, reschedule, content edit, image edit, campaign delete/reset, and Zernio `post.failed` webhook (mutations are delete-then-recreate). Architectural gap: Zernio does not emit a `post.reverted` webhook, tracked in #142. Credentials are OAuth2 `client_credentials` scoped per profile — each brand record names its own env vars via `Lnk.Bio Client ID Label` / `Lnk.Bio Client Secret Label` fields (e.g. `LNKBIO_CLIENT_ID_INTERSECT` / `LNKBIO_CLIENT_SECRET_B64_INTERSECT`), falling back to unscoped `LNKBIO_CLIENT_ID` / `LNKBIO_CLIENT_SECRET_B64`. Client is `src/lib/lnk-bio.ts`; see `docs/reference/lnk-bio-api.md`.
+- **Campaign archive + cleanup:** Archive is orthogonal to Status lifecycle — an archived campaign retains its prior status (Completed, Active, etc.) but `Archived At` is set, which hides it from default list/dashboard views. `POST /api/campaigns/[id]/archive` accepts `{ cleanupDrafts: boolean }` to atomically delete Pending+Dismissed posts while archiving. Cleanup cascades to Short.io links, lnk.bio entries, and Zernio scheduled posts via the shared `cleanupCampaignPosts` helper in `src/lib/campaign-post-cleanup.ts`. Regenerating content on an archived campaign auto-unarchives (`Archived At` cleared in the generate route). Dashboard (`/api/dashboard`) and campaigns list (`/api/campaigns`) both filter out archived by default — the list accepts `?status=active|archived|all`.
 - **Zernio webhook:** `POST /api/webhooks/zernio` receives post lifecycle events and syncs status to Airtable. On `post.published`/`post.partial`, also captures `publishedUrl` from platform results → stored in `Platform Post URL` field. Auth middleware bypassed for `/api/webhooks` path. Currently registered via ngrok; permanent URL tracked in #67. Note: Zernio does not emit a webhook for "reverted to draft" — only `post.published`, `post.failed`, `post.partial`, `post.scheduled`.
 - **Zernio scheduled post sync:** When content or media is edited on a post with a `Zernio Post ID`, the PATCH endpoint (`/api/posts/[id]`) fire-and-forgets an `updatePost` call to Zernio. **Must include `scheduledFor`** in the update body — omitting it causes Zernio to revert the post from scheduled to draft.
 - **LinkedIn PDF carousel:** Posts with 2+ images targeting LinkedIn are auto-assembled into a PDF at publish time using `pdf-lib`. PDF uploaded to Zernio as document media type.

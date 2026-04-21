@@ -11,6 +11,7 @@ interface CampaignFields {
   "Duration Days": number;
   "Target Platforms": string;
   URL: string;
+  "Archived At": string;
 }
 
 interface PostFields {
@@ -49,10 +50,13 @@ export async function GET(request: NextRequest) {
     // Fetch all campaigns and filter by brand ID in memory.
     // ARRAYJOIN(Brand) returns brand names (not IDs), so we match on the Brand linked record array.
     const allCampaigns = await listRecords<CampaignFields>("Campaigns", {
-      fields: ["Name", "Type", "Status", "Brand", "Duration Days", "Target Platforms", "URL"],
+      fields: ["Name", "Type", "Status", "Brand", "Duration Days", "Target Platforms", "URL", "Archived At"],
     });
+    // Exclude archived campaigns from all dashboard surfaces — they shouldn't
+    // appear in the Campaigns panel, and their posts shouldn't appear in
+    // "Needs Your Attention" either.
     const campaigns = allCampaigns.filter((c) =>
-      (c.fields.Brand || []).includes(brandId)
+      (c.fields.Brand || []).includes(brandId) && !c.fields["Archived At"]
     );
 
     const campaignIds = new Set(campaigns.map((c) => c.id));
@@ -88,7 +92,6 @@ export async function GET(request: NextRequest) {
     }
 
     const activeCampaigns = campaigns
-      .filter((c) => c.fields.Status !== "Archived")
       .map((c) => ({
         id: c.id,
         name: c.fields.Name || "Untitled",
@@ -355,7 +358,7 @@ export async function GET(request: NextRequest) {
       summary: {
         totalPosts: totalPostsAllTime,
         totalPublished,
-        totalCampaigns: campaigns.filter((c) => c.fields.Status !== "Archived").length,
+        totalCampaigns: campaigns.length,
         platformsUsed,
         platformCounts,
       },
