@@ -208,20 +208,30 @@ export default function CampaignDetailPage() {
     return t === "settings" ? "settings" : "posts";
   });
   // If the URL has a hash (e.g. #delete-campaign-section) and we're on the
-  // Settings tab, scroll to the bottom of the page — that's where the delete
-  // section lives, and this avoids racing with async-mounted tab content.
+  // Settings tab, scroll the target into view. The scroll container is the
+  // <main> element in dashboard/layout.tsx (overflow-y-auto), not the body —
+  // we scroll it directly to avoid scrollIntoView's inconsistent behavior
+  // with smooth scrolling across nested scroll containers.
   useEffect(() => {
     if (activeTab !== "settings") return;
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     if (!hash) return;
+    const id = hash.replace(/^#/, "");
 
-    // Small delay so tab content + campaign data have time to render.
-    const timeoutId = window.setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
-      // Clear the hash so re-visiting this tab doesn't re-scroll.
-      history.replaceState(null, "", window.location.pathname + window.location.search);
-    }, 400);
-    return () => window.clearTimeout(timeoutId);
+    let attempts = 0;
+    const intervalId = window.setInterval(() => {
+      attempts++;
+      const el = document.getElementById(id);
+      const main = document.querySelector("main") as HTMLElement | null;
+      if (el && main) {
+        main.scrollTo({ top: main.scrollHeight, behavior: "smooth" });
+        window.clearInterval(intervalId);
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } else if (attempts >= 30) {
+        window.clearInterval(intervalId);
+      }
+    }, 100);
+    return () => window.clearInterval(intervalId);
   }, [activeTab]);
   const queryClient = useQueryClient();
   const { markNew, dismissNew, isNew } = useNewPosts();
@@ -872,13 +882,20 @@ export default function CampaignDetailPage() {
           posts={posts}
           onDeleteRequest={() => {
             setActiveTab("settings");
-            // Wait for the tab content to mount before scrolling.
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                const el = document.getElementById("delete-campaign-section");
-                if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-              });
-            });
+            // Scroll the <main> element (the actual scroll container) to
+            // the bottom once the delete section mounts inside it.
+            let attempts = 0;
+            const intervalId = window.setInterval(() => {
+              attempts++;
+              const el = document.getElementById("delete-campaign-section");
+              const main = document.querySelector("main") as HTMLElement | null;
+              if (el && main) {
+                main.scrollTo({ top: main.scrollHeight, behavior: "smooth" });
+                window.clearInterval(intervalId);
+              } else if (attempts >= 30) {
+                window.clearInterval(intervalId);
+              }
+            }, 100);
           }}
         />
       </div>
