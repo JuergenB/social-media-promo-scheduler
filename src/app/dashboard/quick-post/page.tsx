@@ -37,6 +37,8 @@ import { CardImageSelector } from "@/components/posts/card-image-selector";
 import { CampaignImageLibrary } from "@/components/posts/campaign-image-library";
 import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
 import { ImagePicker, type ScrapedImageItem } from "@/components/posts/image-picker";
+import { CollaborationSection } from "@/components/posts/collaboration-section";
+import { PostFirstComment } from "@/components/posts/post-first-comment";
 import { getToneLabel } from "@/lib/prompts/tone-guidance";
 import { toast } from "sonner";
 import { getEligibleOutpaintIndices } from "@/lib/media-items";
@@ -1065,6 +1067,31 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
               saveDisabled={content.editedContent === (post.content || "")}
             />
           </div>
+
+          {/* Instagram collaboration — collaborators & image tags */}
+          {platformLower === "instagram" && (
+            <CollaborationSection
+              key={post.id}
+              postId={post.id}
+              collaborators={(() => {
+                try { return post.collaborators ? JSON.parse(post.collaborators) : []; }
+                catch { return []; }
+              })()}
+              userTags={(() => {
+                try { return post.userTags ? JSON.parse(post.userTags) : []; }
+                catch { return []; }
+              })()}
+              isPublished={isPublished}
+              onPostChange={(fields) => onPostUpdate({ ...post, ...fields })}
+            />
+          )}
+
+          {/* First Comment / Hashtags (Instagram / Facebook / LinkedIn) */}
+          <PostFirstComment
+            post={post}
+            isPublished={isPublished}
+            onPostChange={onPostUpdate}
+          />
 
           {/* Action bar */}
           <div className="flex items-center gap-2 pt-2 border-t border-border">

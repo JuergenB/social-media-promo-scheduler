@@ -4,6 +4,7 @@ import React, { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp, Users, X } from "lucide-react";
+import type { Post } from "@/lib/airtable/types";
 
 const LS_COLLABS_KEY = "polywiz-recent-collaborators";
 const LS_TAGS_KEY = "polywiz-recent-user-tags";
@@ -14,6 +15,8 @@ interface CollaborationSectionProps {
   collaborators: string[];
   userTags: string[];
   isPublished: boolean;
+  /** Optional: sync a local Post state (used by Quick Post which doesn't read from React Query). */
+  onPostChange?: (fields: { collaborators: string; userTags: string }) => void;
 }
 
 /** Ensure @ prefix on a handle. */
@@ -79,6 +82,7 @@ export function CollaborationSection({
   collaborators: initialCollaborators,
   userTags: initialUserTags,
   isPublished,
+  onPostChange,
 }: CollaborationSectionProps) {
   const queryClient = useQueryClient();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -120,21 +124,37 @@ export function CollaborationSection({
     JSON.stringify(parsedTags) !== JSON.stringify(normalizedInitialTags);
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (payload: { collaborators: string[]; userTags: string[] }) => {
       const res = await fetch(`/api/posts/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          collaborators: JSON.stringify(parsedCollabs),
-          userTags: JSON.stringify(parsedTags),
+          collaborators: JSON.stringify(payload.collaborators),
+          userTags: JSON.stringify(payload.userTags),
         }),
       });
       if (!res.ok) throw new Error("Failed to save collaboration settings");
     },
-    onSuccess: () => {
-      saveRecent(LS_COLLABS_KEY, parsedCollabs);
-      saveRecent(LS_TAGS_KEY, parsedTags);
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+    onSuccess: (_data, payload) => {
+      saveRecent(LS_COLLABS_KEY, payload.collaborators);
+      saveRecent(LS_TAGS_KEY, payload.userTags);
+      // Write saved values into the cache directly — skip the refetch round-trip
+      // which can return stale data (Airtable read-after-write delay).
+      const collaboratorsJson = JSON.stringify(payload.collaborators);
+      const userTagsJson = JSON.stringify(payload.userTags);
+      queryClient.setQueriesData<{ posts: Post[] } | undefined>(
+        { queryKey: ["campaign"] },
+        (old) => {
+          if (!old?.posts) return old;
+          return {
+            ...old,
+            posts: old.posts.map((p) =>
+              p.id === postId ? { ...p, collaborators: collaboratorsJson, userTags: userTagsJson } : p
+            ),
+          };
+        }
+      );
+      onPostChange?.({ collaborators: collaboratorsJson, userTags: userTagsJson });
       toast.success("Collaboration saved");
     },
     onError: () => toast.error("Failed to save collaboration settings"),
@@ -144,7 +164,7 @@ export function CollaborationSection({
   const triggerSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     // Re-parse at call time to get latest values
-    saveMutation.mutate();
+    saveMutation.mutate({ collaborators: parsedCollabs, userTags: parsedTags });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId]);
 
@@ -153,7 +173,7 @@ export function CollaborationSection({
     saveTimerRef.current = setTimeout(() => {
       if (dirtyRef.current) {
         dirtyRef.current = false;
-        saveMutation.mutate();
+        saveMutation.mutate({ collaborators: parsedCollabs, userTags: parsedTags });
       }
     }, 500);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -170,7 +190,7 @@ export function CollaborationSection({
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       dirtyRef.current = false;
-      saveMutation.mutate();
+      saveMutation.mutate({ collaborators: parsedCollabs, userTags: parsedTags });
     }, 300);
   };
 

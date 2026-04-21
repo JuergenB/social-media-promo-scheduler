@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useRef, useState, useMemo } from "react";
-import { useQueryClient, useMutation } from "@tanstack/react-query";
+import React, { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns/format";
 import { parseISO } from "date-fns/parseISO";
@@ -46,6 +46,7 @@ import { RegenerateDialog } from "./regenerate-dialog";
 import { FlagIssueDialog } from "./flag-issue-dialog";
 import { CoverSlideDesigner } from "./cover-slide-designer";
 import { CollaborationSection } from "./collaboration-section";
+import { PostFirstComment } from "./post-first-comment";
 import { PlatformBadge } from "@/components/shared/platform-icon";
 import { getEligibleOutpaintIndices } from "@/lib/media-items";
 import type { Campaign, Post } from "@/lib/airtable/types";
@@ -69,8 +70,6 @@ import {
   ArrowLeftRight,
   ChevronDown,
   ChevronUp,
-  MessageSquare,
-  Save,
 } from "lucide-react";
 
 interface CampaignPostDetailProps {
@@ -93,7 +92,6 @@ export function CampaignPostDetail({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
-  const firstCommentContentRef = useRef<HTMLDivElement>(null);
   const [showAddImage, setShowAddImage] = useState(false);
   const [showOutpaintSelector, setShowOutpaintSelector] = useState(false);
 
@@ -138,29 +136,6 @@ export function CampaignPostDetail({
     onNavigateNext: nextPost ? () => onNavigate(nextPost) : undefined,
   });
 
-  // ── First comment (hashtags) ───────────────────────────────────────────
-  const FIRST_COMMENT_PLATFORMS = ["instagram", "facebook", "linkedin"];
-  const showFirstComment = FIRST_COMMENT_PLATFORMS.includes(platformLower);
-  const [firstCommentExpanded, setFirstCommentExpanded] = useState(false);
-  const [editingFirstComment, setEditingFirstComment] = useState(false);
-  const [editedFirstComment, setEditedFirstComment] = useState(post.firstComment || "");
-  const saveFirstCommentMutation = useMutation({
-    mutationFn: async (firstComment: string) => {
-      const res = await fetch(`/api/posts/${post.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstComment }),
-      });
-      if (!res.ok) throw new Error("Failed to save first comment");
-    },
-    onSuccess: () => {
-      setEditingFirstComment(false);
-      queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("First comment saved");
-    },
-    onError: () => toast.error("Failed to save first comment"),
-  });
-
   // ── Collaboration (Instagram only) ────────────────────────────────────
   const isInstagram = platformLower === "instagram";
   const collaborators: string[] = (() => {
@@ -180,9 +155,6 @@ export function CampaignPostDetail({
     media.resetItems(buildMediaItems(post));
     content.reset(post.content || "");
     carousel.resetState();
-    setEditedFirstComment(post.firstComment || "");
-    setEditingFirstComment(false);
-    setFirstCommentExpanded(false);
   }
 
   // ── Derived state ─────────────────────────────────────────────────────
@@ -488,73 +460,8 @@ export function CampaignPostDetail({
           />
         )}
 
-        {/* First Comment / Hashtags — own section with separator */}
-        {showFirstComment && post.firstComment && (() => {
-          const hashtagCount = (post.firstComment.match(/#\w+/g) || []).length;
-          return (
-            <div className="border-t border-border">
-              <button
-                onClick={() => {
-                  setFirstCommentExpanded(!firstCommentExpanded);
-                  if (!firstCommentExpanded) {
-                    requestAnimationFrame(() => {
-                      firstCommentContentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-                    });
-                  }
-                }}
-                className="flex items-center gap-1.5 w-full px-6 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <MessageSquare className="h-3 w-3" />
-                <span>First Comment</span>
-                {hashtagCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground/60">({hashtagCount} hashtags)</span>
-                )}
-                {firstCommentExpanded ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
-              </button>
-              {firstCommentExpanded && (
-                <div ref={firstCommentContentRef} className="px-6 pb-3">
-                  {editingFirstComment && !isPublished ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={editedFirstComment}
-                        onChange={(e) => setEditedFirstComment(e.target.value)}
-                        className="w-full text-xs leading-relaxed bg-background border rounded-md p-2 min-h-[80px] resize-y"
-                        placeholder="Engagement hook + hashtags..."
-                      />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          className="h-6 text-xs"
-                          disabled={saveFirstCommentMutation.isPending || editedFirstComment === post.firstComment}
-                          onClick={() => saveFirstCommentMutation.mutate(editedFirstComment)}
-                        >
-                          <Save className="h-3 w-3 mr-1" />
-                          {saveFirstCommentMutation.isPending ? "Saving..." : "Save"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 text-xs"
-                          onClick={() => { setEditingFirstComment(false); setEditedFirstComment(post.firstComment || ""); }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      className={cn("text-xs leading-relaxed text-muted-foreground", !isPublished && "cursor-pointer hover:text-foreground")}
-                      onClick={() => { if (!isPublished) { setEditingFirstComment(true); setEditedFirstComment(post.firstComment || ""); } }}
-                      title={isPublished ? undefined : "Click to edit"}
-                    >
-                      {post.firstComment}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })()}
+        {/* First Comment / Hashtags */}
+        <PostFirstComment post={post} isPublished={isPublished} />
       </div>
 
       {/* Lightbox */}
