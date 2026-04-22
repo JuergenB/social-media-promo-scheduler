@@ -105,6 +105,28 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
     onError: (err: Error) => toast.error(err.message),
   });
 
+  const rescheduleMutation = useMutation({
+    mutationFn: async (scheduledFor: string) => {
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledDate: scheduledFor }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to reschedule");
+      }
+    },
+    onSuccess: (_data, scheduledFor) => {
+      invalidate();
+      toast.success(`Rescheduled ${post.platform} for ${format(new Date(scheduledFor), "MMM d, h:mm a")}`);
+      setShowSchedulePicker(false);
+      setScheduleDateTime("");
+      onClose();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   const regenerateMutation = useMutation({
     mutationFn: async (guidance: string) => {
       const res = await fetch(`/api/posts/${post.id}/regenerate`, {
@@ -149,6 +171,7 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
     approveMutation,
     dismissMutation,
     publishNowMutation,
+    rescheduleMutation,
     regenerateMutation,
     updateStatus,
     deletePost,

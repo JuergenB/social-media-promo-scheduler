@@ -48,16 +48,26 @@ import { CoverSlideDesigner } from "./cover-slide-designer";
 import { CollaborationSection } from "./collaboration-section";
 import { PostFirstComment } from "./post-first-comment";
 import { PlatformBadge } from "@/components/shared/platform-icon";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getEligibleOutpaintIndices } from "@/lib/media-items";
 import type { Campaign, Post } from "@/lib/airtable/types";
 import type { CoverSlideData } from "@/lib/cover-slide-types";
 import {
   ArrowLeft,
+  CalendarClock,
   CalendarIcon,
+  CalendarX,
   CheckCircle2,
   Clock,
   ExternalLink,
   Loader2,
+  MoreHorizontal,
   Plus,
   RotateCcw,
   Flag,
@@ -649,28 +659,49 @@ export function CampaignPostDetail({
             </>
           )}
           {post.status === "Scheduled" && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
-                <Send className="mr-1 h-3 w-3" />
-                Scheduled
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => {
-                  if (confirm("Unschedule this post? It will be cancelled on Zernio and removed from lnk.bio (if applicable), then return to your Approved pool.")) {
-                    actions.updateStatus("Approved", { clearZernioState: true }).then(() => {
-                      import("sonner").then(({ toast }) => toast.success("Post unscheduled — back in Approved pool"));
-                      onClose();
-                    });
-                  }
-                }}
-              >
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Unschedule
-              </Button>
-            </div>
+            <>
+              {actions.showSchedulePicker ? (
+                <SchedulePopover
+                  initialValue={actions.scheduleDateTime || post.scheduledDate || ""}
+                  isPending={actions.rescheduleMutation.isPending}
+                  onSchedule={(combined) => {
+                    actions.setScheduleDateTime(combined);
+                    actions.rescheduleMutation.mutate(new Date(combined).toISOString());
+                  }}
+                  onCancel={() => {
+                    actions.setShowSchedulePicker(false);
+                    actions.setScheduleDateTime("");
+                  }}
+                />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => actions.setShowSchedulePicker(true)}
+                  >
+                    <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
+                    Reschedule
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => {
+                      if (confirm("Unschedule this post? It will be cancelled on Zernio and removed from lnk.bio (if applicable), then return to your Approved pool.")) {
+                        actions.updateStatus("Approved", { clearZernioState: true }).then(() => {
+                          import("sonner").then(({ toast }) => toast.success("Post unscheduled — back in Approved pool"));
+                          onClose();
+                        });
+                      }
+                    }}
+                  >
+                    <CalendarX className="mr-1.5 h-3.5 w-3.5" />
+                    Unschedule
+                  </Button>
+                </div>
+              )}
+            </>
           )}
           {post.status === "Failed" && (
             <div className="flex items-center gap-1">
@@ -716,19 +747,41 @@ export function CampaignPostDetail({
               Restore
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={() => setFlagDialogOpen(true)}
-            title="Flag Issue"
-          >
-            <Flag className="h-3.5 w-3.5" />
-          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={onClose}>
-          Close
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground"
+              title="More actions"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => setFlagDialogOpen(true)}>
+              <Flag className="mr-2 h-3.5 w-3.5" />
+              Flag Issue
+            </DropdownMenuItem>
+            {post.status === "Scheduled" && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => {
+                    if (confirm("Delete this scheduled post? It will be cancelled on Zernio and removed from lnk.bio (if applicable).")) {
+                      actions.deletePost();
+                    }
+                  }}
+                >
+                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Dialogs */}
