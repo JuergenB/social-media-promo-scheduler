@@ -912,10 +912,10 @@ export async function renderCoverSlide(
         // logo clear of platform-specific card clipping (e.g. lnk.bio, IG feed).
         const padding = brandBand.padding;
         const logoPadding = Math.max(padding, Math.round(width * 0.06));
-        // Logo sizing: 15% smaller defaults across layouts to leave breathing room.
+        // Logo sizing: smaller defaults across layouts to leave breathing room.
         const isSquare = Math.abs(width - height) < 50;
-        const defaultLogoScale = isSquare ? 0.119 : 0.17;
-        const maxLogoH = Math.max(isSquare ? 68 : 102, Math.round(brandingBandEntry.height - padding * 2));
+        const defaultLogoScale = isSquare ? 0.105 : 0.15;
+        const maxLogoH = Math.max(isSquare ? 60 : 90, Math.round(brandingBandEntry.height - padding * 2));
         const maxLogoW = Math.round(width * (logoScale ?? defaultLogoScale));
 
         // Subtle logo: light enough to read as a watermark, not a stamp
@@ -965,7 +965,8 @@ export async function renderCoverSlide(
   if (options.showLinkInBio) {
     const libText = "Link in bio";
     const libFontSize = 24;
-    const libPadding = 24;
+    // Safe-area padding: keep clear of platform-specific card clipping.
+    const libPadding = Math.max(24, Math.round(width * 0.06));
     // Use scheme-aware color at very low opacity
     const libColor = bgLum > 0.5 ? "rgba(0,0,0,0.30)" : "rgba(255,255,255,0.30)";
 
