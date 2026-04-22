@@ -55,6 +55,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getEligibleOutpaintIndices } from "@/lib/media-items";
 import type { Campaign, Post } from "@/lib/airtable/types";
 import type { CoverSlideData } from "@/lib/cover-slide-types";
@@ -102,6 +112,10 @@ export function CampaignPostDetail({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const [unscheduleConfirmOpen, setUnscheduleConfirmOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [unscheduling, setUnscheduling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [showAddImage, setShowAddImage] = useState(false);
   const [showOutpaintSelector, setShowOutpaintSelector] = useState(false);
 
@@ -687,14 +701,7 @@ export function CampaignPostDetail({
                     variant="ghost"
                     size="sm"
                     className="text-muted-foreground hover:text-destructive"
-                    onClick={() => {
-                      if (confirm("Unschedule this post? It will be cancelled on Zernio and removed from lnk.bio (if applicable), then return to your Approved pool.")) {
-                        actions.updateStatus("Approved", { clearZernioState: true }).then(() => {
-                          import("sonner").then(({ toast }) => toast.success("Post unscheduled — back in Approved pool"));
-                          onClose();
-                        });
-                      }
-                    }}
+                    onClick={() => setUnscheduleConfirmOpen(true)}
                   >
                     <CalendarX className="mr-1.5 h-3.5 w-3.5" />
                     Unschedule
@@ -769,11 +776,7 @@ export function CampaignPostDetail({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
-                  onClick={() => {
-                    if (confirm("Delete this scheduled post? It will be cancelled on Zernio and removed from lnk.bio (if applicable).")) {
-                      actions.deletePost();
-                    }
-                  }}
+                  onClick={() => setDeleteConfirmOpen(true)}
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5" />
                   Delete
@@ -791,6 +794,94 @@ export function CampaignPostDetail({
         post={post}
         campaign={campaign}
       />
+
+      <AlertDialog
+        open={unscheduleConfirmOpen}
+        onOpenChange={(open) => { if (!unscheduling) setUnscheduleConfirmOpen(open); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unschedule this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It will be cancelled on Zernio and removed from lnk.bio (if applicable), then return to your Approved pool. You can schedule it again anytime.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unscheduling}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={unscheduling}
+              onClick={async (e) => {
+                e.preventDefault();
+                setUnscheduling(true);
+                try {
+                  await actions.updateStatus("Approved", { clearZernioState: true });
+                  const { toast } = await import("sonner");
+                  toast.success("Post unscheduled — back in Approved pool");
+                  setUnscheduleConfirmOpen(false);
+                  onClose();
+                } catch (err) {
+                  const { toast } = await import("sonner");
+                  toast.error(err instanceof Error ? err.message : "Failed to unschedule");
+                } finally {
+                  setUnscheduling(false);
+                }
+              }}
+            >
+              {unscheduling ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Unscheduling...
+                </>
+              ) : (
+                "Unschedule"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteConfirmOpen}
+        onOpenChange={(open) => { if (!deleting) setDeleteConfirmOpen(open); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the post from Airtable and cancels it on Zernio. Associated images, the shortened link, and the lnk.bio entry will also be removed. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={async (e) => {
+                e.preventDefault();
+                setDeleting(true);
+                try {
+                  await actions.deletePost();
+                  setDeleteConfirmOpen(false);
+                } catch (err) {
+                  const { toast } = await import("sonner");
+                  toast.error(err instanceof Error ? err.message : "Failed to delete");
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <RegenerateDialog
         open={actions.regenDialogOpen}
@@ -900,7 +991,6 @@ function SchedulePopover({
 
   const handleSchedule = () => {
     if (!combined) return;
-    setOpen(false);
     onSchedule(combined);
   };
 

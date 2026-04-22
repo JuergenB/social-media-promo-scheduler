@@ -399,8 +399,32 @@ export async function DELETE(
       "Media URLs": string;
       "Short URL": string;
       "Lnk.Bio Entry ID": string;
+      "Zernio Post ID": string;
       Campaign: string[];
     }>("Posts", id);
+
+    // Cancel on Zernio first — if this fails the post would still publish
+    // on the scheduled date with broken media URLs (we're about to delete
+    // the blobs below).
+    const zernioPostId = post.fields["Zernio Post ID"];
+    if (zernioPostId) {
+      try {
+        const campaignId = post.fields.Campaign?.[0];
+        let brandConfig: { zernioApiKeyLabel?: string | null } | undefined;
+        if (campaignId) {
+          const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
+          const brandId = campaign.fields.Brand?.[0];
+          if (brandId) {
+            const brand = await getRecord<{ "Zernio API Key Label": string }>("Brands", brandId);
+            brandConfig = { zernioApiKeyLabel: brand.fields["Zernio API Key Label"] || null };
+          }
+        }
+        const late = createBrandClient(brandConfig);
+        await late.posts.deletePost({ path: { postId: zernioPostId } });
+      } catch (err) {
+        console.warn(`[posts] Failed to cancel Zernio post ${zernioPostId} on delete:`, err);
+      }
+    }
 
     // Clean up Vercel Blob images
     const imageUrl = post.fields["Image URL"] || "";
