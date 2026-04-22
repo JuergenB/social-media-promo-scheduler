@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp, Users, X } from "lucide-react";
@@ -97,6 +97,11 @@ export function CollaborationSection({
   const parsedTags = parseUsernames(tagsInput);
   const collabError = parsedCollabs.length > 3 ? "Maximum 3 collaborators allowed" : null;
 
+  // Latest parsed values, dereferenced inside debounced/async callbacks to avoid
+  // stale-closure overwrites (#163).
+  const latestRef = useRef({ parsedCollabs, parsedTags });
+  latestRef.current = { parsedCollabs, parsedTags };
+
   // Recent handles from localStorage
   const recentCollabs = expanded && chipVersion >= 0 ? getRecent(LS_COLLABS_KEY) : [];
   const recentTags = expanded && chipVersion >= 0 ? getRecent(LS_TAGS_KEY) : [];
@@ -163,20 +168,43 @@ export function CollaborationSection({
   // Auto-save: debounced on blur, immediate on collapse or chip click
   const triggerSave = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    // Re-parse at call time to get latest values
+    const { parsedCollabs, parsedTags } = latestRef.current;
     saveMutation.mutate({ collaborators: parsedCollabs, userTags: parsedTags });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [postId]);
+  }, [saveMutation]);
 
   const handleBlur = useCallback(() => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       if (dirtyRef.current) {
         dirtyRef.current = false;
+        const { parsedCollabs, parsedTags } = latestRef.current;
         saveMutation.mutate({ collaborators: parsedCollabs, userTags: parsedTags });
       }
     }, 500);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveMutation]);
+
+  // Flush on unmount — if the user closes the dialog while a debounced save is
+  // pending (or while dirty), send the PATCH before teardown. fetch() continues
+  // even after the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+      if (dirtyRef.current) {
+        dirtyRef.current = false;
+        const { parsedCollabs, parsedTags } = latestRef.current;
+        fetch(`/api/posts/${postId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            collaborators: JSON.stringify(parsedCollabs),
+            userTags: JSON.stringify(parsedTags),
+          }),
+          keepalive: true,
+        }).catch(() => { /* best-effort flush */ });
+      }
+    };
   }, [postId]);
 
   const handleRemoveChip = (key: string, handle: string) => {
@@ -190,6 +218,7 @@ export function CollaborationSection({
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       dirtyRef.current = false;
+      const { parsedCollabs, parsedTags } = latestRef.current;
       saveMutation.mutate({ collaborators: parsedCollabs, userTags: parsedTags });
     }, 300);
   };
