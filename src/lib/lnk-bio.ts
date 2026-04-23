@@ -139,10 +139,11 @@ export async function createLnkBioEntry(
   };
   if (options.image) params.image = options.image;
   if (options.scheduledDate) {
-    const d = new Date(options.scheduledDate);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    params.schedule_from =
-      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}-04:00`;
+    // lnk.bio requires strict RFC3339 with an explicit offset (Z or ±HH:MM) and no fractional seconds.
+    // Previous impl used `d.getHours()` (server-local) with a hardcoded `-04:00` — on Vercel (UTC)
+    // that shifted ET schedules by +4h, and even on an ET server would drift by 1h in EST (winter).
+    // UTC Z is DST-free and unambiguous.
+    params.schedule_from = new Date(options.scheduledDate).toISOString().replace(/\.\d{3}Z$/, "Z");
   }
 
   const result = await lnkBioRequest(config, "/lnk/add", "POST", params);
