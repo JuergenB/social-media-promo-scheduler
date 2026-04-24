@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   BarChart3,
+  Clock,
   Eye,
   Heart,
   Link2,
@@ -67,6 +68,12 @@ interface AnalyticsData {
       publishedAt: string;
     }>;
   };
+  bestTimes: Array<{
+    dayOfWeek: number;
+    hour: number;
+    avgEngagement: number;
+    postCount: number;
+  }>;
   lastUpdated: string;
 }
 
@@ -316,6 +323,9 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* ── Best Posting Times Heatmap ─────────────────────────── */}
+      <BestTimesHeatmap slots={data.bestTimes} />
+
       {/* ── Detail Cards Row ───────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Platform breakdown table */}
@@ -428,6 +438,141 @@ export default function AnalyticsPage() {
 }
 
 // ── Subcomponents ────────────────────────────────────────────────────
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+function formatHourLabel(h: number): string {
+  if (h === 0) return "12a";
+  if (h < 12) return `${h}a`;
+  if (h === 12) return "12p";
+  return `${h - 12}p`;
+}
+
+function BestTimesHeatmap({
+  slots,
+}: {
+  slots: AnalyticsData["bestTimes"];
+}) {
+  const byKey = useMemo(() => {
+    const m = new Map<string, AnalyticsData["bestTimes"][number]>();
+    for (const s of slots) m.set(`${s.dayOfWeek}-${s.hour}`, s);
+    return m;
+  }, [slots]);
+
+  const maxEngagement = useMemo(
+    () => Math.max(0, ...slots.map((s) => s.avgEngagement)),
+    [slots],
+  );
+
+  if (slots.length === 0) {
+    return (
+      <Card>
+        <div className="px-5 pt-5 pb-3">
+          <Subheading className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-primary" />
+            Best Posting Times
+          </Subheading>
+        </div>
+        <CardContent className="pt-0">
+          <div className="py-6 text-center">
+            <Text>
+              Not enough historical engagement data yet. Publish more posts to
+              see when your audience is most active.
+            </Text>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="px-5 pt-5 pb-3">
+        <div className="flex items-center justify-between">
+          <Subheading className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-primary" />
+            Best Posting Times
+          </Subheading>
+          <span className="text-[11px] text-muted-foreground">
+            Eastern Time · average engagement per hour
+          </span>
+        </div>
+      </div>
+      <CardContent className="pt-0">
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
+            {/* Hour header row */}
+            <div className="grid grid-cols-[3rem_repeat(24,1fr)] gap-0.5 pb-1">
+              <div />
+              {Array.from({ length: 24 }).map((_, h) => (
+                <div
+                  key={h}
+                  className="text-[10px] text-muted-foreground text-center"
+                >
+                  {h % 3 === 0 ? formatHourLabel(h) : ""}
+                </div>
+              ))}
+            </div>
+            {/* Day rows */}
+            {DAY_LABELS.map((day, d) => (
+              <div
+                key={day}
+                className="grid grid-cols-[3rem_repeat(24,1fr)] gap-0.5 items-center py-0.5"
+              >
+                <div className="text-xs text-muted-foreground font-medium pr-2">
+                  {day}
+                </div>
+                {Array.from({ length: 24 }).map((_, h) => {
+                  const slot = byKey.get(`${d}-${h}`);
+                  const intensity =
+                    slot && maxEngagement > 0
+                      ? slot.avgEngagement / maxEngagement
+                      : 0;
+                  const faded = Boolean(slot && slot.postCount < 3);
+                  const opacity = intensity * (faded ? 0.45 : 1);
+                  return (
+                    <div
+                      key={h}
+                      className="h-6 rounded-sm border border-border/40"
+                      style={{
+                        backgroundColor: slot
+                          ? `rgba(3, 153, 254, ${Math.max(opacity, 0.05)})`
+                          : "rgb(241 245 249 / 0.4)",
+                      }}
+                      title={
+                        slot
+                          ? `${day} ${formatHourLabel(h)} — avg engagement ${slot.avgEngagement.toFixed(1)} (${slot.postCount} post${slot.postCount === 1 ? "" : "s"})`
+                          : `${day} ${formatHourLabel(h)} — no data`
+                      }
+                    />
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center justify-between mt-3 text-[11px] text-muted-foreground">
+          <span>
+            Cells fade when fewer than 3 posts contributed to the slot.
+          </span>
+          <div className="flex items-center gap-2">
+            <span>less</span>
+            <div className="flex gap-0.5">
+              {[0.1, 0.3, 0.55, 0.8, 1].map((o) => (
+                <div
+                  key={o}
+                  className="w-4 h-3 rounded-sm border border-border/40"
+                  style={{ backgroundColor: `rgba(3, 153, 254, ${o})` }}
+                />
+              ))}
+            </div>
+            <span>more</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 function MetricCard({
   label,

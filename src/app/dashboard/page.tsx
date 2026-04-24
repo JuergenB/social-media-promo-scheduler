@@ -207,9 +207,16 @@ export default function DashboardPage() {
       totalImpressions: number;
       totalLikes: number;
       totalComments: number;
+      totalShares: number;
       totalClicks: number;
       postsTracked: number;
     };
+    bestTimes: Array<{
+      dayOfWeek: number;
+      hour: number;
+      avgEngagement: number;
+      postCount: number;
+    }>;
   }>({
     queryKey: ["analytics-summary", currentBrand?.id],
     queryFn: async () => {
@@ -380,8 +387,8 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Publishing Pipeline (full width) ────────────────── */}
-      <Card>
-        <div className="px-5 pt-5 pb-3">
+      <Card className="py-5 gap-3">
+        <div className="px-5">
           <div className="flex items-center justify-between">
             <Subheading className="flex items-center gap-2">
               <Layers className="h-4 w-4" />
@@ -447,6 +454,26 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
+      {/* ── Posting Activity (full width) ─────────────────────── */}
+      {data.timeline.length > 0 && (
+        <Card className="py-5 gap-3">
+          <div className="px-5">
+            <div className="flex items-center justify-between">
+              <Subheading className="flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Posting Activity
+              </Subheading>
+              <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
+                <Link href="/dashboard/calendar">Open Calendar</Link>
+              </Button>
+            </div>
+          </div>
+          <CardContent className="pt-0">
+            <MiniHeatmap timeline={data.timeline} />
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Main Content: 2 columns ──────────────────────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left column (span 2) */}
@@ -456,8 +483,8 @@ export default function DashboardPage() {
           <NeedsAttentionPanel posts={data.posts} />
 
           {/* Campaign Status Board */}
-          <Card>
-            <div className="px-5 pt-5 pb-3">
+          <Card className="py-5 gap-3">
+            <div className="px-5">
               <div className="flex items-center justify-between">
                 <Subheading>Campaigns</Subheading>
                 <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
@@ -528,8 +555,8 @@ export default function DashboardPage() {
         <div className="space-y-6">
 
           {/* ── Mini Calendar ──────────────────────────────────── */}
-          <Card>
-            <div className="px-5 pt-5 pb-1">
+          <Card className="py-5 gap-3">
+            <div className="px-5">
               <div className="flex items-center justify-between">
                 <Subheading className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
@@ -558,8 +585,8 @@ export default function DashboardPage() {
 
           {/* ── Next Up ────────────────────────────────────────── */}
           {data.upcoming && data.upcoming.length > 0 && (
-            <Card>
-              <div className="px-5 pt-5 pb-3">
+            <Card className="py-5 gap-3">
+              <div className="px-5">
                 <Subheading className="flex items-center gap-2">
                   <Clock className="h-4 w-4 text-primary" />
                   Next Up
@@ -586,48 +613,102 @@ export default function DashboardPage() {
 
           {/* ── Engagement Summary ──────────────────────────────── */}
           {analyticsData?.engagement && (
-            <Card>
-              <div className="px-5 pt-5 pb-3">
-                <div className="flex items-center justify-between">
-                  <Subheading className="flex items-center gap-2">
-                    <Eye className="h-4 w-4 text-primary" />
-                    Engagement
-                  </Subheading>
-                  <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
-                    <Link href="/dashboard/analytics">Details</Link>
-                  </Button>
-                </div>
-              </div>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-lg font-semibold">{analyticsData.engagement.totalImpressions.toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">Impressions</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-lg font-semibold">{analyticsData.engagement.totalLikes.toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">Likes</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-lg font-semibold">{analyticsData.engagement.totalComments.toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">Comments</p>
-                  </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-center">
-                    <p className="text-lg font-semibold">{analyticsData.engagement.totalClicks.toLocaleString()}</p>
-                    <p className="text-[10px] text-muted-foreground">Clicks</p>
+            <Link
+              href="/dashboard/analytics"
+              className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+            >
+              <Card className="py-5 gap-3 transition hover:shadow-md hover:border-primary/40 cursor-pointer">
+                <div className="px-5">
+                  <div className="flex items-center justify-between">
+                    <Subheading className="flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-primary" />
+                      Engagement
+                    </Subheading>
+                    <span className="text-xs text-muted-foreground group-hover:text-primary transition flex items-center gap-1">
+                      Details <ArrowRight className="h-3 w-3" />
+                    </span>
                   </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center mt-2">
-                  {analyticsData.engagement.postsTracked} posts tracked
-                </p>
-              </CardContent>
-            </Card>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-5 gap-1.5">
+                    <div className="rounded-lg bg-muted/50 px-1.5 py-2 text-center">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {analyticsData.engagement.totalImpressions.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">
+                        Impressions
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-pink-50/60 dark:bg-pink-950/20 px-1.5 py-2 text-center">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {analyticsData.engagement.totalLikes.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">
+                        Likes
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50/60 dark:bg-blue-950/20 px-1.5 py-2 text-center">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {analyticsData.engagement.totalComments.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">
+                        Comments
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-green-50/60 dark:bg-green-950/20 px-1.5 py-2 text-center">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {analyticsData.engagement.totalShares.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">
+                        Shares
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-purple-50/60 dark:bg-purple-950/20 px-1.5 py-2 text-center">
+                      <p className="text-sm font-semibold tabular-nums">
+                        {analyticsData.engagement.totalClicks.toLocaleString()}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground mt-0.5">
+                        Clicks
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center mt-2">
+                    {analyticsData.engagement.postsTracked} posts tracked
+                  </p>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
+
+          {/* ── Best Posting Times (mini) ───────────────────────── */}
+          {analyticsData?.bestTimes && analyticsData.bestTimes.length > 0 && (
+            <Link
+              href="/dashboard/analytics"
+              className="block group focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl"
+            >
+              <Card className="py-5 gap-3 transition hover:shadow-md hover:border-primary/40 cursor-pointer">
+                <div className="px-5">
+                  <div className="flex items-center justify-between">
+                    <Subheading className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      Best Times
+                    </Subheading>
+                    <span className="text-[10px] text-muted-foreground group-hover:text-primary transition">
+                      ET
+                    </span>
+                  </div>
+                </div>
+                <CardContent className="pt-0">
+                  <MiniBestTimesHeatmap slots={analyticsData.bestTimes} />
+                </CardContent>
+              </Card>
+            </Link>
           )}
 
           {/* ── Platform Distribution ──────────────────────────── */}
           {platformDistribution.length > 0 && (
-            <Card>
-              <div className="px-5 pt-5 pb-3">
+            <Card className="py-5 gap-3">
+              <div className="px-5">
                 <Subheading>Platforms</Subheading>
               </div>
               <CardContent className="pt-0 space-y-2">
@@ -656,8 +737,8 @@ export default function DashboardPage() {
           )}
 
           {/* Quick Actions (compact) */}
-          <Card>
-            <div className="px-5 pt-5 pb-3">
+          <Card className="py-5 gap-3">
+            <div className="px-5">
               <Subheading>Quick Actions</Subheading>
             </div>
             <CardContent className="pt-0 space-y-1">
@@ -671,25 +752,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Timeline Heatmap (full width) ────────────────────── */}
-      {data.timeline.length > 0 && (
-        <Card>
-          <div className="px-5 pt-5 pb-3">
-            <div className="flex items-center justify-between">
-              <Subheading className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Posting Activity
-              </Subheading>
-              <Button variant="ghost" size="sm" className="text-xs h-7" asChild>
-                <Link href="/dashboard/calendar">Open Calendar</Link>
-              </Button>
-            </div>
-          </div>
-          <CardContent className="pt-0">
-            <MiniHeatmap timeline={data.timeline} />
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
@@ -718,16 +780,28 @@ function StatCard({
         : "";
 
   const content = (
-    <div className={cn("rounded-lg border border-border p-4 transition-colors", accentClasses, href && "hover:bg-muted/50 cursor-pointer")}>
-      <div className="flex items-center gap-2 text-muted-foreground mb-1">
-        {icon}
-        <span className="text-xs font-medium">{label}</span>
+    <div
+      className={cn(
+        "rounded-lg border border-border p-4 transition-colors flex flex-col h-full",
+        accentClasses,
+        href && "hover:bg-muted/50 cursor-pointer",
+      )}
+    >
+      <div className="flex items-start gap-2 text-muted-foreground">
+        <span className="mt-0.5 shrink-0">{icon}</span>
+        <span className="text-xs font-medium leading-tight">{label}</span>
       </div>
-      <div className="text-3xl font-semibold tracking-tight">{value}</div>
+      <div className="text-3xl font-semibold tracking-tight mt-auto pt-2">{value}</div>
     </div>
   );
 
-  return href ? <Link href={href}>{content}</Link> : content;
+  return href ? (
+    <Link href={href} className="block h-full">
+      {content}
+    </Link>
+  ) : (
+    content
+  );
 }
 
 // ── Needs Attention Panel (#146) ──────────────────────────────────
@@ -809,8 +883,8 @@ function NeedsAttentionPanel({ posts }: { posts: DashboardStats["posts"] }) {
   };
 
   return (
-    <Card>
-      <div className="px-5 pt-5 pb-3">
+    <Card className="py-5 gap-3">
+      <div className="px-5">
         <div className="flex items-center justify-between">
           <Subheading className="flex items-center gap-2">
             <Eye className="h-4 w-4 text-amber-500" />
@@ -927,6 +1001,98 @@ function QuickLink({ href, icon, label }: { href: string; icon: React.ReactNode;
       <span className="flex-1">{label}</span>
       <ArrowRight className="h-3 w-3" />
     </Link>
+  );
+}
+
+/**
+ * Coarse-grained best-posting-times heatmap for the dashboard right column.
+ * Collapses 24 hours into 6 four-hour bins so the grid stays readable at
+ * narrow widths. Full precision is on /dashboard/analytics.
+ */
+function MiniBestTimesHeatmap({
+  slots,
+}: {
+  slots: Array<{
+    dayOfWeek: number;
+    hour: number;
+    avgEngagement: number;
+    postCount: number;
+  }>;
+}) {
+  const BIN_COUNT = 6;
+  const BIN_HOURS = 4;
+  const BIN_LABELS = ["12a", "4a", "8a", "12p", "4p", "8p"];
+  const DAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+  const { grid, maxAvg } = useMemo(() => {
+    const g: Array<Array<{ weighted: number; posts: number }>> = Array.from(
+      { length: 7 },
+      () =>
+        Array.from({ length: BIN_COUNT }, () => ({ weighted: 0, posts: 0 })),
+    );
+    for (const s of slots) {
+      const bin = Math.min(BIN_COUNT - 1, Math.floor(s.hour / BIN_HOURS));
+      g[s.dayOfWeek][bin].weighted += s.avgEngagement * s.postCount;
+      g[s.dayOfWeek][bin].posts += s.postCount;
+    }
+    let m = 0;
+    for (const row of g) {
+      for (const cell of row) {
+        const avg = cell.posts > 0 ? cell.weighted / cell.posts : 0;
+        if (avg > m) m = avg;
+      }
+    }
+    return { grid: g, maxAvg: m };
+  }, [slots]);
+
+  return (
+    <div>
+      <div className="grid grid-cols-[1rem_repeat(6,1fr)] gap-0.5 mb-1">
+        <div />
+        {BIN_LABELS.map((l) => (
+          <div
+            key={l}
+            className="text-[9px] text-muted-foreground text-center"
+          >
+            {l}
+          </div>
+        ))}
+      </div>
+      {DAYS.map((day, d) => (
+        <div
+          key={d}
+          className="grid grid-cols-[1rem_repeat(6,1fr)] gap-0.5 items-center py-0.5"
+        >
+          <div className="text-[10px] text-muted-foreground font-medium text-center">
+            {day}
+          </div>
+          {Array.from({ length: BIN_COUNT }).map((_, b) => {
+            const cell = grid[d][b];
+            const avg = cell.posts > 0 ? cell.weighted / cell.posts : 0;
+            const intensity = maxAvg > 0 ? avg / maxAvg : 0;
+            const faded = cell.posts > 0 && cell.posts < 3;
+            const opacity = intensity * (faded ? 0.45 : 1);
+            return (
+              <div
+                key={b}
+                className="h-5 rounded-sm border border-border/40"
+                style={{
+                  backgroundColor:
+                    cell.posts > 0
+                      ? `rgba(3, 153, 254, ${Math.max(opacity, 0.08)})`
+                      : "rgb(241 245 249 / 0.4)",
+                }}
+                title={
+                  cell.posts > 0
+                    ? `${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]} ${BIN_LABELS[b]}–${BIN_LABELS[(b + 1) % BIN_COUNT]} · avg ${avg.toFixed(1)} (${cell.posts} posts)`
+                    : ""
+                }
+              />
+            );
+          })}
+        </div>
+      ))}
+    </div>
   );
 }
 

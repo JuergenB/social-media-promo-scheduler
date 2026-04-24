@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserBrandAccess, hasBrandAccess } from "@/lib/brand-access";
-import { createBrandClient } from "@/lib/late-api/client";
+import { createBrandClient, resolveZernioKey } from "@/lib/late-api/client";
 import { listRecords } from "@/lib/airtable/client";
+
+const ZERNIO_BASE_URL = "https://zernio.com/api";
+const DISPLAY_TZ = "America/New_York";
 
 // ── In-memory cache (5-minute TTL) ─────────────────────────────────────
 interface CacheEntry {
@@ -41,12 +44,105 @@ interface AnalyticsResponse {
       publishedAt: string;
     }>;
   };
+  // Best posting times — (dayOfWeek, hour) already converted from UTC to ET.
+  // 0 = Sunday, 6 = Saturday. hour is 0–23 in America/New_York.
+  bestTimes: Array<{
+    dayOfWeek: number;
+    hour: number;
+    avgEngagement: number;
+    postCount: number;
+  }>;
   lastUpdated: string;
 }
 
 interface BrandFields {
   Name: string;
   "Zernio API Key Label": string;
+}
+
+// Convert a (dayOfWeek, hour) slot from UTC to America/New_York, respecting DST.
+// Uses the current week's Sunday as a reference so the Intl TZ math picks the
+// correct offset for the season we're in right now.
+function convertUtcSlotToDisplayTz(
+  dayOfWeekUtc: number,
+  hourUtc: number,
+): { dayOfWeek: number; hour: number } {
+  const ref = new Date();
+  ref.setUTCHours(0, 0, 0, 0);
+  ref.setUTCDate(ref.getUTCDate() - ref.getUTCDay());
+  const utcMs = ref.getTime() + (dayOfWeekUtc * 24 + hourUtc) * 3_600_000;
+  const utc = new Date(utcMs);
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DISPLAY_TZ,
+    weekday: "short",
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(utc);
+
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
+  const hourStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+  const weekdayMap: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  return {
+    dayOfWeek: weekdayMap[weekday] ?? 0,
+    hour: parseInt(hourStr, 10) % 24,
+  };
+}
+
+interface BestTimeRawSlot {
+  day_of_week: number;
+  hour: number;
+  avg_engagement: number;
+  post_count: number;
+}
+
+async function fetchBestTimes(apiKey: string): Promise<
+  AnalyticsResponse["bestTimes"]
+> {
+  const res = await fetch(`${ZERNIO_BASE_URL}/v1/analytics/best-time`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    console.error("[analytics] best-time fetch failed:", res.status);
+    return [];
+  }
+  const body = (await res.json()) as { slots?: BestTimeRawSlot[] };
+  const slots = body.slots ?? [];
+
+  // Collapse any collisions that could theoretically arise from TZ conversion
+  // by summing post_count and weighting avg_engagement by post_count.
+  const agg = new Map<
+    string,
+    { dayOfWeek: number; hour: number; weighted: number; postCount: number }
+  >();
+  for (const s of slots) {
+    const { dayOfWeek, hour } = convertUtcSlotToDisplayTz(
+      s.day_of_week,
+      s.hour,
+    );
+    const key = `${dayOfWeek}-${hour}`;
+    const existing = agg.get(key);
+    if (existing) {
+      existing.weighted += s.avg_engagement * s.post_count;
+      existing.postCount += s.post_count;
+    } else {
+      agg.set(key, {
+        dayOfWeek,
+        hour,
+        weighted: s.avg_engagement * s.post_count,
+        postCount: s.post_count,
+      });
+    }
+  }
+  return Array.from(agg.values()).map((v) => ({
+    dayOfWeek: v.dayOfWeek,
+    hour: v.hour,
+    avgEngagement: v.postCount > 0 ? v.weighted / v.postCount : 0,
+    postCount: v.postCount,
+  }));
 }
 
 /**
@@ -178,8 +274,20 @@ export async function GET(request: NextRequest) {
       // Continue with empty engagement data
     }
 
+    // ── Zernio best-time data (SDK doesn't cover this endpoint) ───────
+    let bestTimes: AnalyticsResponse["bestTimes"] = [];
+    try {
+      const apiKey = resolveZernioKey({
+        zernioApiKeyLabel: brand?.["Zernio API Key Label"] || null,
+      });
+      bestTimes = await fetchBestTimes(apiKey);
+    } catch (err) {
+      console.error("[analytics] best-time error:", err);
+    }
+
     const response: AnalyticsResponse = {
       engagement,
+      bestTimes,
       lastUpdated: new Date().toISOString(),
     };
 
