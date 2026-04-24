@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateRecord, getRecord } from "@/lib/airtable/client";
 import { uploadImage, deleteImage, isBlobUrl } from "@/lib/blob-storage";
+import { syncPostDownstream } from "@/lib/post-downstream-sync";
 
 /**
  * POST /api/posts/[id]/image
@@ -41,6 +42,10 @@ export async function POST(
     // Update Airtable Image URL with the permanent Blob URL
     await updateRecord("Posts", id, { "Image URL": imageUrl });
 
+    // Propagate to Zernio + lnk.bio if the post is scheduled. Fire-and-forget —
+    // don't block the upload response on external APIs.
+    syncPostDownstream(id).catch(() => {});
+
     return NextResponse.json({
       success: true,
       imageUrl,
@@ -77,6 +82,11 @@ export async function DELETE(
       "Image URL": "",
       "Image Upload": [],
     });
+
+    // Fire-and-forget downstream sync — a scheduled post must reflect
+    // that its image is gone (Zernio mediaItems clears, lnk.bio entry
+    // recreates without an image).
+    syncPostDownstream(id).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {

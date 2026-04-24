@@ -3,6 +3,7 @@ import { getRecord, updateRecord } from "@/lib/airtable/client";
 import { parseMediaItems, serializeMediaItems, type MediaItem } from "@/lib/media-items";
 import { renderCarouselSlides, type SlideOptions, type RGB } from "@/lib/image-caption";
 import { uploadImage, deleteImage, isBlobUrl } from "@/lib/blob-storage";
+import { syncPostDownstream } from "@/lib/post-downstream-sync";
 
 interface PostFields {
   Content: string;
@@ -140,6 +141,8 @@ export async function POST(
       "Media Captions": serialized["Media Captions"],
     });
 
+    syncPostDownstream(id).catch(() => {});
+
     return NextResponse.json({
       applied: true,
       mediaItems: newMediaItems,
@@ -226,6 +229,8 @@ export async function DELETE(
       "Media Captions": serialized["Media Captions"],
       "Original Media": "",
     });
+
+    syncPostDownstream(id).catch(() => {});
 
     // Fire-and-forget: clean up orphaned slide blobs (designed card blobs already removed from list above)
     for (const url of blobUrlsToDelete) {
