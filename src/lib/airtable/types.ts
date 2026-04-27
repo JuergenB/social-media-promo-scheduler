@@ -21,10 +21,14 @@ export interface Brand {
   platformCadence: PlatformCadenceConfig | null;
   /** Instagram handle including @ (e.g., "@notrealartworld"). */
   instagramHandle: string | null;
-  /** Vercel Blob URL for white/light transparent PNG logo (for dark backgrounds). */
+  /** Vercel Blob URL for white/light transparent PNG square logo (for dark backgrounds). */
   logoTransparentLight: string | null;
-  /** Vercel Blob URL for dark/black transparent PNG logo (for light backgrounds). */
+  /** Vercel Blob URL for dark/black transparent PNG square logo (for light backgrounds). */
   logoTransparentDark: string | null;
+  /** Vercel Blob URL for wordmark/horizontal logo for use over light backgrounds. */
+  logoRectangularLight: string | null;
+  /** Vercel Blob URL for wordmark/horizontal logo for use over dark backgrounds. */
+  logoRectangularDark: string | null;
   /** Per-brand tone dimension settings (8 dimensions, 1-10 scale each). */
   toneDimensions?: ToneDimensions;
   /** Short additional tone notes (1-2 sentences). */

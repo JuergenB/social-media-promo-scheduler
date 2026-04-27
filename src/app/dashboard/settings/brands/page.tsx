@@ -50,6 +50,7 @@ import { buildProfileUrl } from "@/lib/lnk-bio";
 import { cn } from "@/lib/utils";
 import { getToneLabel, getAllToneTiers } from "@/lib/prompts/tone-guidance";
 import { CadenceEditor } from "@/components/brands/cadence-editor";
+import { LogoManager } from "@/components/brands/logo-manager";
 import { PlatformIcon } from "@/components/shared/platform-icon";
 import { useAccounts } from "@/hooks/use-accounts";
 import {
@@ -837,6 +838,29 @@ function BrandSettings({ brand }: { brand: Brand }) {
             )}
           </CardContent>
         </Card>
+
+        {/* ── Brand Logos ─────────────────────────────────────────── */}
+        <LogoManager brand={brand} />
+
+        {/* ── Cover Generator (Intersect only — dev tool) ─────────── */}
+        {brand?.name === "The Intersect" && (
+          <Card>
+            <CardContent className="p-5 flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-0.5">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Cover Generator
+                </Label>
+                <span className="text-sm">
+                  Render Overview-post cover slides for any Intersect newsletter
+                  issue.
+                </span>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <a href="/dashboard/tools/cover-generator">Open Cover Generator</a>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Voice Guidelines ────────────────────────────────────── */}
         <Card>

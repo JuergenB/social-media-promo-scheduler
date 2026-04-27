@@ -33,6 +33,8 @@ interface BrandFields {
   "Instagram Handle": string;
   "Logo Transparent Light": string;
   "Logo Transparent Dark": string;
+  "Logo Rectangular Light": string;
+  "Logo Rectangular Dark": string;
   "Tone Dimensions": string;
   "Tone Notes": string;
   "Default Voice Intensity": number;
@@ -81,6 +83,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     instagramHandle: r.fields["Instagram Handle"] || null,
     logoTransparentLight: r.fields["Logo Transparent Light"] || null,
     logoTransparentDark: r.fields["Logo Transparent Dark"] || null,
+    logoRectangularLight: r.fields["Logo Rectangular Light"] || null,
+    logoRectangularDark: r.fields["Logo Rectangular Dark"] || null,
     toneDimensions: parseToneDimensions(r.fields["Tone Dimensions"]),
     toneNotes: r.fields["Tone Notes"] || undefined,
     defaultVoiceIntensity: r.fields["Default Voice Intensity"] ?? undefined,
@@ -148,6 +152,10 @@ export async function PATCH(request: NextRequest) {
       lnkBioUsername: "Lnk.Bio Username",
       lnkBioClientIdLabel: "Lnk.Bio Client ID Label",
       lnkBioClientSecretLabel: "Lnk.Bio Client Secret Label",
+      logoTransparentLight: "Logo Transparent Light",
+      logoTransparentDark: "Logo Transparent Dark",
+      logoRectangularLight: "Logo Rectangular Light",
+      logoRectangularDark: "Logo Rectangular Dark",
       status: "Status",
     };
 
