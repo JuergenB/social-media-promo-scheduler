@@ -4,6 +4,7 @@
 
 import {
   createContext,
+  Suspense,
   useContext,
   useEffect,
   useMemo,
@@ -1723,7 +1724,9 @@ type UpscaleStatus = {
   message?: string;
 };
 
-export default function OverviewCoversDevPage() {
+// Wrapped at the bottom in a Suspense boundary so the inner component's
+// useSearchParams() doesn't fail Next.js's CSR-bailout check at build time.
+function OverviewCoversDevPage() {
   const searchParams = useSearchParams();
   const renderSlide = searchParams.get("render") as
     | "A"
@@ -2381,5 +2384,13 @@ export default function OverviewCoversDevPage() {
       </div>
     </div>
     </SizeContext.Provider>
+  );
+}
+
+export default function CoverGeneratorPage() {
+  return (
+    <Suspense fallback={null}>
+      <OverviewCoversDevPage />
+    </Suspense>
   );
 }
