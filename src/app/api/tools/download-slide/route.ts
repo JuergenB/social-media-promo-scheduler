@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
       clip: { x: 0, y: 0, width: W, height: H },
     });
 
-    return new NextResponse(buf as Buffer, {
+    return new NextResponse(new Uint8Array(buf as Uint8Array), {
       status: 200,
       headers: {
         "Content-Type": "image/png",
