@@ -112,10 +112,30 @@ export async function GET(
       theme?: string;
       "Lead Image"?: { url: string }[];
       "Newsletter Entries"?: string[];
+      "Discovered Articles"?: string[];
+      planning_notes?: string;
     };
 
-    // 2. Fetch all linked Newsletter Entries in one call
+    // 2. Two possible sources for stories:
+    //    a) Newsletter Entries (curated, promoted) — older / further-along issues
+    //    b) planning_notes.articleIds — Curator's source of truth for which
+    //       Discovered Articles are selected for THIS issue. Status will be
+    //       "picked" but the issue's reverse-link to Discovered Articles is
+    //       fuzzy and includes rejected candidates too, so we read the JSON
+    //       blob directly instead of filtering.
+    //    Try (a) first; fall back to (b) if empty.
     const entryIds = issueFields["Newsletter Entries"] ?? [];
+    let plannedArticleIds: string[] = [];
+    try {
+      if (issueFields.planning_notes) {
+        const parsed = JSON.parse(issueFields.planning_notes) as {
+          articleIds?: string[];
+        };
+        plannedArticleIds = parsed.articleIds ?? [];
+      }
+    } catch {
+      // planning_notes wasn't valid JSON — leave empty
+    }
     let entries: {
       id: string;
       title: string;
@@ -125,6 +145,7 @@ export async function GET(
     }[] = [];
 
     if (entryIds.length > 0) {
+      // Path (a): Newsletter Entries → cross-reference Discovered Articles for image
       const entryFormula = `OR(${entryIds.map((id) => `RECORD_ID()='${id}'`).join(",")})`;
       const entriesData = await airtableFetch(
         env.baseId,
@@ -140,7 +161,6 @@ export async function GET(
         imageUrl: null,
       }));
 
-      // 3. For each entry, look up matching Discovered Article by URL to get Image URL
       const urlsToLookup = entries
         .map((e) => e.sourceUrl)
         .filter((u): u is string => !!u);
@@ -166,6 +186,31 @@ export async function GET(
           }
         }
       }
+    } else if (plannedArticleIds.length > 0) {
+      // Path (b): no Newsletter Entries yet — read the curator's selection
+      // directly from planning_notes.articleIds and fetch those articles.
+      const articleFormula = `OR(${plannedArticleIds
+        .map((id: string) => `RECORD_ID()='${id}'`)
+        .join(",")})`;
+      const articlesData = await airtableFetch(
+        env.baseId,
+        env.apiKey,
+        ARTICLES_TBL,
+        `filterByFormula=${encodeURIComponent(articleFormula)}&maxRecords=20`,
+      );
+      // Preserve the order from articleIds, since Airtable's response order
+      // doesn't match.
+      const byId = new Map(articlesData.records.map((r) => [r.id, r]));
+      entries = plannedArticleIds
+        .map((id: string) => byId.get(id))
+        .filter((r): r is (typeof articlesData.records)[number] => !!r)
+        .map((r) => ({
+          id: r.id,
+          title: (r.fields["Title"] as string) ?? "",
+          sourceUrl: (r.fields["URL"] as string) ?? "",
+          contentSummary: r.fields["Summary"] as string | undefined,
+          imageUrl: (r.fields["Image URL"] as string) ?? null,
+        }));
     }
 
     return NextResponse.json({
