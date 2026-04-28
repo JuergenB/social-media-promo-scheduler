@@ -94,11 +94,12 @@ export async function GET(req: NextRequest) {
     }
     const pdfBytes = await pdf.save();
 
+    const issueNum = url.searchParams.get("n") ?? "overview";
     return new NextResponse(new Uint8Array(pdfBytes), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="intersect-issue-overview-${fmt}.pdf"`,
+        "Content-Disposition": `attachment; filename="intersect-issue-${issueNum}-overview-${fmt}.pdf"`,
         "Cache-Control": "no-store",
       },
     });

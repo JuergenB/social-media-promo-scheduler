@@ -13,12 +13,10 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 
-// Issue 75 Lead Image, downloaded locally from The Intersect Curator's
-// Airtable so it doesn't expire. Source: appf4szL... / Newsletter Issues /
-// recvI0qqQzhv2vqNT (Lead Image attachment, 1680x720).
-// Multi-brand parameterization is future work — this is hardcoded to The
-// Intersect for the Issue 75 launch on 2026-04-28.
-const HERO_IMAGE = "/dev-assets/intersect-75-lead.jpg";
+// Issue 75 lead image, kept as a local fallback for the seed default so the
+// page paints something even before the first Curator fetch. The live tool
+// reads `leadImageUrl` from the Curator response into IssueData state.
+const HERO_IMAGE_FALLBACK = "/dev-assets/intersect-75-lead.jpg";
 
 const STORY_IMAGES = [
   "https://dxj7eshgz03ln.cloudfront.net/production/link/image/1107144/twenty_by_nine_extra_large_3cfbfef2-e250-4b65-bfd6-89c6d7be4e8d.jpg",
@@ -27,9 +25,9 @@ const STORY_IMAGES = [
   "https://dxj7eshgz03ln.cloudfront.net/production/link/image/1107148/twenty_by_nine_extra_large_a662a7ea-d5cf-4b0f-9749-6dc742c9c58a.jpg",
 ];
 
-// Issue 75 stories, fetched from Newsletter Entries linked to recvI0qqQzhv2vqNT.
-// (Story image scraping isn't wired yet for Issue 75 — STORY_IMAGES still
-// reference Issue 74's CloudFront URLs as placeholders for the grid mockup.)
+// Fallback titles used only when no story picks have been made yet (initial
+// page load with no localStorage). Real story data flows in via the Curator
+// picker into `storyPicks`.
 const STORY_TITLES = [
   "Recycled Plastic Finds Its Form in Coral-Inspired Sculpture",
   "Zim & Zou Turn Boomboxes and Cassette Tapes Into Paper Sculptures",
@@ -37,13 +35,40 @@ const STORY_TITLES = [
   "Issey Miyake Turns Pleating Waste Into Furniture Worth Keeping",
 ];
 
-const ISSUE = {
+type IssueData = {
+  number: number;
+  date: string; // display-formatted, e.g. "APRIL 28, 2026"
+  brand: string; // short masthead, e.g. "THE INTERSECT"
+  brandLong: string; // long form for alt text, e.g. "The Intersect"
+  tagline: string;
+  leadImageUrl: string;
+};
+
+const DEFAULT_ISSUE: IssueData = {
   number: 75,
   date: "APRIL 28, 2026",
   brand: "THE INTERSECT",
   brandLong: "The Intersect",
   tagline: "Wrenches, paper, waste — organic holds its ground.",
+  leadImageUrl: HERO_IMAGE_FALLBACK,
 };
+
+// Convert Curator's "Publication Date" (ISO YYYY-MM-DD or full ISO) into the
+// "MONTH D, YYYY" all-caps display format the slides use. Returns null if the
+// input can't be parsed so the caller can fall back to the prior value.
+function formatPublicationDate(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return null;
+  const [, y, mm, dd] = m;
+  const months = [
+    "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+    "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER",
+  ];
+  const monthIdx = Number(mm) - 1;
+  if (monthIdx < 0 || monthIdx > 11) return null;
+  return `${months[monthIdx]} ${Number(dd)}, ${y}`;
+}
 
 const PALETTE = {
   cream: "#f9f8f3",
@@ -1113,6 +1138,10 @@ function TemplateA({
   taglineFontSize = 52,
   cta = "READ IN BIO →",
   numeralLeft = false,
+  issueNumber,
+  brand,
+  tagline,
+  date,
 }: {
   heroSrc: string;
   imagePos: ImagePos;
@@ -1122,6 +1151,10 @@ function TemplateA({
   taglineFontSize?: number;
   cta?: string;
   numeralLeft?: boolean;
+  issueNumber: number;
+  brand: string;
+  tagline: string;
+  date: string;
 }) {
   const size = useSize();
   const bandIsLight = hexLuminance(
@@ -1166,19 +1199,19 @@ function TemplateA({
           {numeralLeft ? (
             <>
               <div style={{ fontSize: 22, letterSpacing: 3 }}>
-                ISSUE NO. {ISSUE.number}
+                ISSUE NO. {issueNumber}
               </div>
               <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>
-                {ISSUE.brand}
+                {brand}
               </div>
             </>
           ) : (
             <>
               <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>
-                {ISSUE.brand}
+                {brand}
               </div>
               <div style={{ fontSize: 22, letterSpacing: 3 }}>
-                ISSUE NO. {ISSUE.number}
+                ISSUE NO. {issueNumber}
               </div>
             </>
           )}
@@ -1198,7 +1231,7 @@ function TemplateA({
             pointerEvents: "none",
           }}
         >
-          {ISSUE.number}
+          {issueNumber}
         </div>
 
         {bandBlur > 0 && (
@@ -1236,7 +1269,7 @@ function TemplateA({
             color: textInk,
           }}
         >
-          {ISSUE.tagline}
+          {tagline}
         </div>
         <div
           style={{
@@ -1250,7 +1283,7 @@ function TemplateA({
             borderTop: `1px solid ${bandIsLight ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.25)"}`,
           }}
         >
-          <div>{ISSUE.date}</div>
+          <div>{date}</div>
           <div style={{ color: textInk, fontWeight: 600 }}>{cta}</div>
         </div>
       </div>
@@ -1269,6 +1302,9 @@ function TemplateB_Square({
   taglineFontSize = 50,
   cta = "LINK IN BIO →",
   logoLeft = true,
+  issueNumber,
+  brandLong,
+  date,
 }: {
   numeralPos: NumeralPos;
   onNumeralChange: (next: NumeralPos) => void;
@@ -1278,6 +1314,9 @@ function TemplateB_Square({
   taglineFontSize?: number;
   cta?: string;
   logoLeft?: boolean;
+  issueNumber: number;
+  brandLong: string;
+  date: string;
 }) {
   const size = useSize();
   const inset = 60;
@@ -1317,7 +1356,7 @@ function TemplateB_Square({
           <>
             <img
               src={BRAND_LOGO_SQUARE}
-              alt={ISSUE.brandLong}
+              alt={brandLong}
               style={{
                 height: ROW_H,
                 width: ROW_H,
@@ -1329,7 +1368,7 @@ function TemplateB_Square({
               }}
             />
             <DraggableNumeral
-              value={ISSUE.number}
+              value={issueNumber}
               rowH={ROW_H}
               pos={numeralPos}
               onChange={onNumeralChange}
@@ -1341,7 +1380,7 @@ function TemplateB_Square({
         ) : (
           <>
             <DraggableNumeral
-              value={ISSUE.number}
+              value={issueNumber}
               rowH={ROW_H}
               pos={numeralPos}
               onChange={onNumeralChange}
@@ -1351,7 +1390,7 @@ function TemplateB_Square({
             />
             <img
               src={BRAND_LOGO_SQUARE}
-              alt={ISSUE.brandLong}
+              alt={brandLong}
               style={{
                 height: ROW_H,
                 width: ROW_H,
@@ -1465,7 +1504,7 @@ function TemplateB_Square({
             letterSpacing: 3,
           }}
         >
-          <div style={{ color: fgSoft }}>{ISSUE.date}</div>
+          <div style={{ color: fgSoft }}>{date}</div>
           <div style={{ color: fg, fontWeight: 700 }}>{cta}</div>
         </div>
       </div>
@@ -1482,6 +1521,9 @@ function TemplateB_Rect({
   taglineFontSize = 44,
   cta = "LINK IN BIO →",
   logoLeft = true,
+  issueNumber,
+  brandLong,
+  date,
 }: {
   numeralPos: NumeralPos;
   onNumeralChange: (next: NumeralPos) => void;
@@ -1491,6 +1533,9 @@ function TemplateB_Rect({
   taglineFontSize?: number;
   cta?: string;
   logoLeft?: boolean;
+  issueNumber: number;
+  brandLong: string;
+  date: string;
 }) {
   const size = useSize();
   const inset = 60;
@@ -1532,7 +1577,7 @@ function TemplateB_Rect({
           <>
             <img
               src={BRAND_LOGO_RECT}
-              alt={ISSUE.brandLong}
+              alt={brandLong}
               style={{
                 height: ROW_H,
                 width: "auto",
@@ -1544,7 +1589,7 @@ function TemplateB_Rect({
               }}
             />
             <DraggableNumeral
-              value={ISSUE.number}
+              value={issueNumber}
               rowH={ROW_H}
               pos={numeralPos}
               onChange={onNumeralChange}
@@ -1556,7 +1601,7 @@ function TemplateB_Rect({
         ) : (
           <>
             <DraggableNumeral
-              value={ISSUE.number}
+              value={issueNumber}
               rowH={ROW_H}
               pos={numeralPos}
               onChange={onNumeralChange}
@@ -1566,7 +1611,7 @@ function TemplateB_Rect({
             />
             <img
               src={BRAND_LOGO_RECT}
-              alt={ISSUE.brandLong}
+              alt={brandLong}
               style={{
                 height: ROW_H,
                 width: "auto",
@@ -1679,8 +1724,8 @@ function TemplateB_Rect({
             letterSpacing: 3,
           }}
         >
-          <div style={{ color: fgSoft }}>{ISSUE.date}</div>
-          <div style={{ color: fg, fontWeight: 700 }}>LINK IN BIO →</div>
+          <div style={{ color: fgSoft }}>{date}</div>
+          <div style={{ color: fg, fontWeight: 700 }}>{cta}</div>
         </div>
       </div>
     </div>
@@ -1693,12 +1738,20 @@ function TemplateC({
   onChange,
   taglineFontSize = 56,
   cta = "LINK IN BIO →",
+  issueNumber,
+  brand,
+  tagline,
+  date,
 }: {
   heroSrc: string;
   imagePos: ImagePos;
   onChange: (next: ImagePos) => void;
   taglineFontSize?: number;
   cta?: string;
+  issueNumber: number;
+  brand: string;
+  tagline: string;
+  date: string;
 }) {
   const size = useSize();
   const numeralRgb = "255,255,255";
@@ -1732,10 +1785,10 @@ function TemplateC({
         }}
       >
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: 4 }}>
-          {ISSUE.brand}
+          {brand}
         </div>
         <div style={{ fontSize: 18, letterSpacing: 3 }}>
-          ISSUE NO. {ISSUE.number}
+          ISSUE NO. {issueNumber}
         </div>
       </div>
 
@@ -1773,7 +1826,7 @@ function TemplateC({
             maxWidth: 880,
           }}
         >
-          {ISSUE.tagline}
+          {tagline}
         </div>
         <div
           style={{
@@ -1788,7 +1841,7 @@ function TemplateC({
             fontWeight: 700,
           }}
         >
-          <div style={{ fontWeight: 400, opacity: 0.8 }}>{ISSUE.date}</div>
+          <div style={{ fontWeight: 400, opacity: 0.8 }}>{date}</div>
           <div>{cta}</div>
         </div>
       </div>
@@ -1819,7 +1872,31 @@ function OverviewCoversDevPage() {
   const qpStr = (k: string, d: string | null = null) =>
     searchParams.get(k) ?? d;
 
-  const [heroSrc, setHeroSrc] = useState(qpStr("hero", HERO_IMAGE) as string);
+  // Issue data: single source of truth for everything that varies per issue
+  // (number, date, brand, tagline, lead image). Render-mode hydrates these
+  // from query params via DEFAULT_ISSUE merge; normal mode persists to
+  // localStorage so a refresh keeps the active issue's data on screen.
+  const initialIssueData: IssueData = {
+    number: qpNum("n", DEFAULT_ISSUE.number),
+    date: (qpStr("dt") as string | null) ?? DEFAULT_ISSUE.date,
+    brand: (qpStr("br") as string | null) ?? DEFAULT_ISSUE.brand,
+    brandLong: (qpStr("bln") as string | null) ?? DEFAULT_ISSUE.brandLong,
+    tagline: (qpStr("tg") as string | null) ?? DEFAULT_ISSUE.tagline,
+    leadImageUrl:
+      (qpStr("hero") as string | null) ?? DEFAULT_ISSUE.leadImageUrl,
+  };
+  const [issueData, setIssueData] = useLocalStorage<IssueData>(
+    "overview-cover-issueData",
+    initialIssueData,
+  );
+
+  // heroSrc tracks the actual rendered hero image — usually issueData.leadImageUrl,
+  // but the Upscale flow swaps in a Replicate URL that should persist independently.
+  // useLocalStorage keeps the upscaled URL across refreshes; fetchIssue resets it.
+  const [heroSrc, setHeroSrc] = useLocalStorage<string>(
+    "overview-cover-heroSrc",
+    initialIssueData.leadImageUrl,
+  );
   const [posA, setPosA] = useLocalStorage<ImagePos>(
     "overview-cover-posA",
     {
@@ -1910,7 +1987,17 @@ function OverviewCoversDevPage() {
     "overview-cover-taglineFsC",
     qpNum("tcfs", 56),
   );
-  const [issueNumber, setIssueNumber] = useState<number>(qpNum("issue", 75));
+  // Staged issue number — what's typed into the input. Distinct from
+  // issueData.number, which is what's currently rendered. Stays in sync with
+  // issueData on hydration so the input doesn't show stale defaults.
+  const [issueNumber, setIssueNumber] = useState<number>(
+    qpNum("issue", initialIssueData.number),
+  );
+  useEffect(() => {
+    setIssueNumber(issueData.number);
+    // Re-sync only when persisted issueData hydrates with a different number.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issueData.number]);
   const [format, setFormat] = useLocalStorage<"ig" | "li">(
     "overview-cover-format",
     (qpStr("fmt") as "ig" | "li") ?? "ig",
@@ -1946,6 +2033,13 @@ function OverviewCoversDevPage() {
   ): string => {
     const sp = new URLSearchParams({ slide });
     sp.set("fmt", format);
+    // Issue data flows to render mode through these params so the rendered PNG
+    // matches what's on screen.
+    sp.set("n", String(issueData.number));
+    sp.set("dt", issueData.date);
+    sp.set("br", issueData.brand);
+    sp.set("bln", issueData.brandLong);
+    sp.set("tg", issueData.tagline);
     if (slide === "A" || slide === "C") {
       sp.set("hero", heroSrc);
     }
@@ -2032,7 +2126,9 @@ function OverviewCoversDevPage() {
     issue?: {
       number: number;
       name: string;
+      publicationDate?: string;
       summary?: string;
+      theme?: string;
       leadImageUrl?: string;
     };
     entries?: { id: string; title: string; sourceUrl: string; imageUrl: string | null }[];
@@ -2049,6 +2145,33 @@ function OverviewCoversDevPage() {
         return;
       }
       setCuratorState({ state: "loaded", issue: data.issue, entries: data.entries });
+      // Drive every slide off the fetched issue. Any field the Curator doesn't
+      // supply falls back to the previous value (brand/brandLong are project-
+      // scoped and never come from Curator).
+      if (data.issue) {
+        const formattedDate = formatPublicationDate(data.issue.publicationDate);
+        const next: IssueData = {
+          number: data.issue.number ?? issueNumber,
+          date: formattedDate ?? issueData.date,
+          brand: issueData.brand,
+          brandLong: issueData.brandLong,
+          tagline:
+            data.issue.theme ||
+            data.issue.summary ||
+            data.issue.name ||
+            issueData.tagline,
+          leadImageUrl: data.issue.leadImageUrl || issueData.leadImageUrl,
+        };
+        setIssueData(next);
+        if (data.issue.leadImageUrl) {
+          setHeroSrc(data.issue.leadImageUrl);
+          // Reset image pan/zoom so a brand-new hero starts centered.
+          setPosA({ x: 50, y: 50, zoom: 1 });
+          setPosC({ x: 50, y: 50, zoom: 1 });
+        }
+        // Story picks from the prior issue don't apply to the new one.
+        setStoryPicks([]);
+      }
     } catch (e) {
       setCuratorState({ state: "error", error: (e as Error).message });
     }
@@ -2081,6 +2204,10 @@ function OverviewCoversDevPage() {
           taglineFontSize={taglineFsA}
           cta={slide1Cta}
           numeralLeft={slide1NumeralLeft}
+          issueNumber={issueData.number}
+          brand={issueData.brand}
+          tagline={issueData.tagline}
+          date={issueData.date}
         />
       );
     else if (renderSlide === "2a")
@@ -2093,11 +2220,14 @@ function OverviewCoversDevPage() {
               ? effectiveStories.slice(0, 2)
               : effectiveStories.slice(0, 4)
           }
-          tagline={ISSUE.tagline}
+          tagline={issueData.tagline}
           bgColor={bgFinal2a}
           taglineFontSize={tagFs2a}
           cta={slide2Cta}
           logoLeft={slide2aLogoLeft}
+          issueNumber={issueData.number}
+          brandLong={issueData.brandLong}
+          date={issueData.date}
         />
       );
     else if (renderSlide === "2b")
@@ -2107,22 +2237,28 @@ function OverviewCoversDevPage() {
             numeralPos={numeralB}
             onNumeralChange={setNumeralB}
             stories={effectiveStories.slice(2, 4)}
-            tagline={ISSUE.tagline}
+            tagline={issueData.tagline}
             bgColor={bgFinal2b}
             taglineFontSize={tagFs2b}
             cta={slide2Cta}
             logoLeft={slide2bLogoLeft}
+            issueNumber={issueData.number}
+            brandLong={issueData.brandLong}
+            date={issueData.date}
           />
         ) : (
           <TemplateB_Rect
             numeralPos={numeralB}
             onNumeralChange={setNumeralB}
             stories={effectiveStories.slice(0, 4)}
-            tagline={ISSUE.tagline}
+            tagline={issueData.tagline}
             bgColor={bgFinal2b}
             taglineFontSize={tagFs2b}
             cta={slide2Cta}
             logoLeft={slide2bLogoLeft}
+            issueNumber={issueData.number}
+            brandLong={issueData.brandLong}
+            date={issueData.date}
           />
         );
     else if (renderSlide === "C")
@@ -2133,6 +2269,10 @@ function OverviewCoversDevPage() {
           onChange={setPosC}
           taglineFontSize={taglineFsC}
           cta={slide3Cta}
+          issueNumber={issueData.number}
+          brand={issueData.brand}
+          tagline={issueData.tagline}
+          date={issueData.date}
         />
       );
     return (
@@ -2224,6 +2364,11 @@ function OverviewCoversDevPage() {
               sp.set("slides", "A,2a,C");
               sp.set("fmt", format);
               sp.set("hero", heroSrc);
+              sp.set("n", String(issueData.number));
+              sp.set("dt", issueData.date);
+              sp.set("br", issueData.brand);
+              sp.set("bln", issueData.brandLong);
+              sp.set("tg", issueData.tagline);
               sp.set("ax", String(posA.x));
               sp.set("ay", String(posA.y));
               sp.set("az", String(posA.zoom));
@@ -2246,7 +2391,7 @@ function OverviewCoversDevPage() {
               sp.set("s2bl", slide2bLogoLeft ? "1" : "0");
               return `/api/tools/download-pdf?${sp.toString()}`;
             })()}
-            filename={`intersect-issue-${issueNumber}-overview-${format}.pdf`}
+            filename={`intersect-issue-${issueData.number}-overview-${format}.pdf`}
           />
           {curatorState.state === "loaded" && curatorState.issue && (
             <span className="text-xs text-muted-foreground">
@@ -2338,9 +2483,13 @@ function OverviewCoversDevPage() {
               taglineFontSize={taglineFsA}
               cta={slide1Cta}
               numeralLeft={slide1NumeralLeft}
+              issueNumber={issueData.number}
+              brand={issueData.brand}
+              tagline={issueData.tagline}
+              date={issueData.date}
             />
           </CanvasFrame>
-          <DownloadButton href={buildDownloadHref("A")} filename={`intersect-issue-${issueNumber}-cover.png`} />
+          <DownloadButton href={buildDownloadHref("A")} filename={`intersect-issue-${issueData.number}-cover.png`} />
           <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
             <button
               type="button"
@@ -2388,14 +2537,17 @@ function OverviewCoversDevPage() {
                   ? effectiveStories.slice(0, 2)
                   : effectiveStories.slice(0, 4)
               }
-              tagline={ISSUE.tagline}
+              tagline={issueData.tagline}
               bgColor={bgFinal2a}
               taglineFontSize={tagFs2a}
               cta={slide2Cta}
               logoLeft={slide2aLogoLeft}
+              issueNumber={issueData.number}
+              brandLong={issueData.brandLong}
+              date={issueData.date}
             />
           </CanvasFrame>
-          <DownloadButton href={buildDownloadHref("2a")} filename={`intersect-issue-${issueNumber}-inner-2a.png`} />
+          <DownloadButton href={buildDownloadHref("2a")} filename={`intersect-issue-${issueData.number}-inner-2a.png`} />
           <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
             <button
               type="button"
@@ -2445,26 +2597,32 @@ function OverviewCoversDevPage() {
                 numeralPos={numeralB}
                 onNumeralChange={setNumeralB}
                 stories={effectiveStories.slice(2, 4)}
-                tagline={ISSUE.tagline}
+                tagline={issueData.tagline}
                 bgColor={bgFinal2b}
                 taglineFontSize={tagFs2b}
                 cta={slide2Cta}
                 logoLeft={slide2bLogoLeft}
+                issueNumber={issueData.number}
+                brandLong={issueData.brandLong}
+                date={issueData.date}
               />
             ) : (
               <TemplateB_Rect
                 numeralPos={numeralB}
                 onNumeralChange={setNumeralB}
                 stories={effectiveStories.slice(0, 4)}
-                tagline={ISSUE.tagline}
+                tagline={issueData.tagline}
                 bgColor={bgFinal2b}
                 taglineFontSize={tagFs2b}
                 cta={slide2Cta}
                 logoLeft={slide2bLogoLeft}
+                issueNumber={issueData.number}
+                brandLong={issueData.brandLong}
+                date={issueData.date}
               />
             )}
           </CanvasFrame>
-          <DownloadButton href={buildDownloadHref("2b")} filename={`intersect-issue-${issueNumber}-inner-2b.png`} />
+          <DownloadButton href={buildDownloadHref("2b")} filename={`intersect-issue-${issueData.number}-inner-2b.png`} />
           <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
             <button
               type="button"
@@ -2509,9 +2667,13 @@ function OverviewCoversDevPage() {
               onChange={setPosC}
               taglineFontSize={taglineFsC}
               cta={slide3Cta}
+              issueNumber={issueData.number}
+              brand={issueData.brand}
+              tagline={issueData.tagline}
+              date={issueData.date}
             />
           </CanvasFrame>
-          <DownloadButton href={buildDownloadHref("C")} filename={`intersect-issue-${issueNumber}-cta.png`} />
+          <DownloadButton href={buildDownloadHref("C")} filename={`intersect-issue-${issueData.number}-cta.png`} />
           <NumberStepper label="Tagline" value={taglineFsC} onChange={setTaglineFsC} step={5} min={20} />
           <ImageEditorControls
             imagePos={posC}

@@ -87,11 +87,12 @@ export async function GET(req: NextRequest) {
       clip: { x: 0, y: 0, width: W, height: H },
     });
 
+    const issueNum = url.searchParams.get("n") ?? "0";
     return new NextResponse(new Uint8Array(buf as Uint8Array), {
       status: 200,
       headers: {
         "Content-Type": "image/png",
-        "Content-Disposition": `attachment; filename="intersect-issue-75-slide-${slide}-${fmt}.png"`,
+        "Content-Disposition": `attachment; filename="intersect-issue-${issueNum}-slide-${slide}-${fmt}.png"`,
         "Cache-Control": "no-store",
       },
     });
