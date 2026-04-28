@@ -1112,6 +1112,7 @@ function TemplateA({
   bandBlur = 0,
   taglineFontSize = 52,
   cta = "READ IN BIO →",
+  numeralLeft = false,
 }: {
   heroSrc: string;
   imagePos: ImagePos;
@@ -1120,6 +1121,7 @@ function TemplateA({
   bandBlur?: number;
   taglineFontSize?: number;
   cta?: string;
+  numeralLeft?: boolean;
 }) {
   const size = useSize();
   const bandIsLight = hexLuminance(
@@ -1161,19 +1163,32 @@ function TemplateA({
             pointerEvents: "none",
           }}
         >
-          <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>
-            {ISSUE.brand}
-          </div>
-          <div style={{ fontSize: 22, letterSpacing: 3 }}>
-            ISSUE NO. {ISSUE.number}
-          </div>
+          {numeralLeft ? (
+            <>
+              <div style={{ fontSize: 22, letterSpacing: 3 }}>
+                ISSUE NO. {ISSUE.number}
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>
+                {ISSUE.brand}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 4 }}>
+                {ISSUE.brand}
+              </div>
+              <div style={{ fontSize: 22, letterSpacing: 3 }}>
+                ISSUE NO. {ISSUE.number}
+              </div>
+            </>
+          )}
         </div>
 
         <div
           style={{
             position: "absolute",
             top: 60,
-            right: 60,
+            ...(numeralLeft ? { left: 60 } : { right: 60 }),
             fontFamily: '"Noto Serif", Georgia, serif',
             fontWeight: 700,
             fontSize: 460,
@@ -1253,6 +1268,7 @@ function TemplateB_Square({
   bgColor = PALETTE.cream,
   taglineFontSize = 50,
   cta = "LINK IN BIO →",
+  logoLeft = true,
 }: {
   numeralPos: NumeralPos;
   onNumeralChange: (next: NumeralPos) => void;
@@ -1261,6 +1277,7 @@ function TemplateB_Square({
   bgColor?: string;
   taglineFontSize?: number;
   cta?: string;
+  logoLeft?: boolean;
 }) {
   const size = useSize();
   const inset = 60;
@@ -1296,28 +1313,57 @@ function TemplateB_Square({
           justifyContent: "space-between",
         }}
       >
-        <img
-          src={BRAND_LOGO_SQUARE}
-          alt={ISSUE.brandLong}
-          style={{
-            height: ROW_H,
-            width: ROW_H,
-            objectFit: "contain",
-            opacity: 0.5,
-            filter: bgIsLight
-              ? "brightness(0)"
-              : "brightness(0) invert(1)",
-          }}
-        />
-        <DraggableNumeral
-          value={ISSUE.number}
-          rowH={ROW_H}
-          pos={numeralPos}
-          onChange={onNumeralChange}
-          letterSpacing={-10}
-          color={fg}
-          opacity={0.5}
-        />
+        {logoLeft ? (
+          <>
+            <img
+              src={BRAND_LOGO_SQUARE}
+              alt={ISSUE.brandLong}
+              style={{
+                height: ROW_H,
+                width: ROW_H,
+                objectFit: "contain",
+                opacity: 0.5,
+                filter: bgIsLight
+                  ? "brightness(0)"
+                  : "brightness(0) invert(1)",
+              }}
+            />
+            <DraggableNumeral
+              value={ISSUE.number}
+              rowH={ROW_H}
+              pos={numeralPos}
+              onChange={onNumeralChange}
+              letterSpacing={-10}
+              color={fg}
+              opacity={0.5}
+            />
+          </>
+        ) : (
+          <>
+            <DraggableNumeral
+              value={ISSUE.number}
+              rowH={ROW_H}
+              pos={numeralPos}
+              onChange={onNumeralChange}
+              letterSpacing={-10}
+              color={fg}
+              opacity={0.5}
+            />
+            <img
+              src={BRAND_LOGO_SQUARE}
+              alt={ISSUE.brandLong}
+              style={{
+                height: ROW_H,
+                width: ROW_H,
+                objectFit: "contain",
+                opacity: 0.5,
+                filter: bgIsLight
+                  ? "brightness(0)"
+                  : "brightness(0) invert(1)",
+              }}
+            />
+          </>
+        )}
       </div>
 
       <div style={{ height: inset + ROW_H + inset, flexShrink: 0 }} />
@@ -1435,6 +1481,7 @@ function TemplateB_Rect({
   bgColor = PALETTE.cream,
   taglineFontSize = 44,
   cta = "LINK IN BIO →",
+  logoLeft = true,
 }: {
   numeralPos: NumeralPos;
   onNumeralChange: (next: NumeralPos) => void;
@@ -1443,6 +1490,7 @@ function TemplateB_Rect({
   bgColor?: string;
   taglineFontSize?: number;
   cta?: string;
+  logoLeft?: boolean;
 }) {
   const size = useSize();
   const inset = 60;
@@ -1480,28 +1528,57 @@ function TemplateB_Rect({
           justifyContent: "space-between",
         }}
       >
-        <img
-          src={BRAND_LOGO_RECT}
-          alt={ISSUE.brandLong}
-          style={{
-            height: ROW_H,
-            width: "auto",
-            objectFit: "contain",
-            opacity: 0.5,
-            filter: bgIsLight
-              ? "brightness(0)"
-              : "brightness(0) invert(1)",
-          }}
-        />
-        <DraggableNumeral
-          value={ISSUE.number}
-          rowH={ROW_H}
-          pos={numeralPos}
-          onChange={onNumeralChange}
-          letterSpacing={-8}
-          color={fg}
-          opacity={0.5}
-        />
+        {logoLeft ? (
+          <>
+            <img
+              src={BRAND_LOGO_RECT}
+              alt={ISSUE.brandLong}
+              style={{
+                height: ROW_H,
+                width: "auto",
+                objectFit: "contain",
+                opacity: 0.5,
+                filter: bgIsLight
+                  ? "brightness(0)"
+                  : "brightness(0) invert(1)",
+              }}
+            />
+            <DraggableNumeral
+              value={ISSUE.number}
+              rowH={ROW_H}
+              pos={numeralPos}
+              onChange={onNumeralChange}
+              letterSpacing={-8}
+              color={fg}
+              opacity={0.5}
+            />
+          </>
+        ) : (
+          <>
+            <DraggableNumeral
+              value={ISSUE.number}
+              rowH={ROW_H}
+              pos={numeralPos}
+              onChange={onNumeralChange}
+              letterSpacing={-8}
+              color={fg}
+              opacity={0.5}
+            />
+            <img
+              src={BRAND_LOGO_RECT}
+              alt={ISSUE.brandLong}
+              style={{
+                height: ROW_H,
+                width: "auto",
+                objectFit: "contain",
+                opacity: 0.5,
+                filter: bgIsLight
+                  ? "brightness(0)"
+                  : "brightness(0) invert(1)",
+              }}
+            />
+          </>
+        )}
       </div>
 
       <div style={{ height: inset + ROW_H + inset, flexShrink: 0 }} />
@@ -1812,6 +1889,18 @@ function OverviewCoversDevPage() {
       dy: qpNum("nbdy", -41),
     },
   );
+  const [slide1NumeralLeft, setSlide1NumeralLeft] = useLocalStorage<boolean>(
+    "overview-cover-slide1NumeralLeft",
+    qpStr("s1l") === "1",
+  );
+  const [slide2aLogoLeft, setSlide2aLogoLeft] = useLocalStorage<boolean>(
+    "overview-cover-slide2aLogoLeft",
+    qpStr("s2al") !== null ? qpStr("s2al") === "1" : true,
+  );
+  const [slide2bLogoLeft, setSlide2bLogoLeft] = useLocalStorage<boolean>(
+    "overview-cover-slide2bLogoLeft",
+    qpStr("s2bl") !== null ? qpStr("s2bl") === "1" : true,
+  );
   const [upscale, setUpscale] = useState<UpscaleStatus>({ state: "idle" });
   const [taglineFsA, setTaglineFsA] = useLocalStorage<number>(
     "overview-cover-taglineFsA",
@@ -1867,6 +1956,7 @@ function OverviewCoversDevPage() {
       if (bandColorOverrideA) sp.set("bc", bandColorOverrideA);
       sp.set("bl", String(bandLightnessA));
       sp.set("bb", String(bandBlurA));
+      if (slide1NumeralLeft) sp.set("s1l", "1");
     }
     if (slide === "C") {
       sp.set("cx", String(posC.x));
@@ -1880,6 +1970,7 @@ function OverviewCoversDevPage() {
       if (bg2a) sp.set("bg2a", bg2a);
       sp.set("bgL2a", String(bgL2a));
       sp.set("t2afs", String(tagFs2a));
+      sp.set("s2al", slide2aLogoLeft ? "1" : "0");
     }
     if (slide === "2b") {
       sp.set("nbfs", String(numeralB.fontSize));
@@ -1888,6 +1979,7 @@ function OverviewCoversDevPage() {
       if (bg2b) sp.set("bg2b", bg2b);
       sp.set("bgL2b", String(bgL2b));
       sp.set("t2bfs", String(tagFs2b));
+      sp.set("s2bl", slide2bLogoLeft ? "1" : "0");
     }
     return `/api/tools/download-slide?${sp.toString()}`;
   };
@@ -1988,6 +2080,7 @@ function OverviewCoversDevPage() {
           bandBlur={bandBlurA}
           taglineFontSize={taglineFsA}
           cta={slide1Cta}
+          numeralLeft={slide1NumeralLeft}
         />
       );
     else if (renderSlide === "2a")
@@ -2004,6 +2097,7 @@ function OverviewCoversDevPage() {
           bgColor={bgFinal2a}
           taglineFontSize={tagFs2a}
           cta={slide2Cta}
+          logoLeft={slide2aLogoLeft}
         />
       );
     else if (renderSlide === "2b")
@@ -2017,6 +2111,7 @@ function OverviewCoversDevPage() {
             bgColor={bgFinal2b}
             taglineFontSize={tagFs2b}
             cta={slide2Cta}
+            logoLeft={slide2bLogoLeft}
           />
         ) : (
           <TemplateB_Rect
@@ -2027,6 +2122,7 @@ function OverviewCoversDevPage() {
             bgColor={bgFinal2b}
             taglineFontSize={tagFs2b}
             cta={slide2Cta}
+            logoLeft={slide2bLogoLeft}
           />
         );
     else if (renderSlide === "C")
@@ -2140,8 +2236,14 @@ function OverviewCoversDevPage() {
               sp.set("nafs", String(numeralA.fontSize));
               sp.set("nadx", String(numeralA.dx));
               sp.set("nady", String(numeralA.dy));
+              sp.set("nbfs", String(numeralB.fontSize));
+              sp.set("nbdx", String(numeralB.dx));
+              sp.set("nbdy", String(numeralB.dy));
               sp.set("tafs", String(taglineFsA));
               sp.set("tcfs", String(taglineFsC));
+              if (slide1NumeralLeft) sp.set("s1l", "1");
+              sp.set("s2al", slide2aLogoLeft ? "1" : "0");
+              sp.set("s2bl", slide2bLogoLeft ? "1" : "0");
               return `/api/tools/download-pdf?${sp.toString()}`;
             })()}
             filename={`intersect-issue-${issueNumber}-overview-${format}.pdf`}
@@ -2235,9 +2337,23 @@ function OverviewCoversDevPage() {
               bandBlur={bandBlurA}
               taglineFontSize={taglineFsA}
               cta={slide1Cta}
+              numeralLeft={slide1NumeralLeft}
             />
           </CanvasFrame>
           <DownloadButton href={buildDownloadHref("A")} filename={`intersect-issue-${issueNumber}-cover.png`} />
+          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
+            <button
+              type="button"
+              onClick={() => setSlide1NumeralLeft(!slide1NumeralLeft)}
+              className="px-2 py-1 border border-border rounded hover:bg-muted"
+              title="Swap which side the 75 numeral sits on (masthead text follows)"
+            >
+              {slide1NumeralLeft ? "↔ Move 75 to right" : "↔ Move 75 to left"}
+            </button>
+            <span className="opacity-60">
+              currently {slide1NumeralLeft ? "left" : "right"}
+            </span>
+          </div>
           <NumberStepper label="Tagline" value={taglineFsA} onChange={setTaglineFsA} step={5} min={20} />
           <ImageEditorControls
             imagePos={posA}
@@ -2276,9 +2392,23 @@ function OverviewCoversDevPage() {
               bgColor={bgFinal2a}
               taglineFontSize={tagFs2a}
               cta={slide2Cta}
+              logoLeft={slide2aLogoLeft}
             />
           </CanvasFrame>
           <DownloadButton href={buildDownloadHref("2a")} filename={`intersect-issue-${issueNumber}-inner-2a.png`} />
+          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
+            <button
+              type="button"
+              onClick={() => setSlide2aLogoLeft(!slide2aLogoLeft)}
+              className="px-2 py-1 border border-border rounded hover:bg-muted"
+              title="Swap logo and numeral sides"
+            >
+              {slide2aLogoLeft ? "↔ Move logo to right" : "↔ Move logo to left"}
+            </button>
+            <span className="opacity-60">
+              logo currently {slide2aLogoLeft ? "left" : "right"}
+            </span>
+          </div>
           <NumeralControls
             label="Slide 2a · 74"
             value={numeralA}
@@ -2319,6 +2449,7 @@ function OverviewCoversDevPage() {
                 bgColor={bgFinal2b}
                 taglineFontSize={tagFs2b}
                 cta={slide2Cta}
+                logoLeft={slide2bLogoLeft}
               />
             ) : (
               <TemplateB_Rect
@@ -2329,10 +2460,24 @@ function OverviewCoversDevPage() {
                 bgColor={bgFinal2b}
                 taglineFontSize={tagFs2b}
                 cta={slide2Cta}
+                logoLeft={slide2bLogoLeft}
               />
             )}
           </CanvasFrame>
           <DownloadButton href={buildDownloadHref("2b")} filename={`intersect-issue-${issueNumber}-inner-2b.png`} />
+          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
+            <button
+              type="button"
+              onClick={() => setSlide2bLogoLeft(!slide2bLogoLeft)}
+              className="px-2 py-1 border border-border rounded hover:bg-muted"
+              title="Swap logo and numeral sides"
+            >
+              {slide2bLogoLeft ? "↔ Move logo to right" : "↔ Move logo to left"}
+            </button>
+            <span className="opacity-60">
+              logo currently {slide2bLogoLeft ? "left" : "right"}
+            </span>
+          </div>
           <NumeralControls
             label="Slide 2b · 74"
             value={numeralB}
