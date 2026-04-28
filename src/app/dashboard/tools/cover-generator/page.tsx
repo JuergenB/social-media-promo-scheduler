@@ -534,9 +534,11 @@ function NumberStepper({
 function PdfDownloadButton({
   href,
   filename,
+  slideCount,
 }: {
   href: string;
   filename: string;
+  slideCount: number;
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -571,15 +573,15 @@ function PdfDownloadButton({
         onClick={onClick}
         disabled={busy}
         className="px-3 py-1.5 border border-border rounded text-xs hover:bg-muted disabled:opacity-50 flex items-center gap-1.5"
-        title="Render all 3 slides + assemble into a single PDF (LinkedIn carousel)"
+        title={`Render all ${slideCount} slides + assemble into a single PDF`}
       >
         {busy ? (
           <>
             <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-            Rendering PDF (~30s)…
+            Rendering PDF (~{slideCount * 6}s)…
           </>
         ) : (
-          <>↓ Download PDF (3 slides)</>
+          <>↓ Download PDF ({slideCount} slides)</>
         )}
       </button>
       {err && <span className="text-[10px] text-red-600">{err}</span>}
@@ -2131,6 +2133,12 @@ function OverviewCoversDevPage() {
       innerSlides.map((s, j) => (j === idx ? { ...s, ...patch } : s)),
     );
   };
+  // Numeral edits propagate to ALL inner slides so the issue number stays
+  // visually consistent across the carousel — adjusting it on one slide
+  // updates every slide.
+  const setSharedNumeral = (numeral: InnerSlideState["numeral"]) => {
+    setInnerSlides(innerSlides.map((s) => ({ ...s, numeral })));
+  };
 
   const [upscale, setUpscale] = useState<UpscaleStatus>({ state: "idle" });
   const [taglineFsA, setTaglineFsA] = useLocalStorage<number>(
@@ -2508,12 +2516,13 @@ function OverviewCoversDevPage() {
       <div>
         <h1 className="text-2xl font-bold mb-1">Overview Cover Generator</h1>
         <p className="text-sm text-muted-foreground">
-          Render the 3 carousel slides for an Intersect newsletter Overview
-          post. Instagram 4:5 (1080×1350) or LinkedIn 1:1 (1080×1080) — toggle
-          below. Drag images to reposition, drag the 74 to nudge it, tune
-          colors and tagline sizes per slide. Click <strong>↓ Download PNG</strong>{" "}
-          for individual slides or <strong>↓ Download PDF</strong> for the
-          full 3-slide carousel.
+          Render the carousel slides for an Intersect newsletter Overview post.
+          Inner slides scale with the number of picked stories — 2 stories
+          per inner slide. Instagram 4:5 (1080×1350) or LinkedIn 1:1
+          (1080×1080) — toggle below. Drag images to reposition, drag the
+          numeral to nudge it, tune colors and tagline sizes per slide.
+          Click <strong>↓ Download PNG</strong> for individual slides or
+          {" "}<strong>↓ Download PDF</strong> for the full carousel.
         </p>
       </div>
 
@@ -2602,6 +2611,7 @@ function OverviewCoversDevPage() {
               return `/api/tools/download-pdf?${sp.toString()}`;
             })()}
             filename={`intersect-issue-${issueData.number}-overview-${format}.pdf`}
+            slideCount={computeSlideList(storyPicks.length, format).length}
           />
           {curatorState.state === "loaded" && curatorState.issue && (
             <span className="text-xs text-muted-foreground">
@@ -2802,7 +2812,7 @@ function OverviewCoversDevPage() {
               <CanvasFrame label={`${slideLabel} — Inner cover`}>
                 <TemplateB_Cells
                   numeralPos={slide.numeral}
-                  onNumeralChange={(n) => updateInner(idx, { numeral: n })}
+                  onNumeralChange={setSharedNumeral}
                   cells={cells}
                   tagline={issueData.tagline}
                   bgColor={bgFinal}
@@ -2837,12 +2847,10 @@ function OverviewCoversDevPage() {
                 </span>
               </div>
               <NumeralControls
-                label={`${slideLabel} · numeral`}
+                label={`${slideLabel} · numeral (shared across all inner slides)`}
                 value={slide.numeral}
-                onChange={(n) => updateInner(idx, { numeral: n })}
-                onReset={() =>
-                  updateInner(idx, { numeral: defaultInner(format).numeral })
-                }
+                onChange={setSharedNumeral}
+                onReset={() => setSharedNumeral(defaultInner(format).numeral)}
               />
               <BgTaglineControls
                 label={slideLabel}
