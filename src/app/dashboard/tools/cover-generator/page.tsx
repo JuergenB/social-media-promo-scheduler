@@ -102,7 +102,7 @@ type InnerSlideState = {
   logoLeft: boolean;
 };
 const DEFAULT_INNER: InnerSlideState = {
-  numeral: { fontSize: 245, dx: -29, dy: -48 },
+  numeral: { fontSize: 155, dx: -29, dy: -48 },
   bgColor: null,
   bgLightness: 0,
   taglineFs: 50,
@@ -1378,10 +1378,15 @@ function CellRenderer({
   cell,
   cellIdx,
   onImagePosChange,
+  cellAspect,
 }: {
   cell: Cell;
   cellIdx: number;
   onImagePosChange?: (cellIdx: number, pos: ImagePos) => void;
+  /** CSS aspect-ratio applied to both story and subscribe cells so they match
+   *  in the grid. Format-driven: LI side-by-side uses 16/11, IG vertical
+   *  stack uses 16/9 (less-tall, more horizontal frames). */
+  cellAspect: string;
 }) {
   if (cell.kind === "subscribe") {
     return (
@@ -1390,6 +1395,7 @@ function CellRenderer({
           position: "relative",
           overflow: "hidden",
           background: "#222",
+          aspectRatio: cellAspect,
         }}
       >
         <img
@@ -1401,7 +1407,7 @@ function CellRenderer({
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            opacity: 0.55,
+            opacity: 0.75,
           }}
         />
         <div
@@ -1409,7 +1415,7 @@ function CellRenderer({
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.85) 100%)",
+              "linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%)",
           }}
         />
         <div
@@ -1418,46 +1424,55 @@ function CellRenderer({
             inset: 0,
             display: "flex",
             flexDirection: "column",
-            justifyContent: "center",
+            justifyContent: "space-between",
             alignItems: "center",
             padding: 24,
             color: "#fff",
             textAlign: "center",
             fontFamily: '"Noto Sans", system-ui, sans-serif',
-            gap: 10,
           }}
         >
           <div
             style={{
-              fontSize: 14,
+              fontSize: 32,
+              fontWeight: 300,
               letterSpacing: 4,
               opacity: 0.7,
             }}
           >
-            ENJOYED THIS ISSUE?
+            ENJOYING THIS ISSUE?
           </div>
           <div
             style={{
-              fontFamily: '"Noto Serif", Georgia, serif',
-              fontStyle: "italic",
-              fontSize: 32,
-              lineHeight: 1.15,
-              fontWeight: 400,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 10,
             }}
           >
-            Subscribe to The Intersect
-          </div>
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 14,
-              letterSpacing: 3,
-              fontWeight: 700,
-            }}
-          >
-            {cell.format === "li"
-              ? cell.subscribeUrl.toUpperCase()
-              : "LINK IN BIO →"}
+            <div
+              style={{
+                fontFamily: '"Noto Serif", Georgia, serif',
+                fontStyle: "italic",
+                fontSize: 54,
+                lineHeight: 1.15,
+                fontWeight: 400,
+              }}
+            >
+              Subscribe to The Intersect
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 24,
+                letterSpacing: 3,
+                fontWeight: 700,
+              }}
+            >
+              {cell.format === "li"
+                ? cell.subscribeUrl.toUpperCase()
+                : "LINK IN BIO →"}
+            </div>
           </div>
         </div>
       </div>
@@ -1475,7 +1490,8 @@ function CellRenderer({
         background: "#222",
         // Enforce aspect ratio so portrait-ish photos don't get squished into
         // wide banners by flex:1 layout. Matches the original cell shape.
-        aspectRatio: "16 / 11",
+        aspectRatio: "16 / 9.35",
+        borderRadius: 3,
       }}
     >
       {story.imageUrl ? (
@@ -1517,19 +1533,32 @@ function CellRenderer({
           left: 0,
           right: 0,
           bottom: 0,
-          padding: "60px 18px 14px",
+          padding: "60px 32px 20px 26px",
           background:
             "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)",
           color: "#fff",
+          textAlign: "center",
           fontFamily: '"Noto Sans", system-ui, sans-serif',
           fontWeight: 400,
-          fontSize: 19,
-          lineHeight: 1.3,
+          fontSize: 36,
+          lineHeight: 1.1,
           letterSpacing: 0.1,
           pointerEvents: "none",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "flex-end",
         }}
       >
-        {story.title}
+        <div
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}
+        >
+          {story.title}
+        </div>
       </div>
     </div>
   );
@@ -1641,7 +1670,8 @@ function TemplateB_Cells({
   // LI 1:1 keeps cells side-by-side with the original tighter inset.
   const isLI = format === "li";
   const inset = isLI ? 60 : 120;
-  const ROW_H = isLI ? 240 : 180;
+  const topInset = isLI ? 30 : 50;
+  const ROW_H = isLI ? 192 : 144;
   const bgIsLight = hexLuminance(bgColor) > 0.55;
   const fg = bgIsLight ? PALETTE.ink : "#f5f4ee";
   const fgSoft = bgIsLight ? PALETTE.inkSoft : "rgba(245,244,238,0.7)";
@@ -1664,7 +1694,7 @@ function TemplateB_Cells({
       <div
         style={{
           position: "absolute",
-          top: inset,
+          top: topInset,
           left: inset,
           right: inset,
           height: ROW_H,
@@ -1683,6 +1713,7 @@ function TemplateB_Cells({
                 width: ROW_H,
                 objectFit: "contain",
                 opacity: 0.5,
+                marginLeft: -2,
                 filter: bgIsLight
                   ? "brightness(0)"
                   : "brightness(0) invert(1)",
@@ -1726,7 +1757,7 @@ function TemplateB_Cells({
         )}
       </div>
 
-      <div style={{ height: inset + ROW_H + inset, flexShrink: 0 }} />
+      <div style={{ height: topInset + ROW_H + topInset - 5, flexShrink: 0 }} />
 
       <div
         style={{
@@ -1736,7 +1767,7 @@ function TemplateB_Cells({
           // other) so each cell becomes a tall near-square frame.
           gridTemplateColumns: isLI ? "1fr 1fr" : "1fr",
           gridTemplateRows: isLI ? "1fr" : "1fr 1fr",
-          gap: 12,
+          gap: 16,
           padding: `0 ${inset}px`,
           alignContent: "center",
         }}
