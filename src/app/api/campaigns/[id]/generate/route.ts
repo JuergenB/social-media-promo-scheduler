@@ -3,6 +3,7 @@ import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtab
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { getCampaignTypeRule, getGenerationRules } from "@/lib/airtable/campaign-type-rules";
 import { scrapeBlogPost, scrapeNewsletter, scrapeEvent, scrapeExhibition, scrapeSupplemental, extractArtistMetadata, type ContentSection, type ScrapedEventBlogData, type ScrapedExhibitionBlogData } from "@/lib/firecrawl";
+import { mirrorRemoteImageToBlob } from "@/lib/blob-storage";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
   SYSTEM_PROMPT,
@@ -635,11 +636,23 @@ export async function POST(
         const artistMeta = isArtistProfile ? extractArtistMetadata(blogData) : null;
         const artistCampaignName = artistMeta?.campaignLabel || null;
 
+        // Mirror the scraped hero into Vercel Blob so the campaign's
+        // Image URL is permanent. CMS-served URLs (Substack, Airtable-backed
+        // sites) can expire or move; saving the raw scrape URL leaves the
+        // campaign thumbnail and downstream "use as social media campaign
+        // hero" flows fragile. mirrorRemoteImageToBlob is a no-op when the
+        // URL is already on Blob and returns "" on fetch failure so the
+        // existing fall-through (no Image URL written) still applies.
+        const mirroredOgImageUrl =
+          !fields["Image URL"] && ogImageUrl
+            ? await mirrorRemoteImageToBlob(ogImageUrl, "campaigns", campaignId)
+            : "";
+
         await updateRecord("Campaigns", campaignId, {
           ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
           "Scraped Images": JSON.stringify(blogData.images),
-          ...(!fields["Image URL"] && ogImageUrl ? { "Image URL": ogImageUrl } : {}),
+          ...(mirroredOgImageUrl ? { "Image URL": mirroredOgImageUrl } : {}),
           ...(!fields.Description && blogData.title ? { Description: blogData.title } : {}),
           ...(isQuickPostCampaign && blogData.title ? { Name: `Quick Post: ${blogData.title}` } : {}),
           // Artist Profile: set descriptive campaign name and store artist handle
