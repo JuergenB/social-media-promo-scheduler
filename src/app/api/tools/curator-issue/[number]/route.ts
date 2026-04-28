@@ -10,6 +10,19 @@ import path from "node:path";
 export const maxDuration = 30;
 
 function loadCuratorEnv() {
+  // Production (Vercel): explicit env vars set via `vercel env add`.
+  if (
+    process.env.CURATOR_AIRTABLE_API_KEY &&
+    process.env.CURATOR_AIRTABLE_BASE_ID
+  ) {
+    return {
+      apiKey: process.env.CURATOR_AIRTABLE_API_KEY,
+      baseId: process.env.CURATOR_AIRTABLE_BASE_ID,
+    };
+  }
+  // Local dev fallback: read from the sibling repo's .env.local so the dev
+  // tool keeps working without duplicating the credential into polywiz-app's
+  // own .env.local.
   try {
     const envPath = path.join(
       process.env.HOME ?? "",
