@@ -18,23 +18,6 @@ import { useSearchParams } from "next/navigation";
 // reads `leadImageUrl` from the Curator response into IssueData state.
 const HERO_IMAGE_FALLBACK = "/dev-assets/intersect-75-lead.jpg";
 
-const STORY_IMAGES = [
-  "https://dxj7eshgz03ln.cloudfront.net/production/link/image/1107144/twenty_by_nine_extra_large_3cfbfef2-e250-4b65-bfd6-89c6d7be4e8d.jpg",
-  "https://dxj7eshgz03ln.cloudfront.net/production/link/image/1107146/twenty_by_nine_extra_large_69e05815-c129-484b-9825-d218382b4383.jpg",
-  "https://dxj7eshgz03ln.cloudfront.net/production/link/image/1107147/twenty_by_nine_extra_large_488e854d-fa3d-4e44-8cad-87426407f305.jpg",
-  "https://dxj7eshgz03ln.cloudfront.net/production/link/image/1107148/twenty_by_nine_extra_large_a662a7ea-d5cf-4b0f-9749-6dc742c9c58a.jpg",
-];
-
-// Fallback titles used only when no story picks have been made yet (initial
-// page load with no localStorage). Real story data flows in via the Curator
-// picker into `storyPicks`.
-const STORY_TITLES = [
-  "Recycled Plastic Finds Its Form in Coral-Inspired Sculpture",
-  "Zim & Zou Turn Boomboxes and Cassette Tapes Into Paper Sculptures",
-  "Manabu Kosaka's Paper Sculptures Turn Retro Tech Into Something Uncanny",
-  "Issey Miyake Turns Pleating Waste Into Furniture Worth Keeping",
-];
-
 type IssueData = {
   number: number;
   date: string; // display-formatted, e.g. "APRIL 28, 2026"
@@ -2031,9 +2014,23 @@ function OverviewCoversDevPage() {
   const slide2Cta = format === "li" ? liUrl : "LINK IN BIO →";
   const slide3Cta =
     format === "li" ? liUrl : `READ ISSUE ${issueNumber} — LINK IN BIO →`;
+  // Story picks: live picker writes here. Render mode (Puppeteer headless,
+  // empty localStorage) hydrates from the `sp` URL param so the downloaded
+  // PNG/PDF includes the same stories the user picked.
+  const initialStoryPicks: { title: string; imageUrl: string | null }[] = (() => {
+    const raw = qpStr("sp");
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // ignore — fall through to []
+    }
+    return [];
+  })();
   const [storyPicks, setStoryPicks] = useLocalStorage<
     { title: string; imageUrl: string | null }[]
-  >("overview-cover-storyPicks", []);
+  >("overview-cover-storyPicks", initialStoryPicks);
 
   const sampleA = useBottomBandSample(heroSrc);
   const sampledHex = sampleA ? rgbToHex(sampleA.rgb) : null;
@@ -2078,6 +2075,14 @@ function OverviewCoversDevPage() {
       sp.set("cx", String(posC.x));
       sp.set("cy", String(posC.y));
       sp.set("cz", String(posC.zoom));
+    }
+    if (slide === "2a" || slide === "2b") {
+      // Story picks need to flow into render mode via the URL — Puppeteer
+      // launches with empty localStorage, so without this the download falls
+      // back to an empty grid.
+      if (storyPicks.length > 0) {
+        sp.set("sp", JSON.stringify(storyPicks));
+      }
     }
     if (slide === "2a") {
       sp.set("nafs", String(numeralA.fontSize));
@@ -2137,14 +2142,11 @@ function OverviewCoversDevPage() {
     }
   };
 
-  // Effective stories: user picks via the story selector → fall back to the
-  // hardcoded Issue 75 titles + Issue 74 placeholder images if nothing picked.
-  const fallbackStories: Story[] = STORY_TITLES.map((title, i) => ({
-    title,
-    imageUrl: STORY_IMAGES[i] ?? null,
-  }));
-  const effectiveStories: Story[] =
-    storyPicks.length > 0 ? storyPicks : fallbackStories;
+  // Effective stories come straight from the picker. If the user hasn't
+  // picked any yet, the templates render placeholder card backgrounds — far
+  // better than silently falling back to hardcoded URLs from a different
+  // issue, which is what the prior STORY_IMAGES + STORY_TITLES constants did.
+  const effectiveStories: Story[] = storyPicks;
 
   // Curator fetch state
   const [curatorState, setCuratorState] = useState<{
@@ -2405,6 +2407,9 @@ function OverviewCoversDevPage() {
               sp.set("br", issueData.brand);
               sp.set("bln", issueData.brandLong);
               sp.set("tg", issueData.tagline);
+              if (storyPicks.length > 0) {
+                sp.set("sp", JSON.stringify(storyPicks));
+              }
               sp.set("ax", String(posA.x));
               sp.set("ay", String(posA.y));
               sp.set("az", String(posA.zoom));
