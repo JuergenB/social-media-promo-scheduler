@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { useBrand } from "@/lib/brand-context";
 import { toPlatformId, PLATFORM_OPTIMIZE_TARGETS, SLIDE_PLATFORMS, POST_STATUS_CONFIG, PLATFORM_CHAR_LIMITS } from "@/lib/platform-constants";
 import { buildMediaItems, usePostMedia } from "@/hooks/use-post-media";
+import { useCarouselPdf } from "@/hooks/use-carousel-pdf";
 import { usePostContent } from "@/hooks/use-post-content";
 import { useCarousel } from "@/hooks/use-carousel";
 import { useImageOptimize } from "@/hooks/use-image-optimize";
@@ -137,6 +138,14 @@ export function CampaignPostDetail({
   });
   const { mediaItems, mediaImages, setMediaItems } = media;
 
+  // LinkedIn carousel PDF override — when a PDF is attached, the publish
+  // route uses it directly and ignores the image grid below. LinkedIn-only.
+  const carouselPdf = useCarouselPdf({
+    postId: post.id,
+    initialUrl: post.carouselPdfUrl || "",
+  });
+  const isLinkedIn = platformLower === "linkedin";
+
   const content = usePostContent({
     postId: post.id,
     initialContent: post.content || "",
@@ -180,6 +189,7 @@ export function CampaignPostDetail({
     media.resetItems(buildMediaItems(post));
     content.reset(post.content || "");
     carousel.resetState();
+    carouselPdf.setCarouselPdfUrl(post.carouselPdfUrl || "");
   }
 
   // ── Derived state ─────────────────────────────────────────────────────
@@ -385,6 +395,41 @@ export function CampaignPostDetail({
 
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto min-h-0">
+        {/* Carousel PDF override banner — when set, the image grid below is
+            still visible (useful for reference / switching back) but the
+            publish path will use the PDF. LinkedIn-only. */}
+        {isLinkedIn && carouselPdf.hasPdf && (
+          <div className="px-6 pt-3">
+            <div className="flex items-start gap-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs">
+              <div className="flex-1 leading-snug">
+                <div className="font-medium text-foreground">
+                  PDF carousel attached
+                </div>
+                <div className="text-muted-foreground mt-0.5">
+                  This LinkedIn post will publish as a single document. The
+                  image grid below is ignored at publish time.{" "}
+                  <a
+                    href={carouselPdf.carouselPdfUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    Open PDF
+                  </a>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => carouselPdf.removePdfMutation.mutate()}
+                disabled={carouselPdf.removePdfMutation.isPending}
+                className="text-xs text-muted-foreground hover:text-destructive shrink-0 disabled:opacity-50"
+              >
+                {carouselPdf.removePdfMutation.isPending ? "Removing…" : "Remove PDF"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Image gallery */}
         <div className="px-6 pt-3 pb-3 space-y-2">
           <MediaGallery
@@ -425,10 +470,30 @@ export function CampaignPostDetail({
                 />
               )}
               <ImageDropZone
-                onFileUpload={(file) => media.uploadImageMutation.mutate(file)}
-                onUrlAdd={(url) => { media.addImageUrl(url); setShowAddImage(false); }}
+                onFileUpload={(file) => {
+                  // If a PDF was attached, the drop zone has already prompted
+                  // the user to confirm switching back to images. Detach the
+                  // PDF here so the carousel auto-assembly path takes over.
+                  if (carouselPdf.hasPdf) {
+                    carouselPdf.removePdfMutation.mutate();
+                  }
+                  media.uploadImageMutation.mutate(file);
+                }}
+                onUrlAdd={(url) => {
+                  if (carouselPdf.hasPdf) {
+                    carouselPdf.removePdfMutation.mutate();
+                  }
+                  media.addImageUrl(url);
+                  setShowAddImage(false);
+                }}
                 isUploading={media.uploadImageMutation.isPending}
                 onClose={() => setShowAddImage(false)}
+                acceptPdf={isLinkedIn && !isPublished}
+                pdfAttached={carouselPdf.hasPdf}
+                onPdfUpload={(file) => {
+                  carouselPdf.uploadPdfMutation.mutate(file);
+                  setShowAddImage(false);
+                }}
               />
             </div>
           )}

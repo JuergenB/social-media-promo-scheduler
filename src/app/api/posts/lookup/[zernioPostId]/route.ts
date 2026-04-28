@@ -26,6 +26,7 @@ interface PostFields {
   "Platform Post URL": string;
   Collaborators: string;
   "User Tags": string;
+  "Carousel PDF URL": string;
 }
 
 interface CampaignFields {
@@ -87,6 +88,7 @@ function mapPostFields(id: string, fields: PostFields): Post {
     platformPostUrl: fields["Platform Post URL"] || "",
     collaborators: fields["Collaborators"] || "",
     userTags: fields["User Tags"] || "",
+    carouselPdfUrl: fields["Carousel PDF URL"] || "",
   };
 }
 

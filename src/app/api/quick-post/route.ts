@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
       notes: "",
       originalMedia: "",
       coverSlideData: "",
+      carouselPdfUrl: "",
     };
 
     return NextResponse.json({ campaign, post }, { status: 201 });

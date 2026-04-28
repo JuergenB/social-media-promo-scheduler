@@ -65,6 +65,7 @@ interface PostFields {
   "Platform Post URL": string;
   Collaborators: string;
   "User Tags": string;
+  "Carousel PDF URL": string;
 }
 
 export async function GET(
@@ -163,6 +164,7 @@ export async function GET(
       platformPostUrl: r.fields["Platform Post URL"] || "",
       collaborators: r.fields["Collaborators"] || "",
       userTags: r.fields["User Tags"] || "",
+      carouselPdfUrl: r.fields["Carousel PDF URL"] || "",
       createdAt: r.createdTime || "",
     }));
 

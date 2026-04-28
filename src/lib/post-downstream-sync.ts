@@ -21,6 +21,11 @@ interface PostFields {
   Platform: string;
   Collaborators: string;
   "User Tags": string;
+  "Carousel PDF URL"?: string;
+}
+
+interface CampaignFieldsForSync {
+  Name?: string;
 }
 
 interface CampaignFields {
@@ -48,14 +53,17 @@ export async function syncPostDownstream(postId: string): Promise<SyncResult> {
     const campaignId = post.fields.Campaign?.[0];
     if (!campaignId) return result;
 
-    const campaign = await getRecord<CampaignFields>("Campaigns", campaignId);
+    const campaign = await getRecord<CampaignFields & CampaignFieldsForSync>(
+      "Campaigns",
+      campaignId,
+    );
     const brandId = campaign.fields.Brand?.[0];
     if (!brandId) return result;
 
     const brand = await getRecord<BrandFields>("Brands", brandId);
 
     await Promise.allSettled([
-      syncZernio(postId, post.fields, brand.fields).then(
+      syncZernio(postId, post.fields, brand.fields, campaign.fields.Name).then(
         (ok) => { result.zernio = ok ? "ok" : "skipped"; },
         (err) => {
           console.warn(`[post-sync] Zernio failed for ${postId}:`, err);
@@ -80,7 +88,8 @@ export async function syncPostDownstream(postId: string): Promise<SyncResult> {
 async function syncZernio(
   postId: string,
   post: PostFields,
-  brand: BrandFields
+  brand: BrandFields,
+  campaignName?: string
 ): Promise<boolean> {
   const zernioPostId = post["Zernio Post ID"];
   if (!zernioPostId) return false;
@@ -91,18 +100,32 @@ async function syncZernio(
 
   // scheduledFor is REQUIRED on every update — omitting it reverts Zernio
   // from "scheduled" to "draft" status.
-  const mediaItems = parseMediaItems(post);
+  const platformLower = (post.Platform || "").toLowerCase();
+  const userPdfUrl = post["Carousel PDF URL"];
   const updateBody: Record<string, unknown> = {};
   if (post.Content) updateBody.content = post.Content;
-  if (mediaItems.length > 0) {
-    updateBody.mediaItems = mediaItems.map((m) => ({ type: "image" as const, url: m.url }));
+  if (platformLower === "linkedin" && userPdfUrl) {
+    // User-supplied PDF override — single document item, image grid ignored.
+    // Mirrors the publish-route logic at /api/posts/[id]/publish.
+    const filename = `${(campaignName || "Carousel").slice(0, 60)}.pdf`;
+    updateBody.mediaItems = [
+      { type: "document" as const, url: userPdfUrl, filename },
+    ];
+  } else {
+    const mediaItems = parseMediaItems(post);
+    if (mediaItems.length > 0) {
+      updateBody.mediaItems = mediaItems.map((m) => ({
+        type: "image" as const,
+        url: m.url,
+      }));
+    }
   }
   if (post["Scheduled Date"]) updateBody.scheduledFor = post["Scheduled Date"];
 
   // Platform-specific data (firstComment for IG/FB/LI, collaborators + userTags for IG).
   // Must be nested inside platforms[] entry AND include accountId — otherwise
   // it is either silently ignored or nullifies the account link.
-  const platform = (post.Platform || "").toLowerCase();
+  const platform = platformLower;
   const psd: Record<string, unknown> = {};
   if (platform === "instagram") {
     if (post["First Comment"]) psd.firstComment = post["First Comment"];

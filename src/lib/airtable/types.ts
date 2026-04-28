@@ -216,6 +216,10 @@ export interface Post {
   collaborators: string;
   /** JSON string array of Instagram usernames tagged on the image (center-positioned). */
   userTags: string;
+  /** Vercel Blob URL of a user-supplied PDF carousel. LinkedIn-only — when set,
+   *  the publish route uses this PDF directly and skips assembling one from the
+   *  individual images. Empty string when no PDF is attached. */
+  carouselPdfUrl: string;
   /** Airtable record creation timestamp (ISO 8601) */
   createdAt?: string;
 }

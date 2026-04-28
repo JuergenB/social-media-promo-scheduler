@@ -20,6 +20,7 @@ interface PostFields {
   "Zernio Post ID": string;
   Collaborators: string;
   "User Tags": string;
+  "Carousel PDF URL"?: string;
 }
 
 interface CampaignFields {
@@ -150,7 +151,16 @@ export async function POST(
 
     // LinkedIn carousel: multiple images → assemble PDF document (with captions)
     let mediaItems: Array<{ type: "image" | "document"; url: string; filename?: string }>;
-    if (platform === "linkedin" && imageUrls.length > 1) {
+    const userPdfUrl = post.fields["Carousel PDF URL"] as string | undefined;
+    if (platform === "linkedin" && userPdfUrl) {
+      // User-supplied PDF override — skip auto-assembly entirely and ship
+      // the attached PDF as a single document. Set via /api/posts/[id]/carousel-pdf.
+      const pdfDisplayName = `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`;
+      console.log(`[publish-now] LinkedIn user-PDF override: ${userPdfUrl}`);
+      mediaItems = [
+        { type: "document", url: userPdfUrl, filename: pdfDisplayName },
+      ];
+    } else if (platform === "linkedin" && imageUrls.length > 1) {
       console.log(`[publish-now] LinkedIn carousel: assembling ${postMediaItems.length} images into PDF`);
       const pdfBuffer = await assembleCarouselPDF(postMediaItems);
       console.log(`[publish-now] PDF assembled: ${(pdfBuffer.length / 1024).toFixed(0)}KB`);
