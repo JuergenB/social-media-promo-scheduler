@@ -108,6 +108,17 @@ const DEFAULT_INNER: InnerSlideState = {
   taglineFs: 50,
   logoLeft: true,
 };
+// LinkedIn-specific defaults — keeps IG defaults frozen above.
+const DEFAULT_INNER_LI: InnerSlideState = {
+  numeral: { fontSize: 200, dx: -29, dy: -48 },
+  bgColor: null,
+  bgLightness: 0,
+  taglineFs: 50,
+  logoLeft: true,
+};
+function defaultInner(format: "li" | "ig"): InnerSlideState {
+  return format === "li" ? DEFAULT_INNER_LI : DEFAULT_INNER;
+}
 
 // Discriminated cell type for the 2-cell inner-slide grid. Subscribe cell is
 // the orphan-filler when picks.length is odd (LI) or as a graceful gap-filler
@@ -1378,15 +1389,19 @@ function CellRenderer({
   cell,
   cellIdx,
   onImagePosChange,
-  cellAspect,
+  cellW,
+  cellH,
+  titleFontSize = 36,
 }: {
   cell: Cell;
   cellIdx: number;
   onImagePosChange?: (cellIdx: number, pos: ImagePos) => void;
-  /** CSS aspect-ratio applied to both story and subscribe cells so they match
-   *  in the grid. Format-driven: LI side-by-side uses 16/11, IG vertical
-   *  stack uses 16/9 (less-tall, more horizontal frames). */
-  cellAspect: string;
+  /** Explicit width + height in slide-canvas pixels. Computed by parent so
+   *  the cell doesn't fight grid/flex stretching. */
+  cellW: number;
+  cellH: number;
+  /** Story title overlay font size. Format-driven (LI smaller than IG). */
+  titleFontSize?: number;
 }) {
   if (cell.kind === "subscribe") {
     return (
@@ -1395,7 +1410,9 @@ function CellRenderer({
           position: "relative",
           overflow: "hidden",
           background: "#222",
-          aspectRatio: cellAspect,
+          width: cellW,
+          height: cellH,
+          borderRadius: 3,
         }}
       >
         <img
@@ -1488,9 +1505,10 @@ function CellRenderer({
         position: "relative",
         overflow: "hidden",
         background: "#222",
-        // Enforce aspect ratio so portrait-ish photos don't get squished into
-        // wide banners by flex:1 layout. Matches the original cell shape.
-        aspectRatio: "16 / 9.35",
+        // Explicit width + height (computed from canvas + inset by parent)
+        // so cells don't fight grid stretching.
+        width: cellW,
+        height: cellH,
         borderRadius: 3,
       }}
     >
@@ -1540,7 +1558,7 @@ function CellRenderer({
           textAlign: "center",
           fontFamily: '"Noto Sans", system-ui, sans-serif',
           fontWeight: 400,
-          fontSize: 36,
+          fontSize: titleFontSize,
           lineHeight: 1.1,
           letterSpacing: 0.1,
           pointerEvents: "none",
@@ -1670,8 +1688,18 @@ function TemplateB_Cells({
   // LI 1:1 keeps cells side-by-side with the original tighter inset.
   const isLI = format === "li";
   const inset = isLI ? 60 : 120;
-  const topInset = isLI ? 30 : 50;
+  const topInset = isLI ? 60 : 50;
   const ROW_H = isLI ? 192 : 144;
+  // Compute explicit cell dimensions so aspectRatio is honored regardless of
+  // grid stretching. LI: 2 side-by-side, IG: 1 column. Width derives from
+  // canvas width and inset; height = width × aspectFactor.
+  const GAP = 16;
+  const cellW = isLI
+    ? (size.w - inset * 2 - GAP) / 2
+    : size.w - inset * 2;
+  const cellAspectStr = isLI ? "1 / 1" : "16 / 9.35";
+  const [aw, ah] = cellAspectStr.split(" / ").map(Number);
+  const cellH = (cellW * ah) / aw;
   const bgIsLight = hexLuminance(bgColor) > 0.55;
   const fg = bgIsLight ? PALETTE.ink : "#f5f4ee";
   const fgSoft = bgIsLight ? PALETTE.inkSoft : "rgba(245,244,238,0.7)";
@@ -1757,7 +1785,7 @@ function TemplateB_Cells({
         )}
       </div>
 
-      <div style={{ height: topInset + ROW_H + topInset - 5, flexShrink: 0 }} />
+      <div style={{ height: topInset + ROW_H + topInset + (isLI ? -75 : -5), flexShrink: 0 }} />
 
       <div
         style={{
@@ -1766,7 +1794,7 @@ function TemplateB_Cells({
           // LI: cells side-by-side. IG: stacked vertically (one above the
           // other) so each cell becomes a tall near-square frame.
           gridTemplateColumns: isLI ? "1fr 1fr" : "1fr",
-          gridTemplateRows: isLI ? "1fr" : "1fr 1fr",
+          gridTemplateRows: isLI ? "auto" : "1fr 1fr",
           gap: 16,
           padding: `0 ${inset}px`,
           alignContent: "center",
@@ -1778,31 +1806,36 @@ function TemplateB_Cells({
             cell={cell}
             cellIdx={i}
             onImagePosChange={onCellImagePosChange}
+            cellW={cellW}
+            cellH={cellH}
+            titleFontSize={isLI ? 22 : 36}
           />
         ))}
       </div>
 
       <div
         style={{
-          padding: `${inset}px ${inset}px ${inset}px`,
+          padding: `${inset}px ${inset}px ${isLI ? 28 : inset}px`,
           display: "flex",
           flexDirection: "column",
           gap: 28,
           flexShrink: 0,
         }}
       >
-        <div
-          style={{
-            fontFamily: '"Noto Serif", Georgia, serif',
-            fontStyle: "italic",
-            fontSize: taglineFontSize,
-            color: fg,
-            lineHeight: 1.18,
-            letterSpacing: -0.5,
-          }}
-        >
-          {tagline}
-        </div>
+        {!isLI && (
+          <div
+            style={{
+              fontFamily: '"Noto Serif", Georgia, serif',
+              fontStyle: "italic",
+              fontSize: taglineFontSize,
+              color: fg,
+              lineHeight: 1.18,
+              letterSpacing: -0.5,
+            }}
+          >
+            {tagline}
+          </div>
+        )}
         <div
           style={{
             display: "flex",
@@ -1810,12 +1843,12 @@ function TemplateB_Cells({
             alignItems: "baseline",
             paddingTop: 22,
             borderTop: `1px solid ${borderTop}`,
-            fontSize: 22,
+            fontSize: isLI ? 30 : 22,
             letterSpacing: 3,
           }}
         >
           <div style={{ color: fgSoft }}>{date}</div>
-          <div style={{ color: fg, fontWeight: 700 }}>{cta}</div>
+          <div style={{ color: fg, fontWeight: 700, opacity: isLI ? 0.5 : 1 }}>{cta}</div>
         </div>
       </div>
     </div>
@@ -2127,7 +2160,7 @@ function OverviewCoversDevPage() {
     () => (format === "li" ? SIZE_LI : SIZE_IG),
     [format],
   );
-  const liUrl = `intersect.art/issues/${issueNumber}`;
+  const liUrl = `theintersect.art/issues/${issueNumber}`;
   const slide1Cta = format === "li" ? liUrl : "READ IN BIO →";
   const slide2Cta = format === "li" ? liUrl : "LINK IN BIO →";
   const slide3Cta =
@@ -2161,7 +2194,7 @@ function OverviewCoversDevPage() {
     if (innerSlides.length < requiredInnerCount) {
       const next = [...innerSlides];
       while (next.length < requiredInnerCount) {
-        next.push({ ...DEFAULT_INNER });
+        next.push({ ...defaultInner(format) });
       }
       setInnerSlides(next);
     }
@@ -2397,7 +2430,7 @@ function OverviewCoversDevPage() {
       );
     else if (renderSlide.match(/^i(\d+)$/)) {
       const innerIdx = Number(renderSlide.slice(1));
-      const slideState = innerSlides[innerIdx] ?? DEFAULT_INNER;
+      const slideState = innerSlides[innerIdx] ?? defaultInner(format);
       const cells = computeCells(
         effectiveStories,
         innerIdx,
@@ -2808,7 +2841,7 @@ function OverviewCoversDevPage() {
                 value={slide.numeral}
                 onChange={(n) => updateInner(idx, { numeral: n })}
                 onReset={() =>
-                  updateInner(idx, { numeral: DEFAULT_INNER.numeral })
+                  updateInner(idx, { numeral: defaultInner(format).numeral })
                 }
               />
               <BgTaglineControls
@@ -2822,9 +2855,9 @@ function OverviewCoversDevPage() {
                 onTaglineFontSizeChange={(t) => updateInner(idx, { taglineFs: t })}
                 onReset={() =>
                   updateInner(idx, {
-                    bgColor: DEFAULT_INNER.bgColor,
-                    bgLightness: DEFAULT_INNER.bgLightness,
-                    taglineFs: DEFAULT_INNER.taglineFs,
+                    bgColor: defaultInner(format).bgColor,
+                    bgLightness: defaultInner(format).bgLightness,
+                    taglineFs: defaultInner(format).taglineFs,
                   })
                 }
               />
