@@ -631,6 +631,7 @@ function BrandSettings({ brand }: { brand: Brand }) {
     name: brand.name,
     websiteUrl: brand.websiteUrl,
     newsletterUrl: brand.newsletterUrl,
+    subscribeUrl: brand.subscribeUrl ?? "",
   });
 
   // Voice guidelines draft
@@ -666,6 +667,7 @@ function BrandSettings({ brand }: { brand: Brand }) {
       name: brand.name,
       websiteUrl: brand.websiteUrl,
       newsletterUrl: brand.newsletterUrl,
+      subscribeUrl: brand.subscribeUrl ?? "",
     });
     setEditingDetails(false);
   };
@@ -786,6 +788,17 @@ function BrandSettings({ brand }: { brand: Brand }) {
                     className="text-sm h-8"
                   />
                 </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                    <Globe className="h-3 w-3" /> Subscribe URL
+                  </Label>
+                  <Input
+                    value={detailsDraft.subscribeUrl}
+                    onChange={(e) => setDetailsDraft({ ...detailsDraft, subscribeUrl: e.target.value })}
+                    placeholder="theintersect.art (no protocol — used as visible CTA on cover-generator subscribe cells)"
+                    className="text-sm h-8"
+                  />
+                </div>
               </div>
             ) : (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 pt-3 border-t text-xs text-muted-foreground">
@@ -839,9 +852,6 @@ function BrandSettings({ brand }: { brand: Brand }) {
           </CardContent>
         </Card>
 
-        {/* ── Brand Logos ─────────────────────────────────────────── */}
-        <LogoManager brand={brand} />
-
         {/* ── Cover Generator (Intersect only — dev tool) ─────────── */}
         {brand?.name === "The Intersect" && (
           <Card>
@@ -861,6 +871,9 @@ function BrandSettings({ brand }: { brand: Brand }) {
             </CardContent>
           </Card>
         )}
+
+        {/* ── Brand Logos ─────────────────────────────────────────── */}
+        <LogoManager brand={brand} />
 
         {/* ── Voice Guidelines ────────────────────────────────────── */}
         <Card>

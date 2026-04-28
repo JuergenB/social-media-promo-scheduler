@@ -73,6 +73,93 @@ const SIZE_LI = { w: 1080, h: 1080 }; // LinkedIn document carousel 1:1
 const SCALE = 0.42;
 const DISPLAY_W = 1080 * SCALE; // width is always 1080, only height varies
 
+// ── Inner-slide model ─────────────────────────────────────────────────
+//
+// Both LI 1:1 and IG 4:5 carousels pack 2 stories per inner slide. With N
+// picked stories you get ceil(N/2) inner slides; if N is odd the final slot
+// pairs the orphaned story with a "subscribe" cell built from the issue's
+// hero image (LI: visible URL footer; IG: "LINK IN BIO" footer).
+const STORIES_PER_INNER = 2;
+const MAX_STORY_PICKS = 12;
+const FALLBACK_SUBSCRIBE_URL = "theintersect.art";
+
+type ImagePos = { x: number; y: number; zoom: number };
+const DEFAULT_IMAGE_POS: ImagePos = { x: 50, y: 50, zoom: 1 };
+
+type StoryPick = {
+  title: string;
+  imageUrl: string | null;
+  imagePos?: ImagePos; // per-image drag-reposition; undefined means use default
+};
+
+// Per-inner-slide editable state — what used to live as discrete numeralA/B,
+// bg2a/b, etc. variables. Now an array entry per inner slide.
+type InnerSlideState = {
+  numeral: { fontSize: number; dx: number; dy: number };
+  bgColor: string | null; // hex override; null = cream default
+  bgLightness: number; // -50..50
+  taglineFs: number; // px
+  logoLeft: boolean;
+};
+const DEFAULT_INNER: InnerSlideState = {
+  numeral: { fontSize: 245, dx: -29, dy: -48 },
+  bgColor: null,
+  bgLightness: 0,
+  taglineFs: 50,
+  logoLeft: true,
+};
+
+// Discriminated cell type for the 2-cell inner-slide grid. Subscribe cell is
+// the orphan-filler when picks.length is odd (LI) or as a graceful gap-filler
+// for IG when picks aren't a multiple of STORIES_PER_INNER.
+type Cell =
+  | { kind: "story"; story: StoryPick }
+  | { kind: "subscribe"; heroSrc: string; subscribeUrl: string; format: "li" | "ig" };
+
+// Compute the carousel slide list for a given pick count + format.
+//   LI: [A, i0, i1, …, iN]  (no closing C; CTA lives in post body)
+//   IG: [A, i0, i1, …, iN, C]
+// Inner-slide count = max(1, ceil(picks/STORIES_PER_INNER)). Always at least
+// one inner slide so the carousel previews even with no picks.
+function computeSlideList(
+  picksLength: number,
+  format: "li" | "ig",
+): string[] {
+  const innerCount = Math.max(
+    1,
+    Math.ceil(picksLength / STORIES_PER_INNER),
+  );
+  const inners = Array.from({ length: innerCount }, (_, i) => `i${i}`);
+  return format === "li" ? ["A", ...inners] : ["A", ...inners, "C"];
+}
+
+// Build the 2-cell array for a given inner-slide index. If the slot would
+// otherwise be empty (orphaned story or no picks), fill with a subscribe cell.
+function computeCells(
+  picks: StoryPick[],
+  innerIdx: number,
+  heroSrc: string,
+  subscribeUrl: string,
+  format: "li" | "ig",
+): Cell[] {
+  const start = innerIdx * STORIES_PER_INNER;
+  const slot1 = picks[start];
+  const slot2 = picks[start + 1];
+  const cells: Cell[] = [];
+  if (slot1) cells.push({ kind: "story", story: slot1 });
+  if (slot2) cells.push({ kind: "story", story: slot2 });
+  // Pad to 2 cells. Subscribe cell fills any vacancy.
+  while (cells.length < STORIES_PER_INNER) {
+    cells.push({
+      kind: "subscribe",
+      heroSrc,
+      subscribeUrl,
+      format,
+    });
+  }
+  return cells;
+}
+
 const SizeContext = createContext<{ w: number; h: number }>(SIZE_IG);
 const useSize = () => useContext(SizeContext);
 
@@ -211,8 +298,8 @@ function useBottomBandSample(src: string) {
   return color;
 }
 
-type ImagePos = { x: number; y: number; zoom: number };
-
+// ImagePos is declared near the top of the file alongside the inner-slide
+// model. Kept here only for the clamp helper that follows.
 const clamp = (n: number, min = 0, max = 100) =>
   Math.max(min, Math.min(max, n));
 
@@ -1283,24 +1370,257 @@ function TemplateA({
   );
 }
 
-type Story = { title: string; imageUrl: string | null };
+// Inner-slide cell renderer. Renders either a story image card with a
+// drag-to-reposition affordance + title overlay, or a "subscribe" card built
+// from the issue's hero image with a format-appropriate CTA footer (LI shows
+// the subscribe URL; IG shows "LINK IN BIO →").
+function CellRenderer({
+  cell,
+  cellIdx,
+  onImagePosChange,
+}: {
+  cell: Cell;
+  cellIdx: number;
+  onImagePosChange?: (cellIdx: number, pos: ImagePos) => void;
+}) {
+  if (cell.kind === "subscribe") {
+    return (
+      <div
+        style={{
+          position: "relative",
+          overflow: "hidden",
+          background: "#222",
+        }}
+      >
+        <img
+          src={cell.heroSrc}
+          alt=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: 0.55,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.85) 100%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: 24,
+            color: "#fff",
+            textAlign: "center",
+            fontFamily: '"Noto Sans", system-ui, sans-serif',
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 14,
+              letterSpacing: 4,
+              opacity: 0.7,
+            }}
+          >
+            ENJOYED THIS ISSUE?
+          </div>
+          <div
+            style={{
+              fontFamily: '"Noto Serif", Georgia, serif',
+              fontStyle: "italic",
+              fontSize: 32,
+              lineHeight: 1.15,
+              fontWeight: 400,
+            }}
+          >
+            Subscribe to The Intersect
+          </div>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 14,
+              letterSpacing: 3,
+              fontWeight: 700,
+            }}
+          >
+            {cell.format === "li"
+              ? cell.subscribeUrl.toUpperCase()
+              : "LINK IN BIO →"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  // story cell — drag-to-reposition image + title overlay
+  const story = cell.story;
+  const pos = story.imagePos ?? DEFAULT_IMAGE_POS;
+  const isDraggable = !!onImagePosChange;
+  return (
+    <div
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        background: "#222",
+        // Enforce aspect ratio so portrait-ish photos don't get squished into
+        // wide banners by flex:1 layout. Matches the original cell shape.
+        aspectRatio: "16 / 11",
+      }}
+    >
+      {story.imageUrl ? (
+        isDraggable ? (
+          <CellDraggableImage
+            src={story.imageUrl}
+            pos={pos}
+            onChange={(p) => onImagePosChange!(cellIdx, p)}
+          />
+        ) : (
+          <img
+            src={story.imageUrl}
+            alt=""
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: `${pos.x}% ${pos.y}%`,
+              transform: `scale(${pos.zoom})`,
+              transformOrigin: `${pos.x}% ${pos.y}%`,
+              opacity: 0.95,
+            }}
+          />
+        )
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            background: "linear-gradient(135deg,#1a1a1a,#2e2e2e)",
+          }}
+        />
+      )}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: "60px 18px 14px",
+          background:
+            "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)",
+          color: "#fff",
+          fontFamily: '"Noto Sans", system-ui, sans-serif',
+          fontWeight: 400,
+          fontSize: 19,
+          lineHeight: 1.3,
+          letterSpacing: 0.1,
+          pointerEvents: "none",
+        }}
+      >
+        {story.title}
+      </div>
+    </div>
+  );
+}
 
-function TemplateB_Square({
+// Cell-scoped variant of DraggableImage that fills its parent (no SizeContext
+// dependency — the parent grid cell is the bounds, not the slide canvas).
+function CellDraggableImage({
+  src,
+  pos,
+  onChange,
+}: {
+  src: string;
+  pos: ImagePos;
+  onChange: (next: ImagePos) => void;
+}) {
+  const [drag, setDrag] = useState<{
+    x: number;
+    y: number;
+    posX: number;
+    posY: number;
+  } | null>(null);
+  return (
+    <div
+      onPointerDown={(e) => {
+        (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
+        setDrag({
+          x: e.clientX,
+          y: e.clientY,
+          posX: pos.x,
+          posY: pos.y,
+        });
+      }}
+      onPointerMove={(e) => {
+        if (!drag) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const dx = ((e.clientX - drag.x) / rect.width) * 100;
+        const dy = ((e.clientY - drag.y) / rect.height) * 100;
+        onChange({
+          ...pos,
+          x: clamp(drag.posX - dx),
+          y: clamp(drag.posY - dy),
+        });
+      }}
+      onPointerUp={() => setDrag(null)}
+      style={{
+        position: "absolute",
+        inset: 0,
+        cursor: drag ? "grabbing" : "grab",
+        touchAction: "none",
+      }}
+    >
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: `${pos.x}% ${pos.y}%`,
+          transform: `scale(${pos.zoom})`,
+          transformOrigin: `${pos.x}% ${pos.y}%`,
+          pointerEvents: "none",
+          userSelect: "none",
+        }}
+      />
+    </div>
+  );
+}
+
+function TemplateB_Cells({
   numeralPos,
   onNumeralChange,
-  stories,
+  cells,
   tagline,
   bgColor = PALETTE.cream,
-  taglineFontSize = 50,
+  taglineFontSize,
   cta = "LINK IN BIO →",
   logoLeft = true,
   issueNumber,
   brandLong,
   date,
+  format,
+  onCellImagePosChange,
 }: {
   numeralPos: NumeralPos;
   onNumeralChange: (next: NumeralPos) => void;
-  stories: Story[];
+  cells: Cell[]; // exactly 2; story or subscribe per slot
   tagline: string;
   bgColor?: string;
   taglineFontSize?: number;
@@ -1309,10 +1629,19 @@ function TemplateB_Square({
   issueNumber: number;
   brandLong: string;
   date: string;
+  format: "li" | "ig";
+  /** Live canvas only: persists drag position for story cells back to picker
+   *  state. Render mode passes undefined → cells render with their stored
+   *  position but aren't draggable. */
+  onCellImagePosChange?: (cellIdx: number, pos: ImagePos) => void;
 }) {
   const size = useSize();
-  const inset = 60;
-  const ROW_H = 240;
+  // Format-aware layout: IG 4:5 stacks cells vertically with wider L/R inset
+  // (turns each cell into a tall near-square frame instead of a 16:11 sliver);
+  // LI 1:1 keeps cells side-by-side with the original tighter inset.
+  const isLI = format === "li";
+  const inset = isLI ? 60 : 120;
+  const ROW_H = isLI ? 240 : 180;
   const bgIsLight = hexLuminance(bgColor) > 0.55;
   const fg = bgIsLight ? PALETTE.ink : "#f5f4ee";
   const fgSoft = bgIsLight ? PALETTE.inkSoft : "rgba(245,244,238,0.7)";
@@ -1403,64 +1732,22 @@ function TemplateB_Square({
         style={{
           flex: 1,
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridTemplateRows:
-            stories.length <= 2 ? "auto" : "auto auto",
+          // LI: cells side-by-side. IG: stacked vertically (one above the
+          // other) so each cell becomes a tall near-square frame.
+          gridTemplateColumns: isLI ? "1fr 1fr" : "1fr",
+          gridTemplateRows: isLI ? "1fr" : "1fr 1fr",
           gap: 12,
           padding: `0 ${inset}px`,
           alignContent: "center",
         }}
       >
-        {stories.slice(0, 4).map((s, i) => (
-          <div
+        {cells.slice(0, 2).map((cell, i) => (
+          <CellRenderer
             key={i}
-            style={{
-              position: "relative",
-              overflow: "hidden",
-              background: "#222",
-              aspectRatio: "16 / 11",
-            }}
-          >
-            {s.imageUrl ? (
-              <img
-                src={s.imageUrl}
-                alt=""
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  opacity: 0.95,
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  background: "linear-gradient(135deg,#1a1a1a,#2e2e2e)",
-                }}
-              />
-            )}
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                padding: "60px 18px 14px",
-                background:
-                  "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)",
-                color: "#fff",
-                fontFamily: '"Noto Sans", system-ui, sans-serif',
-                fontWeight: 400,
-                fontSize: 19,
-                lineHeight: 1.3,
-                letterSpacing: 0.1,
-              }}
-            >
-              {s.title}
-            </div>
-          </div>
+            cell={cell}
+            cellIdx={i}
+            onImagePosChange={onCellImagePosChange}
+          />
         ))}
       </div>
 
@@ -1504,225 +1791,6 @@ function TemplateB_Square({
   );
 }
 
-function TemplateB_Rect({
-  numeralPos,
-  onNumeralChange,
-  stories,
-  tagline,
-  bgColor = PALETTE.cream,
-  taglineFontSize = 44,
-  cta = "LINK IN BIO →",
-  logoLeft = true,
-  issueNumber,
-  brandLong,
-  date,
-}: {
-  numeralPos: NumeralPos;
-  onNumeralChange: (next: NumeralPos) => void;
-  stories: Story[];
-  tagline: string;
-  bgColor?: string;
-  taglineFontSize?: number;
-  cta?: string;
-  logoLeft?: boolean;
-  issueNumber: number;
-  brandLong: string;
-  date: string;
-}) {
-  const size = useSize();
-  const inset = 60;
-  const ROW_H = 200;
-  const bgIsLight = hexLuminance(bgColor) > 0.55;
-  const bg = bgColor;
-  const fg = bgIsLight ? PALETTE.ink : "#f5f4ee";
-  const fgSoft = bgIsLight ? PALETTE.inkSoft : "rgba(245,244,238,0.7)";
-  const borderTop = bgIsLight
-    ? "rgba(0,0,0,0.15)"
-    : "rgba(255,255,255,0.18)";
-
-  return (
-    <div
-      style={{
-        width: size.w,
-        height: size.h,
-        background: bg,
-        color: fg,
-        display: "flex",
-        flexDirection: "column",
-        fontFamily: '"Noto Sans", system-ui, sans-serif',
-        position: "relative",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          top: inset,
-          left: inset,
-          right: inset,
-          height: ROW_H,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        {logoLeft ? (
-          <>
-            <img
-              src={BRAND_LOGO_RECT}
-              alt={brandLong}
-              style={{
-                height: ROW_H,
-                width: "auto",
-                objectFit: "contain",
-                opacity: 0.5,
-                filter: bgIsLight
-                  ? "brightness(0)"
-                  : "brightness(0) invert(1)",
-              }}
-            />
-            <DraggableNumeral
-              value={issueNumber}
-              rowH={ROW_H}
-              pos={numeralPos}
-              onChange={onNumeralChange}
-              letterSpacing={-8}
-              color={fg}
-              opacity={0.5}
-            />
-          </>
-        ) : (
-          <>
-            <DraggableNumeral
-              value={issueNumber}
-              rowH={ROW_H}
-              pos={numeralPos}
-              onChange={onNumeralChange}
-              letterSpacing={-8}
-              color={fg}
-              opacity={0.5}
-            />
-            <img
-              src={BRAND_LOGO_RECT}
-              alt={brandLong}
-              style={{
-                height: ROW_H,
-                width: "auto",
-                objectFit: "contain",
-                opacity: 0.5,
-                filter: bgIsLight
-                  ? "brightness(0)"
-                  : "brightness(0) invert(1)",
-              }}
-            />
-          </>
-        )}
-      </div>
-
-      <div style={{ height: inset + ROW_H + inset, flexShrink: 0 }} />
-
-      <div
-        style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gridTemplateRows:
-            stories.length <= 2 ? "auto" : "auto auto",
-          gap: 12,
-          padding: `0 ${inset}px`,
-          alignContent: "center",
-        }}
-      >
-        {stories.slice(0, 4).map((s, i) => (
-          <div
-            key={i}
-            style={{
-              position: "relative",
-              overflow: "hidden",
-              background: "#222",
-              aspectRatio: "16 / 11",
-            }}
-          >
-            {s.imageUrl ? (
-              <img
-                src={s.imageUrl}
-                alt=""
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  opacity: 0.95,
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  background: "linear-gradient(135deg,#1a1a1a,#2e2e2e)",
-                }}
-              />
-            )}
-            <div
-              style={{
-                position: "absolute",
-                left: 0,
-                right: 0,
-                bottom: 0,
-                padding: "60px 18px 14px",
-                background:
-                  "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)",
-                color: "#fff",
-                fontFamily: '"Noto Sans", system-ui, sans-serif',
-                fontWeight: 400,
-                fontSize: 19,
-                lineHeight: 1.3,
-                letterSpacing: 0.1,
-              }}
-            >
-              {s.title}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div
-        style={{
-          padding: `${inset}px ${inset}px ${inset}px`,
-          display: "flex",
-          flexDirection: "column",
-          gap: 28,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: '"Noto Serif", Georgia, serif',
-            fontStyle: "italic",
-            fontSize: taglineFontSize,
-            color: fg,
-            lineHeight: 1.2,
-            letterSpacing: -0.5,
-          }}
-        >
-          {tagline}
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "baseline",
-            paddingTop: 22,
-            borderTop: `1px solid ${borderTop}`,
-            fontSize: 22,
-            letterSpacing: 3,
-          }}
-        >
-          <div style={{ color: fgSoft }}>{date}</div>
-          <div style={{ color: fg, fontWeight: 700 }}>{cta}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function TemplateC({
   heroSrc,
@@ -1850,12 +1918,9 @@ type UpscaleStatus = {
 // useSearchParams() doesn't fail Next.js's CSR-bailout check at build time.
 function OverviewCoversDevPage() {
   const searchParams = useSearchParams();
-  const renderSlide = searchParams.get("render") as
-    | "A"
-    | "2a"
-    | "2b"
-    | "C"
-    | null;
+  // renderSlide accepts "A", "C", or "iN" (any inner-slide index). Validated
+  // at use sites — anything else returns null and the page renders normally.
+  const renderSlide = searchParams.get("render");
   // For render mode, prefer query-param state; defaults match the baked-in.
   const qpNum = (k: string, d: number) => {
     const v = searchParams.get(k);
@@ -1916,48 +1981,6 @@ function OverviewCoversDevPage() {
     "overview-cover-bandBlurA",
     qpNum("bb", 0),
   );
-  const [bg2a, setBg2a] = useLocalStorage<string | null>(
-    "overview-cover-bg2a",
-    qpStr("bg2a"),
-  );
-  const [bgL2a, setBgL2a] = useLocalStorage<number>(
-    "overview-cover-bgL2a",
-    qpNum("bgL2a", 0),
-  );
-  const [bg2b, setBg2b] = useLocalStorage<string | null>(
-    "overview-cover-bg2b",
-    qpStr("bg2b"),
-  );
-  const [bgL2b, setBgL2b] = useLocalStorage<number>(
-    "overview-cover-bgL2b",
-    qpNum("bgL2b", 0),
-  );
-  const [tagFs2a, setTagFs2a] = useLocalStorage<number>(
-    "overview-cover-tagFs2a",
-    qpNum("t2afs", 50),
-  );
-  const [tagFs2b, setTagFs2b] = useLocalStorage<number>(
-    "overview-cover-tagFs2b",
-    qpNum("t2bfs", 44),
-  );
-  const bgFinal2a = adjustLightness(bg2a ?? PALETTE.cream, bgL2a);
-  const bgFinal2b = adjustLightness(bg2b ?? PALETTE.cream, bgL2b);
-  const [numeralA, setNumeralA] = useLocalStorage<NumeralPos>(
-    "overview-cover-numeralA",
-    {
-      fontSize: qpNum("nafs", 265),
-      dx: qpNum("nadx", -29),
-      dy: qpNum("nady", -48),
-    },
-  );
-  const [numeralB, setNumeralB] = useLocalStorage<NumeralPos>(
-    "overview-cover-numeralB",
-    {
-      fontSize: qpNum("nbfs", 225),
-      dx: qpNum("nbdx", -11),
-      dy: qpNum("nbdy", -41),
-    },
-  );
   const [slide1NumeralLeft, setSlide1NumeralLeft] = useLocalStorage<boolean>(
     "overview-cover-slide1NumeralLeft",
     qpStr("s1l") === "1",
@@ -1973,14 +1996,78 @@ function OverviewCoversDevPage() {
       "overview-cover-slide1NumeralOpacity",
       qpNum("s1no", 18),
     );
-  const [slide2aLogoLeft, setSlide2aLogoLeft] = useLocalStorage<boolean>(
-    "overview-cover-slide2aLogoLeft",
-    qpStr("s2al") !== null ? qpStr("s2al") === "1" : true,
+  // Inner-slide state — array entry per inner slide. Render mode hydrates
+  // from the `is` URL param when present (Puppeteer headless has no
+  // localStorage). On first hydration of an empty array, a one-time
+  // migration shim seeds index 0 + 1 from the legacy 2a/2b state so the
+  // user's prior tweaks survive.
+  const initialInnerSlides: InnerSlideState[] = (() => {
+    const raw = qpStr("is");
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed as InnerSlideState[];
+    } catch {
+      // ignore — fall through
+    }
+    return [];
+  })();
+  const [innerSlides, setInnerSlides] = useLocalStorage<InnerSlideState[]>(
+    "overview-cover-innerSlides",
+    initialInnerSlides,
   );
-  const [slide2bLogoLeft, setSlide2bLogoLeft] = useLocalStorage<boolean>(
-    "overview-cover-slide2bLogoLeft",
-    qpStr("s2bl") !== null ? qpStr("s2bl") === "1" : true,
-  );
+
+  // One-time migration: if innerSlides is empty AND any of the legacy 2a/2b
+  // localStorage keys exist, seed the first two entries from them so the
+  // user's prior per-slide tweaks survive the refactor. Guarded by a flag
+  // key so it runs at most once per browser. Reads localStorage directly
+  // (not the React state) because the legacy state vars are about to be
+  // removed in step 6.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem("overview-cover-migrated-v2") === "1") return;
+    if (innerSlides.length > 0) {
+      window.localStorage.setItem("overview-cover-migrated-v2", "1");
+      return;
+    }
+    const readJson = <T,>(k: string, fallback: T): T => {
+      try {
+        const raw = window.localStorage.getItem(k);
+        return raw ? (JSON.parse(raw) as T) : fallback;
+      } catch {
+        return fallback;
+      }
+    };
+    const seed = (a: "A" | "B"): InnerSlideState => ({
+      numeral: readJson(`overview-cover-numeral${a}`, DEFAULT_INNER.numeral),
+      bgColor: readJson<string | null>(
+        `overview-cover-bg2${a.toLowerCase()}`,
+        null,
+      ),
+      bgLightness: readJson<number>(
+        `overview-cover-bgL2${a.toLowerCase()}`,
+        0,
+      ),
+      taglineFs: readJson<number>(
+        `overview-cover-tagFs2${a.toLowerCase()}`,
+        a === "A" ? 50 : 44,
+      ),
+      logoLeft: readJson<boolean>(
+        `overview-cover-slide2${a.toLowerCase()}LogoLeft`,
+        true,
+      ),
+    });
+    setInnerSlides([seed("A"), seed("B")]);
+    window.localStorage.setItem("overview-cover-migrated-v2", "1");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateInner = (idx: number, patch: Partial<InnerSlideState>) => {
+    setInnerSlides(
+      innerSlides.map((s, j) => (j === idx ? { ...s, ...patch } : s)),
+    );
+  };
+
   const [upscale, setUpscale] = useState<UpscaleStatus>({ state: "idle" });
   const [taglineFsA, setTaglineFsA] = useLocalStorage<number>(
     "overview-cover-taglineFsA",
@@ -2028,9 +2115,27 @@ function OverviewCoversDevPage() {
     }
     return [];
   })();
-  const [storyPicks, setStoryPicks] = useLocalStorage<
-    { title: string; imageUrl: string | null }[]
-  >("overview-cover-storyPicks", initialStoryPicks);
+  const [storyPicks, setStoryPicks] = useLocalStorage<StoryPick[]>(
+    "overview-cover-storyPicks",
+    initialStoryPicks,
+  );
+
+  // Auto-grow innerSlides when storyPicks count requires more inner slides.
+  // Never shrinks (preserves user-tuned slots when picks decrease).
+  const requiredInnerCount = Math.max(
+    1,
+    Math.ceil(storyPicks.length / STORIES_PER_INNER),
+  );
+  useEffect(() => {
+    if (innerSlides.length < requiredInnerCount) {
+      const next = [...innerSlides];
+      while (next.length < requiredInnerCount) {
+        next.push({ ...DEFAULT_INNER });
+      }
+      setInnerSlides(next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requiredInnerCount]);
 
   const sampleA = useBottomBandSample(heroSrc);
   const sampledHex = sampleA ? rgbToHex(sampleA.rgb) : null;
@@ -2045,9 +2150,7 @@ function OverviewCoversDevPage() {
     setBandBlurA(0);
   };
 
-  const buildDownloadHref = (
-    slide: "A" | "2a" | "2b" | "C",
-  ): string => {
+  const buildDownloadHref = (slide: string): string => {
     const sp = new URLSearchParams({ slide });
     sp.set("fmt", format);
     // Issue data flows to render mode through these params so the rendered PNG
@@ -2076,31 +2179,19 @@ function OverviewCoversDevPage() {
       sp.set("cy", String(posC.y));
       sp.set("cz", String(posC.zoom));
     }
-    if (slide === "2a" || slide === "2b") {
-      // Story picks need to flow into render mode via the URL — Puppeteer
-      // launches with empty localStorage, so without this the download falls
-      // back to an empty grid.
+    if (/^i\d+$/.test(slide)) {
+      // Story picks (incl. per-image drag positions) and inner-slide state
+      // arrays both flow into render mode via JSON URL params — Puppeteer
+      // launches with empty localStorage so without these the download
+      // would lose all of it.
       if (storyPicks.length > 0) {
         sp.set("sp", JSON.stringify(storyPicks));
       }
-    }
-    if (slide === "2a") {
-      sp.set("nafs", String(numeralA.fontSize));
-      sp.set("nadx", String(numeralA.dx));
-      sp.set("nady", String(numeralA.dy));
-      if (bg2a) sp.set("bg2a", bg2a);
-      sp.set("bgL2a", String(bgL2a));
-      sp.set("t2afs", String(tagFs2a));
-      sp.set("s2al", slide2aLogoLeft ? "1" : "0");
-    }
-    if (slide === "2b") {
-      sp.set("nbfs", String(numeralB.fontSize));
-      sp.set("nbdx", String(numeralB.dx));
-      sp.set("nbdy", String(numeralB.dy));
-      if (bg2b) sp.set("bg2b", bg2b);
-      sp.set("bgL2b", String(bgL2b));
-      sp.set("t2bfs", String(tagFs2b));
-      sp.set("s2bl", slide2bLogoLeft ? "1" : "0");
+      // Subscribe URL needed for orphan-cell rendering when picks count is odd.
+      sp.set("subs", subscribeUrl);
+      // Hero URL needed for the subscribe-cell background.
+      sp.set("hero", heroSrc);
+      sp.set("is", JSON.stringify(innerSlides));
     }
     return `/api/tools/download-slide?${sp.toString()}`;
   };
@@ -2146,7 +2237,40 @@ function OverviewCoversDevPage() {
   // picked any yet, the templates render placeholder card backgrounds — far
   // better than silently falling back to hardcoded URLs from a different
   // issue, which is what the prior STORY_IMAGES + STORY_TITLES constants did.
-  const effectiveStories: Story[] = storyPicks;
+  const effectiveStories: StoryPick[] = storyPicks;
+  // Subscribe URL for the orphan-cell. Render mode reads `?subs=...` from the
+  // URL (Puppeteer can't refetch). Live page fetches the Intersect brand
+  // record once on mount and uses its `Subscribe URL` field. Falls back to a
+  // bare-domain constant only if both routes fail.
+  const [brandSubscribeUrl, setBrandSubscribeUrl] = useState<string | null>(
+    qpStr("subs"),
+  );
+  useEffect(() => {
+    if (brandSubscribeUrl) return; // already set from URL
+    let cancelled = false;
+    fetch("/api/brands?status=Active")
+      .then((r) => r.json())
+      .then((d) => {
+        if (cancelled) return;
+        const intersect = (d.brands as { name: string; subscribeUrl?: string }[])
+          ?.find((b) => /intersect/i.test(b.name));
+        if (intersect?.subscribeUrl) setBrandSubscribeUrl(intersect.subscribeUrl);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const subscribeUrl = brandSubscribeUrl || FALLBACK_SUBSCRIBE_URL;
+  // imagePos drag handler — writes back to storyPicks at the matching cell.
+  // The cellIdx is local to its inner slide; we resolve to the global pick
+  // index via the inner-slide offset at the call site.
+  const updateStoryImagePos = (storyIdx: number, pos: ImagePos) => {
+    setStoryPicks(
+      storyPicks.map((s, j) => (j === storyIdx ? { ...s, imagePos: pos } : s)),
+    );
+  };
 
   // Curator fetch state
   const [curatorState, setCuratorState] = useState<{
@@ -2212,7 +2336,7 @@ function OverviewCoversDevPage() {
     const idx = storyPicks.findIndex((s) => s.title === entry.title);
     if (idx >= 0) {
       setStoryPicks(storyPicks.filter((_, i) => i !== idx));
-    } else if (storyPicks.length < 4) {
+    } else if (storyPicks.length < MAX_STORY_PICKS) {
       setStoryPicks([...storyPicks, entry]);
     }
   };
@@ -2240,57 +2364,37 @@ function OverviewCoversDevPage() {
           date={issueData.date}
         />
       );
-    else if (renderSlide === "2a")
+    else if (renderSlide.match(/^i(\d+)$/)) {
+      const innerIdx = Number(renderSlide.slice(1));
+      const slideState = innerSlides[innerIdx] ?? DEFAULT_INNER;
+      const cells = computeCells(
+        effectiveStories,
+        innerIdx,
+        heroSrc,
+        subscribeUrl,
+        format,
+      );
+      const bg = adjustLightness(
+        slideState.bgColor ?? PALETTE.cream,
+        slideState.bgLightness,
+      );
       node = (
-        <TemplateB_Square
-          numeralPos={numeralA}
-          onNumeralChange={setNumeralA}
-          stories={
-            format === "li"
-              ? effectiveStories.slice(0, 2)
-              : effectiveStories.slice(0, 4)
-          }
+        <TemplateB_Cells
+          numeralPos={slideState.numeral}
+          onNumeralChange={(p) => updateInner(innerIdx, { numeral: p })}
+          cells={cells}
           tagline={issueData.tagline}
-          bgColor={bgFinal2a}
-          taglineFontSize={tagFs2a}
+          bgColor={bg}
+          taglineFontSize={slideState.taglineFs}
           cta={slide2Cta}
-          logoLeft={slide2aLogoLeft}
+          logoLeft={slideState.logoLeft}
           issueNumber={issueData.number}
           brandLong={issueData.brandLong}
           date={issueData.date}
+          format={format}
         />
       );
-    else if (renderSlide === "2b")
-      node =
-        format === "li" ? (
-          <TemplateB_Square
-            numeralPos={numeralB}
-            onNumeralChange={setNumeralB}
-            stories={effectiveStories.slice(2, 4)}
-            tagline={issueData.tagline}
-            bgColor={bgFinal2b}
-            taglineFontSize={tagFs2b}
-            cta={slide2Cta}
-            logoLeft={slide2bLogoLeft}
-            issueNumber={issueData.number}
-            brandLong={issueData.brandLong}
-            date={issueData.date}
-          />
-        ) : (
-          <TemplateB_Rect
-            numeralPos={numeralB}
-            onNumeralChange={setNumeralB}
-            stories={effectiveStories.slice(0, 4)}
-            tagline={issueData.tagline}
-            bgColor={bgFinal2b}
-            taglineFontSize={tagFs2b}
-            cta={slide2Cta}
-            logoLeft={slide2bLogoLeft}
-            issueNumber={issueData.number}
-            brandLong={issueData.brandLong}
-            date={issueData.date}
-          />
-        );
+    }
     else if (renderSlide === "C")
       node = (
         <TemplateC
@@ -2399,15 +2503,15 @@ function OverviewCoversDevPage() {
           <PdfDownloadButton
             href={(() => {
               const sp = new URLSearchParams();
-              // IG 4:5 fits all 4 picked stories on Slide 2a, so the 3-slide
-              // carousel closes with a CTA panel. LI 1:1 fits only 2 stories
-              // per slide, so 2b is required to display stories 3–4 — the
-              // CTA panel would otherwise leave half the picked stories off
-              // the deliverable.
-              const slides = format === "li" ? "A,2a,2b" : "A,2a,C";
-              sp.set("slides", slides);
+              // Slide list grows with story count: ceil(N/2) inner slides
+              // for both formats; LI closes there, IG appends a CTA panel.
+              sp.set(
+                "slides",
+                computeSlideList(storyPicks.length, format).join(","),
+              );
               sp.set("fmt", format);
               sp.set("hero", heroSrc);
+              sp.set("subs", subscribeUrl);
               sp.set("n", String(issueData.number));
               sp.set("dt", issueData.date);
               sp.set("br", issueData.brand);
@@ -2416,6 +2520,7 @@ function OverviewCoversDevPage() {
               if (storyPicks.length > 0) {
                 sp.set("sp", JSON.stringify(storyPicks));
               }
+              sp.set("is", JSON.stringify(innerSlides));
               sp.set("ax", String(posA.x));
               sp.set("ay", String(posA.y));
               sp.set("az", String(posA.zoom));
@@ -2425,19 +2530,11 @@ function OverviewCoversDevPage() {
               sp.set("cx", String(posC.x));
               sp.set("cy", String(posC.y));
               sp.set("cz", String(posC.zoom));
-              sp.set("nafs", String(numeralA.fontSize));
-              sp.set("nadx", String(numeralA.dx));
-              sp.set("nady", String(numeralA.dy));
-              sp.set("nbfs", String(numeralB.fontSize));
-              sp.set("nbdx", String(numeralB.dx));
-              sp.set("nbdy", String(numeralB.dy));
               sp.set("tafs", String(taglineFsA));
               sp.set("tcfs", String(taglineFsC));
               if (slide1NumeralLeft) sp.set("s1l", "1");
               sp.set("s1nl", slide1NumeralLight ? "1" : "0");
               sp.set("s1no", String(slide1NumeralOpacity));
-              sp.set("s2al", slide2aLogoLeft ? "1" : "0");
-              sp.set("s2bl", slide2bLogoLeft ? "1" : "0");
               return `/api/tools/download-pdf?${sp.toString()}`;
             })()}
             filename={`intersect-issue-${issueData.number}-overview-${format}.pdf`}
@@ -2459,7 +2556,7 @@ function OverviewCoversDevPage() {
               onClick={() => setStoryPicks([])}
               className="text-xs underline opacity-70 hover:opacity-100 ml-auto"
             >
-              clear story picks ({storyPicks.length}/4)
+              clear story picks ({storyPicks.length}/{MAX_STORY_PICKS})
             </button>
           )}
         </div>
@@ -2476,7 +2573,7 @@ function OverviewCoversDevPage() {
         {curatorState.state === "loaded" && curatorState.entries && (
           <div className="flex flex-col gap-2">
             <div className="text-xs text-muted-foreground">
-              Pick up to 4 stories for the Slide 2 grid (click to toggle):
+              Pick up to {MAX_STORY_PICKS} stories — they fill {STORIES_PER_INNER} per inner slide (click to toggle):
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {curatorState.entries.map((e) => {
@@ -2615,143 +2712,94 @@ function OverviewCoversDevPage() {
           />
         </div>
 
-        <div className="flex flex-col gap-2">
-          <CanvasFrame
-            label={
-              format === "li"
-                ? "Slide 2a — Inner cover · stories 1–2"
-                : "Slide 2a — Inner cover · square mark"
+        {innerSlides.map((slide, idx) => {
+          const cells = computeCells(
+            effectiveStories,
+            idx,
+            heroSrc,
+            subscribeUrl,
+            format,
+          );
+          const bgFinal = adjustLightness(
+            slide.bgColor ?? PALETTE.cream,
+            slide.bgLightness,
+          );
+          const slideLabel = `Slide ${idx + 2} (${idx === 0 ? "2a" : idx === 1 ? "2b" : `2${String.fromCharCode(99 + idx - 2)}`})`;
+          // Story-cell drag handler: maps cellIdx within this inner slide to
+          // its global pick index in storyPicks, then writes back.
+          const onCellDrag = (cellIdx: number, pos: ImagePos) => {
+            const globalIdx = idx * STORIES_PER_INNER + cellIdx;
+            if (globalIdx < storyPicks.length) {
+              updateStoryImagePos(globalIdx, pos);
             }
-          >
-            <TemplateB_Square
-              numeralPos={numeralA}
-              onNumeralChange={setNumeralA}
-              stories={
-                format === "li"
-                  ? effectiveStories.slice(0, 2)
-                  : effectiveStories.slice(0, 4)
-              }
-              tagline={issueData.tagline}
-              bgColor={bgFinal2a}
-              taglineFontSize={tagFs2a}
-              cta={slide2Cta}
-              logoLeft={slide2aLogoLeft}
-              issueNumber={issueData.number}
-              brandLong={issueData.brandLong}
-              date={issueData.date}
-            />
-          </CanvasFrame>
-          <DownloadButton href={buildDownloadHref("2a")} filename={`intersect-issue-${issueData.number}-inner-2a.png`} />
-          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
-            <button
-              type="button"
-              onClick={() => setSlide2aLogoLeft(!slide2aLogoLeft)}
-              className="px-2 py-1 border border-border rounded hover:bg-muted"
-              title="Swap logo and numeral sides"
-            >
-              {slide2aLogoLeft ? "↔ Move logo to right" : "↔ Move logo to left"}
-            </button>
-            <span className="opacity-60">
-              logo currently {slide2aLogoLeft ? "left" : "right"}
-            </span>
-          </div>
-          <NumeralControls
-            label="Slide 2a · 74"
-            value={numeralA}
-            onChange={setNumeralA}
-            onReset={() => setNumeralA({ fontSize: 265, dx: -29, dy: -48 })}
-          />
-          <BgTaglineControls
-            label="Slide 2a"
-            bgColor={bg2a}
-            onBgColorChange={setBg2a}
-            bgLightness={bgL2a}
-            onBgLightnessChange={setBgL2a}
-            bgFinalColor={bgFinal2a}
-            taglineFontSize={tagFs2a}
-            onTaglineFontSizeChange={setTagFs2a}
-            onReset={() => {
-              setBg2a(null);
-              setBgL2a(0);
-              setTagFs2a(50);
-            }}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <CanvasFrame
-            label={
-              format === "li"
-                ? "Slide 2b — Inner cover · stories 3–4"
-                : "Slide 2b — Inner cover · large rect logo"
-            }
-          >
-            {format === "li" ? (
-              <TemplateB_Square
-                numeralPos={numeralB}
-                onNumeralChange={setNumeralB}
-                stories={effectiveStories.slice(2, 4)}
-                tagline={issueData.tagline}
-                bgColor={bgFinal2b}
-                taglineFontSize={tagFs2b}
-                cta={slide2Cta}
-                logoLeft={slide2bLogoLeft}
-                issueNumber={issueData.number}
-                brandLong={issueData.brandLong}
-                date={issueData.date}
+          };
+          return (
+            <div className="flex flex-col gap-2" key={`inner-${idx}`}>
+              <CanvasFrame label={`${slideLabel} — Inner cover`}>
+                <TemplateB_Cells
+                  numeralPos={slide.numeral}
+                  onNumeralChange={(n) => updateInner(idx, { numeral: n })}
+                  cells={cells}
+                  tagline={issueData.tagline}
+                  bgColor={bgFinal}
+                  taglineFontSize={slide.taglineFs}
+                  cta={slide2Cta}
+                  logoLeft={slide.logoLeft}
+                  issueNumber={issueData.number}
+                  brandLong={issueData.brandLong}
+                  date={issueData.date}
+                  format={format}
+                  onCellImagePosChange={onCellDrag}
+                />
+              </CanvasFrame>
+              <DownloadButton
+                href={buildDownloadHref(`i${idx}`)}
+                filename={`intersect-issue-${issueData.number}-inner-${idx}.png`}
               />
-            ) : (
-              <TemplateB_Rect
-                numeralPos={numeralB}
-                onNumeralChange={setNumeralB}
-                stories={effectiveStories.slice(0, 4)}
-                tagline={issueData.tagline}
-                bgColor={bgFinal2b}
-                taglineFontSize={tagFs2b}
-                cta={slide2Cta}
-                logoLeft={slide2bLogoLeft}
-                issueNumber={issueData.number}
-                brandLong={issueData.brandLong}
-                date={issueData.date}
+              <div
+                className="flex items-center gap-2 text-xs font-mono text-muted-foreground"
+                style={{ width: DISPLAY_W }}
+              >
+                <button
+                  type="button"
+                  onClick={() => updateInner(idx, { logoLeft: !slide.logoLeft })}
+                  className="px-2 py-1 border border-border rounded hover:bg-muted"
+                  title="Swap logo and numeral sides"
+                >
+                  {slide.logoLeft ? "↔ Move logo to right" : "↔ Move logo to left"}
+                </button>
+                <span className="opacity-60">
+                  logo currently {slide.logoLeft ? "left" : "right"}
+                </span>
+              </div>
+              <NumeralControls
+                label={`${slideLabel} · numeral`}
+                value={slide.numeral}
+                onChange={(n) => updateInner(idx, { numeral: n })}
+                onReset={() =>
+                  updateInner(idx, { numeral: DEFAULT_INNER.numeral })
+                }
               />
-            )}
-          </CanvasFrame>
-          <DownloadButton href={buildDownloadHref("2b")} filename={`intersect-issue-${issueData.number}-inner-2b.png`} />
-          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
-            <button
-              type="button"
-              onClick={() => setSlide2bLogoLeft(!slide2bLogoLeft)}
-              className="px-2 py-1 border border-border rounded hover:bg-muted"
-              title="Swap logo and numeral sides"
-            >
-              {slide2bLogoLeft ? "↔ Move logo to right" : "↔ Move logo to left"}
-            </button>
-            <span className="opacity-60">
-              logo currently {slide2bLogoLeft ? "left" : "right"}
-            </span>
-          </div>
-          <NumeralControls
-            label="Slide 2b · 74"
-            value={numeralB}
-            onChange={setNumeralB}
-            onReset={() => setNumeralB({ fontSize: 225, dx: -11, dy: -41 })}
-          />
-          <BgTaglineControls
-            label="Slide 2b"
-            bgColor={bg2b}
-            onBgColorChange={setBg2b}
-            bgLightness={bgL2b}
-            onBgLightnessChange={setBgL2b}
-            bgFinalColor={bgFinal2b}
-            taglineFontSize={tagFs2b}
-            onTaglineFontSizeChange={setTagFs2b}
-            onReset={() => {
-              setBg2b(null);
-              setBgL2b(0);
-              setTagFs2b(44);
-            }}
-          />
-        </div>
+              <BgTaglineControls
+                label={slideLabel}
+                bgColor={slide.bgColor}
+                onBgColorChange={(c) => updateInner(idx, { bgColor: c })}
+                bgLightness={slide.bgLightness}
+                onBgLightnessChange={(l) => updateInner(idx, { bgLightness: l })}
+                bgFinalColor={bgFinal}
+                taglineFontSize={slide.taglineFs}
+                onTaglineFontSizeChange={(t) => updateInner(idx, { taglineFs: t })}
+                onReset={() =>
+                  updateInner(idx, {
+                    bgColor: DEFAULT_INNER.bgColor,
+                    bgLightness: DEFAULT_INNER.bgLightness,
+                    taglineFs: DEFAULT_INNER.taglineFs,
+                  })
+                }
+              />
+            </div>
+          );
+        })}
 
         <div className="flex flex-col gap-2">
           <CanvasFrame label="Slide 3 — CTA (full-bleed)">

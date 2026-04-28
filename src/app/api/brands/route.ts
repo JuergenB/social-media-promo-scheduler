@@ -43,6 +43,7 @@ interface BrandFields {
   "Lnk.Bio Username": string;
   "Lnk.Bio Client ID Label": string;
   "Lnk.Bio Client Secret Label": string;
+  "Subscribe URL": string;
   Status: "Active" | "Inactive";
 }
 
@@ -93,6 +94,7 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     lnkBioUsername: r.fields["Lnk.Bio Username"] || null,
     lnkBioClientIdLabel: r.fields["Lnk.Bio Client ID Label"] || null,
     lnkBioClientSecretLabel: r.fields["Lnk.Bio Client Secret Label"] || null,
+    subscribeUrl: r.fields["Subscribe URL"] || "",
     status: r.fields.Status || "Active",
   };
 }
@@ -156,6 +158,7 @@ export async function PATCH(request: NextRequest) {
       logoTransparentDark: "Logo Transparent Dark",
       logoRectangularLight: "Logo Rectangular Light",
       logoRectangularDark: "Logo Rectangular Dark",
+      subscribeUrl: "Subscribe URL",
       status: "Status",
     };
 

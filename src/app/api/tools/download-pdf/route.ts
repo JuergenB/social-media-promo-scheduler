@@ -13,10 +13,10 @@ const PORT = 3025;
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   // slides comes as a comma-separated list, e.g. "A,2a,C"
-  const slides = (url.searchParams.get("slides") ?? "A,2a,C")
+  const slides = (url.searchParams.get("slides") ?? "A,i0")
     .split(",")
     .map((s) => s.trim())
-    .filter((s) => ["A", "2a", "2b", "C"].includes(s));
+    .filter((s) => s === "A" || s === "C" || /^i\d+$/.test(s));
   if (slides.length === 0) {
     return NextResponse.json({ error: "no slides" }, { status: 400 });
   }
