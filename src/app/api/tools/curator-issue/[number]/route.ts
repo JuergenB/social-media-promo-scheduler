@@ -1,13 +1,54 @@
 import { NextResponse } from "next/server";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { put, head } from "@vercel/blob";
 
 // Dev-only: fetch a single Intersect newsletter issue + its linked Newsletter
 // Entries from the-intersect-curator's Airtable base. Cross-references each
 // entry's Source URL against the Discovered Articles table to recover the
 // scraped Image URL. Intersect-specific by design.
 
-export const maxDuration = 30;
+export const maxDuration = 60;
+
+// Mirror an Airtable signed URL to a deterministic Vercel Blob key so the
+// cover generator and downstream PNG/PDF rendering have a permanent URL —
+// Airtable signed URLs expire after ~2 hours and would render as black
+// boxes in any saved screenshot. Idempotent: the same issue+filename
+// always lands at the same Blob key, so a re-fetch reuses the existing
+// upload.
+async function mirrorToBlob(
+  airtableUrl: string,
+  issueNumber: number,
+): Promise<string> {
+  // Derive extension from the URL path or Content-Type later.
+  // Airtable signed URLs have noisy paths so we always upload as .jpg
+  // (lead images are jpg in the source base).
+  const blobKey = `cover-generator/issue-${issueNumber}-lead.jpg`;
+
+  // Reuse if already mirrored for this issue.
+  try {
+    const meta = await head(blobKey);
+    if (meta?.url) return meta.url;
+  } catch {
+    // head() throws on missing — fall through to upload.
+  }
+
+  const resp = await fetch(airtableUrl);
+  if (!resp.ok) {
+    throw new Error(
+      `Lead image fetch failed: ${resp.status} ${resp.statusText}`,
+    );
+  }
+  const ct = resp.headers.get("content-type") ?? "image/jpeg";
+  const buf = Buffer.from(await resp.arrayBuffer());
+  const blob = await put(blobKey, buf, {
+    access: "public",
+    contentType: ct.startsWith("image/") ? ct : "image/jpeg",
+    addRandomSuffix: false,
+    allowOverwrite: true,
+  });
+  return blob.url;
+}
 
 function loadCuratorEnv() {
   // Production (Vercel): explicit env vars set via `vercel env add`.
@@ -218,6 +259,25 @@ export async function GET(
         }));
     }
 
+    // Mirror the lead image to Vercel Blob so the URL is permanent.
+    // The Airtable signed URL would otherwise expire (~2 hours) and any
+    // saved/downloaded slide referencing it would render as a black box.
+    const rawLeadUrl = issueFields["Lead Image"]?.[0]?.url ?? null;
+    let leadImageUrl: string | null = null;
+    if (rawLeadUrl) {
+      try {
+        leadImageUrl = await mirrorToBlob(rawLeadUrl, issueNumber);
+      } catch (e) {
+        // Fall back to the Airtable URL — better than nothing, and the
+        // page will at least render until that URL expires.
+        console.warn(
+          `[curator-issue] Lead image mirror failed for issue ${issueNumber}:`,
+          (e as Error).message,
+        );
+        leadImageUrl = rawLeadUrl;
+      }
+    }
+
     return NextResponse.json({
       issue: {
         id: issueRec.id,
@@ -226,7 +286,7 @@ export async function GET(
         publicationDate: issueFields["Publication Date"],
         summary: issueFields["Summary"],
         theme: issueFields["theme"],
-        leadImageUrl: issueFields["Lead Image"]?.[0]?.url ?? null,
+        leadImageUrl,
       },
       entries,
     });

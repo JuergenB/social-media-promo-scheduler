@@ -2281,6 +2281,14 @@ function OverviewCoversDevPage() {
       );
     return (
       <SizeContext.Provider value={currentSize}>
+        {/* In render mode the page is screenshotted by Puppeteer for PNG/PDF
+            export. Hide the Next.js dev indicator (the floating "N" + status
+            icon — both live inside <nextjs-portal>'s shadow DOM) so they
+            don't bleed into the saved artifact. */}
+        <style>{`
+          html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+          nextjs-portal { display: none !important; }
+        `}</style>
         <div
           id="render-root"
           style={{
