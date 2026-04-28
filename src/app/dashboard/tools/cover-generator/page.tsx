@@ -2399,7 +2399,13 @@ function OverviewCoversDevPage() {
           <PdfDownloadButton
             href={(() => {
               const sp = new URLSearchParams();
-              sp.set("slides", "A,2a,C");
+              // IG 4:5 fits all 4 picked stories on Slide 2a, so the 3-slide
+              // carousel closes with a CTA panel. LI 1:1 fits only 2 stories
+              // per slide, so 2b is required to display stories 3–4 — the
+              // CTA panel would otherwise leave half the picked stories off
+              // the deliverable.
+              const slides = format === "li" ? "A,2a,2b" : "A,2a,C";
+              sp.set("slides", slides);
               sp.set("fmt", format);
               sp.set("hero", heroSrc);
               sp.set("n", String(issueData.number));
