@@ -29,12 +29,12 @@ export async function POST(
     const buffer = Buffer.from(bytes);
     const contentType = file.type || "image/jpeg";
 
-    // Delete previous Blob image if one exists
-    const existing = await getRecord<{ "Image URL": string }>("Posts", id);
-    const existingUrl = existing.fields["Image URL"];
-    if (existingUrl && isBlobUrl(existingUrl)) {
-      await deleteImage(existingUrl).catch(() => {});
-    }
+    // NOTE: We deliberately do NOT delete the existing Image URL's Blob here.
+    // The carousel flow (use-post-media → setMediaItems → saveImagesMutation)
+    // appends to the media array; what's currently in `Image URL` is usually
+    // still in use as carousel position 0. Eager-deleting it on every upload
+    // ate other carousel images and 404'd them at publish time. Orphan Blobs
+    // get garbage-collected separately by the cleanupCampaignPosts helper.
 
     // Upload to Vercel Blob
     const imageUrl = await uploadImage("posts", id, buffer, contentType);
