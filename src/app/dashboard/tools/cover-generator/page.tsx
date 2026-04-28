@@ -1138,6 +1138,8 @@ function TemplateA({
   taglineFontSize = 52,
   cta = "READ IN BIO →",
   numeralLeft = false,
+  numeralLight = true,
+  numeralOpacity = 18,
   issueNumber,
   brand,
   tagline,
@@ -1151,6 +1153,8 @@ function TemplateA({
   taglineFontSize?: number;
   cta?: string;
   numeralLeft?: boolean;
+  numeralLight?: boolean; // true = white, false = black
+  numeralOpacity?: number; // percentage 0–100, default 18
   issueNumber: number;
   brand: string;
   tagline: string;
@@ -1164,7 +1168,12 @@ function TemplateA({
   ) > 0.55;
   const textInk = bandIsLight ? PALETTE.ink : "#ffffff";
   const textInkSoft = bandIsLight ? PALETTE.inkSoft : "rgba(255,255,255,0.75)";
+  // Top-of-canvas masthead text uses mixBlendMode: "screen" against the
+  // photo, so it stays white regardless of the numeral toggle below.
   const numeralRgb = "255,255,255";
+  // Big background numeral — user-toggleable light/dark + opacity.
+  const bigNumeralRgb = numeralLight ? "255,255,255" : "0,0,0";
+  const bigNumeralAlpha = Math.max(0, Math.min(100, numeralOpacity)) / 100;
 
   return (
     <div
@@ -1227,7 +1236,7 @@ function TemplateA({
             fontSize: 460,
             lineHeight: 0.85,
             letterSpacing: -18,
-            color: `rgba(${numeralRgb},0.18)`,
+            color: `rgba(${bigNumeralRgb},${bigNumeralAlpha})`,
             pointerEvents: "none",
           }}
         >
@@ -1970,6 +1979,17 @@ function OverviewCoversDevPage() {
     "overview-cover-slide1NumeralLeft",
     qpStr("s1l") === "1",
   );
+  // Slide 1 big numeral: light/dark + opacity. Default light + 18% to match
+  // the prior baked-in `rgba(255,255,255,0.18)`.
+  const [slide1NumeralLight, setSlide1NumeralLight] = useLocalStorage<boolean>(
+    "overview-cover-slide1NumeralLight",
+    qpStr("s1nl") !== null ? qpStr("s1nl") === "1" : true,
+  );
+  const [slide1NumeralOpacity, setSlide1NumeralOpacity] =
+    useLocalStorage<number>(
+      "overview-cover-slide1NumeralOpacity",
+      qpNum("s1no", 18),
+    );
   const [slide2aLogoLeft, setSlide2aLogoLeft] = useLocalStorage<boolean>(
     "overview-cover-slide2aLogoLeft",
     qpStr("s2al") !== null ? qpStr("s2al") === "1" : true,
@@ -2051,6 +2071,8 @@ function OverviewCoversDevPage() {
       sp.set("bl", String(bandLightnessA));
       sp.set("bb", String(bandBlurA));
       if (slide1NumeralLeft) sp.set("s1l", "1");
+      sp.set("s1nl", slide1NumeralLight ? "1" : "0");
+      sp.set("s1no", String(slide1NumeralOpacity));
     }
     if (slide === "C") {
       sp.set("cx", String(posC.x));
@@ -2208,6 +2230,8 @@ function OverviewCoversDevPage() {
           taglineFontSize={taglineFsA}
           cta={slide1Cta}
           numeralLeft={slide1NumeralLeft}
+          numeralLight={slide1NumeralLight}
+          numeralOpacity={slide1NumeralOpacity}
           issueNumber={issueData.number}
           brand={issueData.brand}
           tagline={issueData.tagline}
@@ -2399,6 +2423,8 @@ function OverviewCoversDevPage() {
               sp.set("tafs", String(taglineFsA));
               sp.set("tcfs", String(taglineFsC));
               if (slide1NumeralLeft) sp.set("s1l", "1");
+              sp.set("s1nl", slide1NumeralLight ? "1" : "0");
+              sp.set("s1no", String(slide1NumeralOpacity));
               sp.set("s2al", slide2aLogoLeft ? "1" : "0");
               sp.set("s2bl", slide2bLogoLeft ? "1" : "0");
               return `/api/tools/download-pdf?${sp.toString()}`;
@@ -2495,6 +2521,8 @@ function OverviewCoversDevPage() {
               taglineFontSize={taglineFsA}
               cta={slide1Cta}
               numeralLeft={slide1NumeralLeft}
+              numeralLight={slide1NumeralLight}
+              numeralOpacity={slide1NumeralOpacity}
               issueNumber={issueData.number}
               brand={issueData.brand}
               tagline={issueData.tagline}
@@ -2502,17 +2530,60 @@ function OverviewCoversDevPage() {
             />
           </CanvasFrame>
           <DownloadButton href={buildDownloadHref("A")} filename={`intersect-issue-${issueData.number}-cover.png`} />
-          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground" style={{ width: DISPLAY_W }}>
+          <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground flex-wrap" style={{ width: DISPLAY_W }}>
             <button
               type="button"
               onClick={() => setSlide1NumeralLeft(!slide1NumeralLeft)}
               className="px-2 py-1 border border-border rounded hover:bg-muted"
-              title="Swap which side the 75 numeral sits on (masthead text follows)"
+              title="Swap which side the issue numeral sits on (masthead text follows)"
             >
-              {slide1NumeralLeft ? "↔ Move 75 to right" : "↔ Move 75 to left"}
+              {slide1NumeralLeft ? "↔ Move to right" : "↔ Move to left"}
             </button>
-            <span className="opacity-60">
-              currently {slide1NumeralLeft ? "left" : "right"}
+            <button
+              type="button"
+              onClick={() => setSlide1NumeralLight(!slide1NumeralLight)}
+              className="px-2 py-1 border border-border rounded hover:bg-muted"
+              title="Toggle numeral color: light (white) over dark photos, dark (black) over light photos"
+            >
+              {slide1NumeralLight ? "◐ Dark" : "◑ Light"}
+            </button>
+            <span className="inline-flex items-center gap-1">
+              <span className="opacity-70">Opacity</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setSlide1NumeralOpacity(
+                    Math.max(0, slide1NumeralOpacity - 5),
+                  )
+                }
+                className="px-1.5 py-0.5 border border-border rounded hover:bg-muted"
+                title="Decrease numeral opacity by 5%"
+              >
+                −
+              </button>
+              <span className="w-9 text-center tabular-nums">
+                {slide1NumeralOpacity}%
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setSlide1NumeralOpacity(
+                    Math.min(100, slide1NumeralOpacity + 5),
+                  )
+                }
+                className="px-1.5 py-0.5 border border-border rounded hover:bg-muted"
+                title="Increase numeral opacity by 5%"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={() => setSlide1NumeralOpacity(18)}
+                className="text-[10px] underline opacity-60 hover:opacity-100 ml-1"
+                title="Reset opacity to 18%"
+              >
+                reset
+              </button>
             </span>
           </div>
           <NumberStepper label="Tagline" value={taglineFsA} onChange={setTaglineFsA} step={5} min={20} />
