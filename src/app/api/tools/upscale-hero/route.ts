@@ -1,22 +1,20 @@
-import { NextResponse } from "next/server";
-import { put, head } from "@vercel/blob";
+import { NextRequest, NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-// Dev-only endpoint to demo the upscale flow on the overview-covers mockup
-// page. Reads the local hero image, ensures it's in Blob (Replicate needs a
-// public URL), kicks off Real-ESRGAN, polls until done, returns the upscaled
-// output URL.
+// Upscale the cover-generator's current hero image via Replicate's Real-ESRGAN.
+// The page POSTs `{ sourceUrl }` — whatever heroSrc is currently rendering.
+// Two source shapes are supported:
+//   - http(s):// URL (typical: Curator Airtable lead image) → passed straight
+//     to Replicate; no Blob round-trip.
+//   - /public-relative path (initial fallback before any Curator fetch) →
+//     read from disk, uploaded to Blob with a basename-derived key, then the
+//     Blob URL is passed to Replicate.
 
 export const maxDuration = 120;
 
-const SOURCE_PATH = path.join(
-  process.cwd(),
-  "public/dev-assets/intersect-74-lead.jpg",
-);
-const BLOB_KEY = "dev-assets/intersect-74-lead-source.jpg";
-
-export async function POST() {
+export async function POST(req: NextRequest) {
   const token = process.env.REPLICATE_API_TOKEN;
   if (!token) {
     return NextResponse.json(
@@ -25,26 +23,48 @@ export async function POST() {
     );
   }
 
-  // Step 1 — make sure the source image lives at a public URL Replicate can fetch
+  const body = (await req.json().catch(() => ({}))) as {
+    sourceUrl?: unknown;
+  };
+  const rawUrl = typeof body.sourceUrl === "string" ? body.sourceUrl : "";
+  if (!rawUrl) {
+    return NextResponse.json(
+      { error: "sourceUrl is required (POST { sourceUrl: string })" },
+      { status: 400 },
+    );
+  }
+
+  // Step 1 — resolve the source to a public URL Replicate can fetch.
   let sourceUrl: string;
-  try {
-    const meta = await head(BLOB_KEY).catch(() => null);
-    if (meta?.url) {
-      sourceUrl = meta.url;
-    } else {
-      const file = await readFile(SOURCE_PATH);
-      const blob = await put(BLOB_KEY, file, {
+  if (/^https?:\/\//i.test(rawUrl)) {
+    sourceUrl = rawUrl;
+  } else if (rawUrl.startsWith("/")) {
+    try {
+      const filePath = path.join(process.cwd(), "public", rawUrl);
+      const file = await readFile(filePath);
+      const basename = path.basename(rawUrl);
+      const ext = path.extname(basename).toLowerCase();
+      const contentType = ext === ".png" ? "image/png" : "image/jpeg";
+      const blob = await put(`dev-assets/upscale-source-${basename}`, file, {
         access: "public",
-        contentType: "image/jpeg",
+        contentType,
         addRandomSuffix: false,
         allowOverwrite: true,
       });
       sourceUrl = blob.url;
+    } catch (e) {
+      return NextResponse.json(
+        { error: `Source upload failed: ${(e as Error).message}` },
+        { status: 500 },
+      );
     }
-  } catch (e) {
+  } else {
     return NextResponse.json(
-      { error: `Source upload failed: ${(e as Error).message}` },
-      { status: 500 },
+      {
+        error:
+          "sourceUrl must be an http(s) URL or a /public-relative path",
+      },
+      { status: 400 },
     );
   }
 

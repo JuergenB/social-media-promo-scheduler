@@ -2087,7 +2087,11 @@ function OverviewCoversDevPage() {
         "Running Real-ESRGAN ×2 on Replicate (typically 10–30s, sometimes longer)…",
     });
     try {
-      const resp = await fetch("/api/tools/upscale-hero", { method: "POST" });
+      const resp = await fetch("/api/tools/upscale-hero", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: heroSrc }),
+      });
       const data = (await resp.json()) as { url?: string; error?: string };
       if (!resp.ok || !data.url) {
         setUpscale({
