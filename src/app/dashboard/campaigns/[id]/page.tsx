@@ -123,6 +123,7 @@ import {
   Send,
   CalendarX2,
   GripVertical,
+  Pencil,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -2662,25 +2663,112 @@ function CampaignSettingsEditable({
 /** Read-only settings for campaigns with generated posts */
 function CampaignSettingsReadOnly({ campaign }: { campaign: Campaign }) {
   const TypeIcon = CAMPAIGN_TYPE_ICONS[campaign.type] || Sparkles;
+  const queryClient = useQueryClient();
+  const [editingUrl, setEditingUrl] = useState(false);
+  const [pendingUrl, setPendingUrl] = useState(campaign.url);
+
+  // Re-sync if the underlying campaign URL changes from elsewhere
+  useEffect(() => {
+    setPendingUrl(campaign.url);
+  }, [campaign.url]);
+
+  const urlMutation = useMutation({
+    mutationFn: async (newUrl: string) => {
+      const res = await fetch(`/api/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: newUrl }),
+      });
+      if (!res.ok) throw new Error("Failed to update Source URL");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaign.id] });
+      toast.success("Source URL updated. Future generations will use the new URL.");
+      setEditingUrl(false);
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
+  });
 
   return (
     <Card>
       <CardContent className="space-y-6 pt-6">
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-3 text-sm text-amber-800 dark:text-amber-200">
-          Settings are locked because posts have been scheduled. To change settings, unschedule posts first or reset the campaign.
+          Settings are locked because posts have been scheduled. To change settings, unschedule posts first or reset the campaign. The Source URL can still be updated below — handy for swapping a Curated.co preview link for the public URL after the issue publishes.
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <SettingsField label="Source URL">
-            <a
-              href={campaign.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline inline-flex items-center gap-1 break-all"
-            >
-              {campaign.url}
-              <ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
+            {editingUrl ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="url"
+                  value={pendingUrl}
+                  onChange={(e) => setPendingUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && pendingUrl && pendingUrl !== campaign.url) {
+                      urlMutation.mutate(pendingUrl);
+                    } else if (e.key === "Escape") {
+                      setPendingUrl(campaign.url);
+                      setEditingUrl(false);
+                    }
+                  }}
+                  className="flex-1 min-w-0 px-2 py-1 text-sm border border-input rounded bg-background"
+                  autoFocus
+                />
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => urlMutation.mutate(pendingUrl)}
+                  disabled={
+                    urlMutation.isPending ||
+                    !pendingUrl ||
+                    pendingUrl === campaign.url
+                  }
+                  className="h-7 px-2"
+                >
+                  {urlMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Save className="h-3 w-3" />
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setPendingUrl(campaign.url);
+                    setEditingUrl(false);
+                  }}
+                  disabled={urlMutation.isPending}
+                  className="h-7 px-2"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between gap-2">
+                <a
+                  href={campaign.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-primary hover:underline break-all min-w-0 flex-1"
+                >
+                  {campaign.url}
+                  <ExternalLink className="inline-block h-3 w-3 ml-1 align-baseline" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setEditingUrl(true)}
+                  className="inline-flex items-center justify-center h-6 w-6 shrink-0 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                  title="Edit Source URL (e.g. swap preview for public URL)"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              </div>
+            )}
           </SettingsField>
           <SettingsField label="Campaign Type">
             <span className="flex items-center gap-1.5 text-sm">
