@@ -177,7 +177,9 @@ export async function GET(
         const urlToImage = new Map<string, string>();
         for (const a of articlesData.records) {
           const u = a.fields["URL"] as string | undefined;
-          const img = a.fields["Image URL"] as string | undefined;
+          const img =
+            (a.fields["Image URL"] as string | undefined) ||
+            (a.fields["Blob Image URL"] as string | undefined);
           if (u && img) urlToImage.set(u, img);
         }
         for (const e of entries) {
@@ -209,7 +211,10 @@ export async function GET(
           title: (r.fields["Title"] as string) ?? "",
           sourceUrl: (r.fields["URL"] as string) ?? "",
           contentSummary: r.fields["Summary"] as string | undefined,
-          imageUrl: (r.fields["Image URL"] as string) ?? null,
+          imageUrl:
+            (r.fields["Image URL"] as string) ||
+            (r.fields["Blob Image URL"] as string) ||
+            null,
         }));
     }
 
