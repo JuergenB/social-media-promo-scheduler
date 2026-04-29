@@ -36,6 +36,9 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Playwright auth state (one-time interactive login → reusable session cookie)
+.auth/
+
 # vercel
 .vercel
 

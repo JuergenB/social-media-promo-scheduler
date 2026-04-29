@@ -28,30 +28,19 @@ When delegating research to an Agent subagent, explicitly instruct it to use Per
 
 When the user gives multiple instructions in one message, implement ALL of them before responding. Do not silently drop instructions.
 
-## Rule 6: Visual testing with Puppeteer is mandatory when requested
+## Rule 6: Visual testing — sparing, honest, Playwright-preferred
 
-When the user says "testing suite", "test visually", "take a screenshot", "use Puppeteer", or any variation — this is a **BLOCKING requirement**. Do not proceed without it.
+See the global rule "Visual Verification — Use Sparingly, Honestly" in `~/.claude/CLAUDE.md` for the full policy. The summary in this project:
 
-**What this means:**
-- After UI changes: load the page in Puppeteer, screenshot the relevant area, READ the screenshot, evaluate it
-- After generating images: open each image via Puppeteer, screenshot it, READ the screenshot, critique it
-- If issues found: fix and re-test. Do NOT present to the user until it passes visual review
-- TypeScript compilation passing does NOT count as visual testing
-- Reading a file inline does NOT count as visual testing
-- "Looks good based on the code" is NOT acceptable — visual output must be visually verified
+- **Screenshots only for first-render / multi-step flow / regression detection** — not iterative design refinement, not pixel-precision work, not "does this look good" judgments.
+- **When taking one, report two parts:** what the screenshot verifies vs. what still needs the user's eyes.
+- **Bail out at 2 attempts** on a visual issue. Ask for explicit values; don't try a third time.
+- **Default to design system** (shadcn defaults, Tailwind scale). Custom values require user-provided justification.
 
-**How to use Puppeteer** (already installed as `puppeteer@24.40.0`):
-```javascript
-const puppeteer = require('puppeteer');
-const browser = await puppeteer.launch();
-const page = await browser.newPage();
-await page.goto('http://localhost:3025/dashboard/...');
-await page.screenshot({ path: '/tmp/screenshot.png', fullPage: true });
-await browser.close();
-```
-Then READ the screenshot file to evaluate it visually.
-
-**This rule exists because:** Visual testing was repeatedly skipped despite explicit user requests, causing the user to find bugs manually (calendar overflow, image off-by-one, template text overlap). This is not acceptable.
+**Tooling:**
+- New scripts: **Playwright with `storageState`**. Use `scripts/lib/playwright-auth.mjs` (one-time interactive login → reusable `.auth/state.json`, gitignored). No more credential parsing in scripts.
+- Existing Puppeteer helpers (`scripts/lib/puppeteer-auth.mjs` and the ~17 scripts that use it) stay as-is — they're clean (POST flow, no hardcoded creds). Don't migrate working code.
+- Both `puppeteer@24.40.0` and `playwright` are installed.
 
 ## Allowed Bash Commands
 

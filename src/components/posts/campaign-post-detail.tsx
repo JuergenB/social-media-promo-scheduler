@@ -17,6 +17,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -1095,6 +1102,23 @@ function combineLocal(date: Date | undefined, time: string): string {
   return `${formatLocalDate(date)}T${time}`;
 }
 
+// Convert 24h "HH:MM" → 12h parts. Empty/invalid input returns null.
+function parse12h(time: string): { hour12: number; minute: number; meridiem: "AM" | "PM" } | null {
+  if (!time) return null;
+  const [h, m] = time.split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const meridiem: "AM" | "PM" = h >= 12 ? "PM" : "AM";
+  const hour12 = h % 12 === 0 ? 12 : h % 12;
+  return { hour12, minute: m, meridiem };
+}
+
+// Convert 12h parts → 24h "HH:MM"
+function to24h(hour12: number, minute: number, meridiem: "AM" | "PM"): string {
+  let h = hour12 % 12;
+  if (meridiem === "PM") h += 12;
+  return `${pad2(h)}:${pad2(minute)}`;
+}
+
 function parseInitialValue(value: string): { date: Date | undefined; time: string } {
   if (!value) return { date: undefined, time: "" };
   // Handle ISO format from Airtable (e.g. "2026-04-30T19:42:00.000Z") by
@@ -1125,27 +1149,24 @@ function SchedulePopover({
   const [date, setDate] = useState<Date | undefined>(initial.date);
   const [time, setTime] = useState<string>(initial.time);
 
+  // Derive 12h parts (hour, minute, AM/PM) from the canonical 24h "HH:MM" state.
+  const timeParts = React.useMemo(() => parse12h(time), [time]);
+
+  // Update one or more 12h parts and write back to canonical 24h state.
+  const updateTime = (patch: { hour12?: number; minute?: number; meridiem?: "AM" | "PM" }) => {
+    const base = timeParts ?? { hour12: 9, minute: 0, meridiem: "AM" as const };
+    const next = {
+      hour12: patch.hour12 ?? base.hour12,
+      minute: patch.minute ?? base.minute,
+      meridiem: patch.meridiem ?? base.meridiem,
+    };
+    setTime(to24h(next.hour12, next.minute, next.meridiem));
+  };
+
   const combined = combineLocal(date, time);
   const triggerLabel = combined
     ? format(new Date(combined), "MMM d, yyyy 'at' h:mm a")
     : "Pick date & time";
-
-  const setQuickPick = (offsetDays: number, hour: number, minute = 0) => {
-    const d = new Date();
-    d.setDate(d.getDate() + offsetDays);
-    d.setHours(hour, minute, 0, 0);
-    setDate(d);
-    setTime(`${pad2(hour)}:${pad2(minute)}`);
-  };
-
-  const setNextMonday = (hour: number, minute = 0) => {
-    const d = new Date();
-    const daysUntilMonday = (8 - d.getDay()) % 7 || 7;
-    d.setDate(d.getDate() + daysUntilMonday);
-    d.setHours(hour, minute, 0, 0);
-    setDate(d);
-    setTime(`${pad2(hour)}:${pad2(minute)}`);
-  };
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -1175,87 +1196,102 @@ function SchedulePopover({
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-auto p-0">
-        <div className="space-y-3 p-3">
-          {/* Quick picks */}
-          <div className="flex flex-wrap gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setQuickPick(1, 9)}
-            >
-              Tomorrow 9 AM
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setQuickPick(1, 18)}
-            >
-              Tomorrow 6 PM
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setNextMonday(10)}
-            >
-              Next Monday 10 AM
-            </Button>
-          </div>
-
-          <div className="border-t" />
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+        <div className="space-y-2 p-2">
+          {/* Date */}
+          <div className="flex justify-center">
             <Calendar
               mode="single"
               selected={date}
               onSelect={setDate}
+              defaultMonth={date ?? todayStart}
               disabled={(d) => d < todayStart}
+              modifiersClassNames={{ today: "text-muted-foreground/70 font-normal" }}
               initialFocus
             />
-            <div className="space-y-2 sm:w-40">
-              <Label className="text-xs">Time</Label>
-              <Input
-                type="time"
-                value={time}
-                onChange={(e) => setTime(e.target.value)}
-                className="h-9"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Local time
-              </p>
+          </div>
+
+          {/* Time — 12-hour Select pickers */}
+          <div className="border-t pt-2">
+            <div className="flex items-center gap-1.5">
+              <Select
+                value={timeParts ? String(timeParts.hour12) : undefined}
+                onValueChange={(v) => updateTime({ hour12: Number(v) })}
+              >
+                <SelectTrigger size="sm" className="h-9 w-[70px]">
+                  <SelectValue placeholder="--" />
+                </SelectTrigger>
+                <SelectContent position="popper" side="top" className="max-h-[220px]">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                    <SelectItem key={h} value={String(h)}>
+                      {h}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span className="text-sm font-medium text-muted-foreground">:</span>
+              <Select
+                value={timeParts ? pad2(timeParts.minute) : undefined}
+                onValueChange={(v) => updateTime({ minute: Number(v) })}
+              >
+                <SelectTrigger size="sm" className="h-9 w-[70px]">
+                  <SelectValue placeholder="--" />
+                </SelectTrigger>
+                <SelectContent position="popper" side="top" className="max-h-[220px]">
+                  {Array.from({ length: 60 }, (_, i) => i).map((m) => (
+                    <SelectItem key={m} value={pad2(m)}>
+                      {pad2(m)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={timeParts?.meridiem ?? undefined}
+                onValueChange={(v) => updateTime({ meridiem: v as "AM" | "PM" })}
+              >
+                <SelectTrigger size="sm" className="h-9 w-[70px]">
+                  <SelectValue placeholder="--" />
+                </SelectTrigger>
+                <SelectContent position="popper" side="top">
+                  <SelectItem value="AM">AM</SelectItem>
+                  <SelectItem value="PM">PM</SelectItem>
+                </SelectContent>
+              </Select>
+              <span className="ml-auto text-[10px] text-muted-foreground">ET</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-3 py-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleCancel}
-            disabled={isPending}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            onClick={handleSchedule}
-            disabled={isPending || !combined}
-          >
-            {isPending ? (
-              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="mr-1 h-3.5 w-3.5" />
-            )}
-            {isPending ? "Scheduling..." : "Schedule"}
-          </Button>
+        <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2">
+          <span className="text-[11px] text-muted-foreground">
+            {combined
+              ? format(new Date(combined), "EEE, MMM d · h:mm a")
+              : "Select date & time"}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleCancel}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handleSchedule}
+              disabled={isPending || !combined}
+            >
+              {isPending ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="mr-1 h-3.5 w-3.5" />
+              )}
+              {isPending ? "Scheduling..." : "Schedule"}
+            </Button>
+          </div>
         </div>
       </PopoverContent>
     </Popover>
