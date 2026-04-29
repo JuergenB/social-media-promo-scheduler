@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { useBrand } from "@/lib/brand-context";
+import { pickBrandLogo } from "@/lib/brand-logo";
 import { cn } from "@/lib/utils";
 import {
   CAMPAIGN_TYPES,
@@ -330,17 +331,20 @@ export default function NewCampaignPage() {
             <div className="bg-zinc-900 px-5 py-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {currentBrand.logoUrl ? (
-                    <img
-                      src={currentBrand.logoUrl}
-                      alt={`${currentBrand.name} logo`}
-                      className="h-9 w-auto max-w-[120px] object-contain rounded"
-                    />
-                  ) : (
-                    <div className="h-9 w-9 rounded-lg bg-zinc-700 flex items-center justify-center text-zinc-300 text-base font-bold">
-                      {currentBrand.name.charAt(0)}
-                    </div>
-                  )}
+                  {(() => {
+                    const url = pickBrandLogo(currentBrand, { surface: "dark" });
+                    return url ? (
+                      <img
+                        src={url}
+                        alt={`${currentBrand.name} logo`}
+                        className="h-9 w-auto max-w-[120px] object-contain rounded"
+                      />
+                    ) : (
+                      <div className="h-9 w-9 rounded-lg bg-zinc-700 flex items-center justify-center text-zinc-300 text-base font-bold">
+                        {currentBrand.name.charAt(0)}
+                      </div>
+                    );
+                  })()}
                   <div>
                     <h3 className="text-base font-semibold text-white">
                       {currentBrand.name}
@@ -406,17 +410,20 @@ export default function NewCampaignPage() {
                       }}
                       className="flex items-center gap-3 w-full px-6 py-3 text-left hover:bg-muted/50 transition-colors"
                     >
-                      {brand.logoUrl ? (
-                        <img
-                          src={brand.logoUrl}
-                          alt=""
-                          className="h-7 w-7 rounded object-contain"
-                        />
-                      ) : (
-                        <span className="h-7 w-7 rounded bg-muted flex items-center justify-center text-xs font-bold">
-                          {brand.name.charAt(0)}
-                        </span>
-                      )}
+                      {(() => {
+                        const url = pickBrandLogo(brand, { surface: "light" });
+                        return url ? (
+                          <img
+                            src={url}
+                            alt=""
+                            className="h-7 w-7 rounded object-contain"
+                          />
+                        ) : (
+                          <span className="h-7 w-7 rounded bg-muted flex items-center justify-center text-xs font-bold">
+                            {brand.name.charAt(0)}
+                          </span>
+                        );
+                      })()}
                       <div>
                         <p className="text-sm font-medium">{brand.name}</p>
                         {brand.websiteUrl && (

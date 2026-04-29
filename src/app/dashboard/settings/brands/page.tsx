@@ -20,6 +20,7 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { pickBrandLogo } from "@/lib/brand-logo";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -697,17 +698,20 @@ function BrandSettings({ brand }: { brand: Brand }) {
           <CardContent className="p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4 min-w-0">
-                {brand.logoUrl ? (
-                  <img
-                    src={brand.logoUrl}
-                    alt={`${brand.name} logo`}
-                    className="h-12 w-auto max-w-[160px] object-contain rounded shrink-0"
-                  />
-                ) : (
-                  <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-lg font-bold shrink-0">
-                    {brand.name.charAt(0)}
-                  </div>
-                )}
+                {(() => {
+                  const url = pickBrandLogo(brand, { surface: "light" });
+                  return url ? (
+                    <img
+                      src={url}
+                      alt={`${brand.name} logo`}
+                      className="h-12 w-auto max-w-[160px] object-contain rounded shrink-0"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center text-muted-foreground text-lg font-bold shrink-0">
+                      {brand.name.charAt(0)}
+                    </div>
+                  );
+                })()}
                 <div className="min-w-0">
                   {editingDetails ? (
                     <Input

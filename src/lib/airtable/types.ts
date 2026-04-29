@@ -29,6 +29,10 @@ export interface Brand {
   logoRectangularLight: string | null;
   /** Vercel Blob URL for wordmark/horizontal logo for use over dark backgrounds. */
   logoRectangularDark: string | null;
+  /** Vercel Blob URL for full-color square logo. Used in the brand switcher and anywhere a recognizable color mark is preferred over the B&W transparents. */
+  logoColorSquare: string | null;
+  /** Vercel Blob URL for full-color rectangular/wordmark logo. */
+  logoColorRect: string | null;
   /** Per-brand tone dimension settings (8 dimensions, 1-10 scale each). */
   toneDimensions?: ToneDimensions;
   /** Short additional tone notes (1-2 sentences). */

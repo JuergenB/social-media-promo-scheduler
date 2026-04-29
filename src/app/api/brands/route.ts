@@ -35,6 +35,8 @@ interface BrandFields {
   "Logo Transparent Dark": string;
   "Logo Rectangular Light": string;
   "Logo Rectangular Dark": string;
+  "Logo Color Square": string;
+  "Logo Color Rectangular": string;
   "Tone Dimensions": string;
   "Tone Notes": string;
   "Default Voice Intensity": number;
@@ -86,6 +88,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     logoTransparentDark: r.fields["Logo Transparent Dark"] || null,
     logoRectangularLight: r.fields["Logo Rectangular Light"] || null,
     logoRectangularDark: r.fields["Logo Rectangular Dark"] || null,
+    logoColorSquare: r.fields["Logo Color Square"] || null,
+    logoColorRect: r.fields["Logo Color Rectangular"] || null,
     toneDimensions: parseToneDimensions(r.fields["Tone Dimensions"]),
     toneNotes: r.fields["Tone Notes"] || undefined,
     defaultVoiceIntensity: r.fields["Default Voice Intensity"] ?? undefined,
@@ -158,6 +162,8 @@ export async function PATCH(request: NextRequest) {
       logoTransparentDark: "Logo Transparent Dark",
       logoRectangularLight: "Logo Rectangular Light",
       logoRectangularDark: "Logo Rectangular Dark",
+      logoColorSquare: "Logo Color Square",
+      logoColorRect: "Logo Color Rectangular",
       subscribeUrl: "Subscribe URL",
       status: "Status",
     };

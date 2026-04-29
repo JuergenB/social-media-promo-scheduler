@@ -6,20 +6,25 @@ import { updateRecord, getRecord } from "@/lib/airtable/client";
 import { isBlobUrl } from "@/lib/blob-storage";
 
 /**
- * Logo upload endpoint — supports four slots per brand:
- *   - light-square / dark-square — square (1:1) logos
- *   - light-rect / dark-rect     — rectangular/wordmark logos
+ * Logo upload endpoint — six slots per brand:
+ *   - color-square / light-square / dark-square — square (1:1) logos
+ *   - color-rect   / light-rect   / dark-rect   — rectangular/wordmark logos
  *
- * "light" / "dark" refers to the BACKGROUND the logo is placed on:
+ * For the transparent variants, "light" / "dark" refers to the BACKGROUND
+ * the logo is intended to sit on:
  *   - light-* = logo for light backgrounds (dark/black logo art)
  *   - dark-*  = logo for dark backgrounds (white/light logo art)
+ *
+ * The color-* variants are full-color marks usable on either surface.
  *
  * Each slot maps to one Airtable URL field.
  */
 
 const SLOT_TO_FIELD = {
+  "color-square": "Logo Color Square",
   "light-square": "Logo Transparent Dark", // logo art is DARK, lives on LIGHT bg
   "dark-square": "Logo Transparent Light", // logo art is LIGHT, lives on DARK bg
+  "color-rect": "Logo Color Rectangular",
   "light-rect": "Logo Rectangular Light", // wordmark for use OVER light bg
   "dark-rect": "Logo Rectangular Dark", // wordmark for use OVER dark bg
 } as const;
@@ -98,6 +103,8 @@ interface BrandLogoFields {
   "Logo Transparent Dark"?: string;
   "Logo Rectangular Light"?: string;
   "Logo Rectangular Dark"?: string;
+  "Logo Color Square"?: string;
+  "Logo Color Rectangular"?: string;
 }
 
 export async function POST(
@@ -110,7 +117,10 @@ export async function POST(
 
     if (!slot || !(slot in SLOT_TO_FIELD)) {
       return NextResponse.json(
-        { error: "Invalid slot. Expected: light-square | dark-square | light-rect | dark-rect" },
+        {
+          error:
+            "Invalid slot. Expected one of: color-square | light-square | dark-square | color-rect | light-rect | dark-rect",
+        },
         { status: 400 }
       );
     }
