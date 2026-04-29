@@ -1097,11 +1097,21 @@ function combineLocal(date: Date | undefined, time: string): string {
 
 function parseInitialValue(value: string): { date: Date | undefined; time: string } {
   if (!value) return { date: undefined, time: "" };
+  // Handle ISO format from Airtable (e.g. "2026-04-30T19:42:00.000Z") by
+  // converting to the browser's local time. Time input expects HH:MM only —
+  // strip seconds/milliseconds if present.
+  const isIso = value.endsWith("Z") || /T\d{2}:\d{2}:\d{2}/.test(value);
+  if (isIso) {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return { date: undefined, time: "" };
+    return { date: d, time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}` };
+  }
+  // Already datetime-local style ("YYYY-MM-DDTHH:MM")
   const [datePart, timePart] = value.split("T");
   if (!datePart) return { date: undefined, time: "" };
   const [y, m, d] = datePart.split("-").map(Number);
   const date = new Date(y, (m || 1) - 1, d || 1);
-  return { date, time: timePart || "" };
+  return { date, time: (timePart || "").slice(0, 5) };
 }
 
 function SchedulePopover({
