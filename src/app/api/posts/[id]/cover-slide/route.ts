@@ -229,127 +229,8 @@ export async function POST(
       "Cover Slide Data": JSON.stringify(coverSlideData),
     });
 
-    // Sync the new media to Zernio if this post is already scheduled. Fire-and-forget
-    // so we don't block the response; a failed sync is logged but doesn't break the
-    // Airtable write. Mirror of the pattern in PATCH /api/posts/[id].
-    (async () => {
-      try {
-        const fresh = await getRecord<{
-          "Zernio Post ID": string;
-          "Scheduled Date": string;
-          Content: string;
-          "Image URL": string;
-          "Media URLs": string;
-          "Media Captions": string;
-          Platform: string;
-          Campaign: string[];
-        }>("Posts", id);
-        const zernioPostId = fresh.fields["Zernio Post ID"];
-        if (!zernioPostId) return;
-        const campaignId = fresh.fields.Campaign?.[0];
-        if (!campaignId) return;
-        const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
-        const brandId = campaign.fields.Brand?.[0];
-        if (!brandId) return;
-        const brand = await getRecord<{ "Zernio API Key Label": string }>("Brands", brandId);
-        const client = createBrandClient({
-          zernioApiKeyLabel: brand.fields["Zernio API Key Label"] || null,
-        });
-        const freshItems = parseMediaItems(fresh.fields);
-        const updateBody: Record<string, unknown> = {
-          mediaItems: freshItems.map((m) => ({ type: "image" as const, url: m.url })),
-        };
-        // scheduledFor is required — omitting it reverts Zernio to draft.
-        if (fresh.fields["Scheduled Date"]) {
-          updateBody.scheduledFor = fresh.fields["Scheduled Date"];
-        }
-        if (fresh.fields.Content) updateBody.content = fresh.fields.Content;
-        const { error } = await client.posts.updatePost({
-          path: { postId: zernioPostId },
-          body: updateBody,
-        });
-        if (error) {
-          console.warn(`[cover-slide] Zernio sync failed for ${zernioPostId}:`, error);
-        } else {
-          console.log(`[cover-slide] Synced cover to Zernio post ${zernioPostId}`);
-        }
-      } catch (err) {
-        console.warn("[cover-slide] Zernio sync error:", err);
-      }
-    })();
-
-    // lnk.bio delete-then-recreate when a scheduled Instagram post's image changed.
-    // Mirrors the PATCH route's lnkBioShouldRecreate path (image edit scenario).
-    (async () => {
-      try {
-        const fresh = await getRecord<{
-          "Lnk.Bio Entry ID": string;
-          "Short URL": string;
-          "Image URL": string;
-          "Scheduled Date": string;
-          Content: string;
-          Platform: string;
-          Campaign: string[];
-        }>("Posts", id);
-        const entryId = fresh.fields["Lnk.Bio Entry ID"];
-        if (!entryId) return;
-        const campaignId = fresh.fields.Campaign?.[0];
-        if (!campaignId) return;
-        const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
-        const brandId = campaign.fields.Brand?.[0];
-        if (!brandId) return;
-        const brand = await getRecord<{
-          "Lnk.Bio Enabled": boolean;
-          "Lnk.Bio Group ID": string;
-          "Lnk.Bio Client ID Label": string;
-          "Lnk.Bio Client Secret Label": string;
-          Timezone: string;
-        }>("Brands", brandId);
-
-        const { deleteLnkBioEntry, createLnkBioEntry, resolveCredentials, resolveConfig } =
-          await import("@/lib/lnk-bio");
-
-        const creds = resolveCredentials({
-          lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
-          lnkBioClientIdLabel: brand.fields["Lnk.Bio Client ID Label"] || null,
-          lnkBioClientSecretLabel: brand.fields["Lnk.Bio Client Secret Label"] || null,
-        });
-        if (!creds) return;
-        await deleteLnkBioEntry(creds, entryId);
-
-        const isInstagram = fresh.fields.Platform === "Instagram";
-        if (!isInstagram) {
-          await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
-          return;
-        }
-        const cfg = resolveConfig({
-          lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
-          lnkBioGroupId: brand.fields["Lnk.Bio Group ID"] || null,
-          lnkBioClientIdLabel: brand.fields["Lnk.Bio Client ID Label"] || null,
-          lnkBioClientSecretLabel: brand.fields["Lnk.Bio Client Secret Label"] || null,
-        });
-        const shortUrl = fresh.fields["Short URL"];
-        if (!cfg || !shortUrl) {
-          await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
-          return;
-        }
-        try {
-          const newId = await createLnkBioEntry(cfg, {
-            title: (fresh.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
-            link: shortUrl,
-            image: fresh.fields["Image URL"] || "",
-            scheduledDate: fresh.fields["Scheduled Date"],
-            timezone: brand.fields.Timezone || "America/New_York",
-          });
-          await updateRecord("Posts", id, { "Lnk.Bio Entry ID": newId || "" });
-        } catch (err) {
-          console.warn("[cover-slide] lnk.bio recreate failed:", err);
-          await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
-        }
-      } catch (err) {
-        console.warn("[cover-slide] lnk.bio sync error:", err);
-      }
-    })();
+    const { markEdited } = await import("@/lib/post-apply");
+    markEdited(id).catch(() => {});
 
     return NextResponse.json({
       applied: true,
@@ -412,6 +293,9 @@ export async function DELETE(
       "Media Captions": serialized["Media Captions"],
       "Cover Slide Data": "",
     });
+
+    const { markEdited } = await import("@/lib/post-apply");
+    markEdited(id).catch(() => {});
 
     // Clean up cover slide blob
     if (coverData.appliedUrl && isBlobUrl(coverData.appliedUrl)) {

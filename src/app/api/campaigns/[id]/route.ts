@@ -65,6 +65,7 @@ interface PostFields {
   "Platform Post URL": string;
   Collaborators: string;
   "User Tags": string;
+  "Lnk.Bio Sync Pending"?: boolean;
   "Carousel PDF URL": string;
 }
 
@@ -164,6 +165,7 @@ export async function GET(
       platformPostUrl: r.fields["Platform Post URL"] || "",
       collaborators: r.fields["Collaborators"] || "",
       userTags: r.fields["User Tags"] || "",
+      lnkBioSyncPending: !!r.fields["Lnk.Bio Sync Pending"],
       carouselPdfUrl: r.fields["Carousel PDF URL"] || "",
       createdAt: r.createdTime || "",
     }));

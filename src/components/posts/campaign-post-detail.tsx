@@ -92,6 +92,7 @@ import {
   ArrowLeftRight,
   ChevronDown,
   ChevronUp,
+  RefreshCw,
 } from "lucide-react";
 
 interface CampaignPostDetailProps {
@@ -802,6 +803,22 @@ export function CampaignPostDetail({
                     actions.setScheduleDateTime("");
                   }}
                 />
+              ) : post.lnkBioSyncPending ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => actions.applyMutation.mutate()}
+                    disabled={actions.applyMutation.isPending}
+                    title="Refresh the lnk.bio entry with the latest content, image, and schedule"
+                  >
+                    <RefreshCw className={cn("mr-1.5 h-3.5 w-3.5", actions.applyMutation.isPending && "animate-spin")} />
+                    {actions.applyMutation.isPending ? "Applying..." : "Apply Changes"}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    Reschedule and Unschedule disabled while changes are pending
+                  </span>
+                </div>
               ) : (
                 <div className="flex items-center gap-2">
                   <Button

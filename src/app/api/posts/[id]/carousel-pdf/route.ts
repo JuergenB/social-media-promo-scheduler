@@ -3,7 +3,6 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { del } from "@vercel/blob";
 import { getRecord, updateRecord } from "@/lib/airtable/client";
 import { isBlobUrl } from "@/lib/blob-storage";
-import { syncPostDownstream } from "@/lib/post-downstream-sync";
 
 // Carousel PDF override for LinkedIn document carousel posts.
 //
@@ -125,7 +124,8 @@ export async function DELETE(
     await del(prev).catch(() => {});
   }
   await updateRecord("Posts", id, { "Carousel PDF URL": "" });
-  syncPostDownstream(id).catch(() => {});
+  const { markEdited } = await import("@/lib/post-apply");
+  markEdited(id).catch(() => {});
   return NextResponse.json({ success: true });
 }
 
@@ -137,5 +137,6 @@ async function persistPdfUrl(postId: string, newUrl: string) {
     await del(prev).catch(() => {});
   }
   await updateRecord("Posts", postId, { "Carousel PDF URL": newUrl });
-  syncPostDownstream(postId).catch(() => {});
+  const { markEdited } = await import("@/lib/post-apply");
+  markEdited(postId).catch(() => {});
 }

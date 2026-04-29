@@ -222,6 +222,8 @@ export interface Post {
   collaborators: string;
   /** JSON string array of Instagram usernames tagged on the image (center-positioned). */
   userTags: string;
+  /** True when content/media/schedule has changed on a scheduled Instagram post since the last lnk.bio recreate. Set by edit endpoints, cleared by Apply Changes. Drives the visibility of the Apply button. */
+  lnkBioSyncPending: boolean;
   /** Vercel Blob URL of a user-supplied PDF carousel. LinkedIn-only — when set,
    *  the publish route uses this PDF directly and skips assembling one from the
    *  individual images. Empty string when no PDF is attached. */

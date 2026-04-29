@@ -3,7 +3,6 @@ import { getRecord, updateRecord, deleteRecord } from "@/lib/airtable/client";
 import { deleteShortLinkIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
 import { createBrandClient } from "@/lib/late-api/client";
-import { parseMediaItems } from "@/lib/media-items";
 
 /**
  * PATCH /api/posts/[id]
@@ -173,26 +172,17 @@ export async function PATCH(
       })();
     }
 
-    // Status changes that should tear down a scheduled lnk.bio entry
+    // Status changes that should tear down a scheduled lnk.bio entry.
+    // Edit-driven recreate (reschedule / content / image change) is now
+    // handled by POST /api/posts/[id]/apply — see #205.
     const statusChangedAwayFromScheduled =
       body.status !== undefined && body.status !== "Scheduled" && body.status !== "Published";
 
-    // Reschedule / edit that should delete-then-recreate the lnk.bio entry
-    const lnkBioShouldRecreate =
-      body.scheduledDate !== undefined
-      || body.content !== undefined
-      || body.imageUrl !== undefined;
-
-    if (statusChangedAwayFromScheduled || lnkBioShouldRecreate) {
+    if (statusChangedAwayFromScheduled) {
       (async () => {
         try {
           const post = await getRecord<{
             "Lnk.Bio Entry ID": string;
-            "Short URL": string;
-            "Image URL": string;
-            "Scheduled Date": string;
-            Content: string;
-            Platform: string;
             Campaign: string[];
           }>("Posts", id);
 
@@ -206,14 +196,11 @@ export async function PATCH(
           if (!brandId) return;
           const brand = await getRecord<{
             "Lnk.Bio Enabled": boolean;
-            "Lnk.Bio Group ID": string;
             "Lnk.Bio Client ID Label": string;
             "Lnk.Bio Client Secret Label": string;
-            Timezone: string;
           }>("Brands", brandId);
 
-          const { deleteLnkBioEntry, createLnkBioEntry, resolveCredentials, resolveConfig } =
-            await import("@/lib/lnk-bio");
+          const { deleteLnkBioEntry, resolveCredentials } = await import("@/lib/lnk-bio");
 
           const creds = resolveCredentials({
             lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
@@ -223,177 +210,29 @@ export async function PATCH(
           if (!creds) return;
 
           await deleteLnkBioEntry(creds, entryId);
-
-          const isInstagram = post.fields.Platform === "Instagram";
-          if (statusChangedAwayFromScheduled || !isInstagram) {
-            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
-            return;
-          }
-
-          // Recreate with latest values
-          const cfg = resolveConfig({
-            lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
-            lnkBioGroupId: brand.fields["Lnk.Bio Group ID"] || null,
-            lnkBioClientIdLabel: brand.fields["Lnk.Bio Client ID Label"] || null,
-            lnkBioClientSecretLabel: brand.fields["Lnk.Bio Client Secret Label"] || null,
-          });
-          const shortUrl = post.fields["Short URL"];
-          if (!cfg || !shortUrl) {
-            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
-            return;
-          }
-
-          try {
-            const newId = await createLnkBioEntry(cfg, {
-              title:
-                (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
-              link: shortUrl,
-              image: post.fields["Image URL"] || "",
-              scheduledDate: post.fields["Scheduled Date"],
-              timezone: brand.fields.Timezone || "America/New_York",
-            });
-            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": newId || "" });
-          } catch (err) {
-            console.warn("[posts] lnk.bio recreate failed:", err);
-            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
-          }
+          await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
         } catch (err) {
-          console.warn("[posts] lnk.bio sync error:", err);
+          console.warn("[posts] lnk.bio teardown error:", err);
         }
       })();
     }
 
-    // Sync content/media/firstComment changes to Zernio if the post is already scheduled
-    const contentOrMediaChanged = fields["Content"] !== undefined
+    // Per-edit Zernio sync (idempotent, safe to race) + mark lnk.bio dirty
+    // so the Apply Changes button surfaces. See #205. Note: scheduledDate
+    // is included so reschedule via PATCH propagates to Zernio (was the bug
+    // that prompted this whole refactor).
+    const editAffectsDownstream = fields["Content"] !== undefined
       || fields["Image URL"] !== undefined
       || fields["Media URLs"] !== undefined
       || fields["Media Captions"] !== undefined
       || fields["First Comment"] !== undefined
       || fields["Collaborators"] !== undefined
-      || fields["User Tags"] !== undefined;
+      || fields["User Tags"] !== undefined
+      || fields["Scheduled Date"] !== undefined;
 
-    if (contentOrMediaChanged) {
-      // Fire-and-forget: don't block the response on Zernio sync
-      (async () => {
-        try {
-          const post = await getRecord<{
-            "Zernio Post ID": string;
-            "Scheduled Date": string;
-            Campaign: string[];
-            Content: string;
-            "Image URL": string;
-            "Media URLs": string;
-            "Media Captions": string;
-            "First Comment": string;
-            Platform: string;
-            Collaborators: string;
-            "User Tags": string;
-          }>("Posts", id);
-
-          const zernioPostId = post.fields["Zernio Post ID"];
-          if (!zernioPostId) return; // Not scheduled on Zernio — nothing to sync
-
-          // Resolve brand for API key
-          const campaignId = post.fields.Campaign?.[0];
-          if (!campaignId) return;
-          const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
-          const brandId = campaign.fields.Brand?.[0];
-          if (!brandId) return;
-          const brand = await getRecord<{ "Zernio API Key Label": string }>("Brands", brandId);
-          const client = createBrandClient({
-            zernioApiKeyLabel: brand.fields["Zernio API Key Label"] || null,
-          });
-
-          // Build update body with current content, media, AND scheduledFor
-          // Including scheduledFor is critical — omitting it causes Zernio to
-          // revert the post from "scheduled" to "draft" status.
-          const mediaItems = parseMediaItems(post.fields);
-          const updateBody: Record<string, unknown> = {};
-
-          if (post.fields.Content) {
-            updateBody.content = post.fields.Content;
-          }
-          if (mediaItems.length > 0) {
-            updateBody.mediaItems = mediaItems.map((item) => ({
-              type: "image" as const,
-              url: item.url,
-            }));
-          }
-          if (post.fields["Scheduled Date"]) {
-            updateBody.scheduledFor = post.fields["Scheduled Date"];
-          }
-
-          // Sync firstComment + collaboration fields to Zernio (Instagram-specific).
-          // CRITICAL: Zernio requires platformSpecificData to be nested INSIDE
-          // each platforms[] entry. A root-level platformSpecificData is silently
-          // ignored on update. The platforms[] entry MUST also include
-          // accountId — sending platforms without accountId nullifies the
-          // account link on the post.
-          // For collaborators and userTags we ALWAYS send the array (even if
-          // empty) so clearing them in the UI propagates — omitting the key
-          // leaves Zernio's prior value intact.
-          const platform = (post.fields.Platform || "").toLowerCase();
-          const psd: Record<string, unknown> = {};
-          if (platform === "instagram") {
-            if (post.fields["First Comment"]) {
-              psd.firstComment = post.fields["First Comment"];
-            }
-            try {
-              const collabs: string[] = post.fields.Collaborators
-                ? JSON.parse(post.fields.Collaborators)
-                : [];
-              psd.collaborators = collabs.map((u) => u.replace(/^@/, ""));
-            } catch {
-              psd.collaborators = [];
-            }
-            try {
-              const tags: string[] = post.fields["User Tags"]
-                ? JSON.parse(post.fields["User Tags"])
-                : [];
-              psd.userTags = tags.map((u) => ({ username: u.replace(/^@/, ""), x: 0.5, y: 0.5 }));
-            } catch {
-              psd.userTags = [];
-            }
-          } else if (["facebook", "linkedin"].includes(platform)) {
-            if (post.fields["First Comment"]) {
-              psd.firstComment = post.fields["First Comment"];
-            }
-          }
-          if (Object.keys(psd).length > 0) {
-            // Fetch the live Zernio post to get the current accountId — without
-            // it, the platforms array replacement nullifies the account link.
-            const { data: existing } = await client.posts.getPost({
-              path: { postId: zernioPostId },
-            });
-            const existingPlatform = (existing as { post?: { platforms?: Array<{ platform?: string; accountId?: string | { _id: string } }> } })?.post?.platforms?.find((p) => p.platform === platform);
-            const accountId = typeof existingPlatform?.accountId === "string"
-              ? existingPlatform.accountId
-              : existingPlatform?.accountId?._id;
-            if (accountId) {
-              updateBody.platforms = [{
-                platform,
-                accountId,
-                platformSpecificData: psd,
-              }];
-            } else {
-              console.warn(`[posts] Skipping platformSpecificData sync for ${zernioPostId}: could not resolve accountId from existing post`);
-            }
-          }
-
-          const { error } = await client.posts.updatePost({
-            path: { postId: zernioPostId },
-            body: updateBody,
-          });
-
-          if (error) {
-            console.warn(`[posts] Zernio sync failed for ${zernioPostId}:`, error);
-          } else {
-            console.log(`[posts] Synced changes to Zernio post ${zernioPostId}`);
-          }
-        } catch (err) {
-          console.warn("[posts] Zernio sync error:", err);
-        }
-      })();
+    if (editAffectsDownstream) {
+      const { markEdited } = await import("@/lib/post-apply");
+      markEdited(id).catch(() => {});
     }
 
     return NextResponse.json({ success: true });

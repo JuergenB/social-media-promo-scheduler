@@ -3,7 +3,6 @@ import { getRecord, updateRecord } from "@/lib/airtable/client";
 import { outpaintImage, getTargetDimensions } from "@/lib/replicate-outpaint";
 import { uploadImage } from "@/lib/blob-storage";
 import { parseMediaItems, serializeMediaItems } from "@/lib/media-items";
-import { syncPostDownstream } from "@/lib/post-downstream-sync";
 import sharp from "sharp";
 
 interface PostFields {
@@ -135,7 +134,8 @@ export async function POST(
       "Media Captions": serialized["Media Captions"],
     });
 
-    syncPostDownstream(postId).catch(() => {});
+    const { markEdited } = await import("@/lib/post-apply");
+    markEdited(postId).catch(() => {});
 
     return NextResponse.json({
       success: true,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { updateRecord, getRecord } from "@/lib/airtable/client";
 import { uploadImage, deleteImage, isBlobUrl } from "@/lib/blob-storage";
-import { syncPostDownstream } from "@/lib/post-downstream-sync";
+import { markEdited } from "@/lib/post-apply";
 
 /**
  * POST /api/posts/[id]/image
@@ -39,12 +39,11 @@ export async function POST(
     // Upload to Vercel Blob
     const imageUrl = await uploadImage("posts", id, buffer, contentType);
 
-    // Update Airtable Image URL with the permanent Blob URL
     await updateRecord("Posts", id, { "Image URL": imageUrl });
 
-    // Propagate to Zernio + lnk.bio if the post is scheduled. Fire-and-forget —
-    // don't block the upload response on external APIs.
-    syncPostDownstream(id).catch(() => {});
+    // Per-edit Zernio sync (idempotent, safe to race) + mark lnk.bio dirty
+    // so the user sees the Apply Changes button. Fire-and-forget — see #205.
+    markEdited(id).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -83,10 +82,7 @@ export async function DELETE(
       "Image Upload": [],
     });
 
-    // Fire-and-forget downstream sync — a scheduled post must reflect
-    // that its image is gone (Zernio mediaItems clears, lnk.bio entry
-    // recreates without an image).
-    syncPostDownstream(id).catch(() => {});
+    markEdited(id).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {

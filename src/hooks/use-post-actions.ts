@@ -107,6 +107,7 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
 
   const rescheduleMutation = useMutation({
     mutationFn: async (scheduledFor: string) => {
+      // 1. Update Airtable Scheduled Date.
       const res = await fetch(`/api/posts/${post.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -116,6 +117,13 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to reschedule");
       }
+      // 2. Push the new state to Zernio + lnk.bio. Reschedule is the user's
+      //    intent to commit; chain Apply so they don't have to click twice.
+      const applyRes = await fetch(`/api/posts/${post.id}/apply`, { method: "POST" });
+      if (!applyRes.ok) {
+        const data = await applyRes.json().catch(() => ({}));
+        throw new Error(data.error || "Rescheduled in Airtable but downstream sync failed — click Apply Changes to retry");
+      }
     },
     onSuccess: (_data, scheduledFor) => {
       invalidate();
@@ -123,6 +131,27 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
       setShowSchedulePicker(false);
       setScheduleDateTime("");
       onClose();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
+  // Apply Changes — pushes the current Airtable state of a scheduled post to
+  // Zernio + lnk.bio. The only mutation path for downstream services on
+  // already-scheduled posts; per-edit auto-sync was removed in #205 because
+  // it produced concurrent-mutation races.
+  const applyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/apply`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Apply failed");
+      return data;
+    },
+    onSuccess: (data: { zernio?: string; lnkBio?: string }) => {
+      invalidate();
+      const parts: string[] = [];
+      if (data.zernio === "ok") parts.push("Zernio");
+      if (data.lnkBio === "ok") parts.push("lnk.bio");
+      toast.success(parts.length > 0 ? `Synced ${parts.join(" + ")}` : "Up to date");
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -172,6 +201,7 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
     dismissMutation,
     publishNowMutation,
     rescheduleMutation,
+    applyMutation,
     regenerateMutation,
     updateStatus,
     deletePost,

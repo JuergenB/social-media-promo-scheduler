@@ -26,6 +26,7 @@ interface PostFields {
   "Platform Post URL": string;
   Collaborators: string;
   "User Tags": string;
+  "Lnk.Bio Sync Pending"?: boolean;
   "Carousel PDF URL": string;
 }
 
@@ -88,6 +89,7 @@ function mapPostFields(id: string, fields: PostFields): Post {
     platformPostUrl: fields["Platform Post URL"] || "",
     collaborators: fields["Collaborators"] || "",
     userTags: fields["User Tags"] || "",
+    lnkBioSyncPending: !!fields["Lnk.Bio Sync Pending"],
     carouselPdfUrl: fields["Carousel PDF URL"] || "",
   };
 }
