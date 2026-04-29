@@ -12,6 +12,9 @@
  *
  * Phase A (issue #207): midpoint quantile sampling, maxPerDay enforcement,
  * minSpacingHours enforcement, count-aware excludedDates.
+ * Phase B (issue #84 Phase 2): density-aware additive scheduling — when a
+ * platform already has scheduled posts, new approved posts fill the curve's
+ * residual deficits rather than piling into whatever days happen to be free.
  */
 
 import type { DistributionBias, PlatformCadenceConfig } from "@/lib/airtable/types";
@@ -294,45 +297,92 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
 
     if (validDays.length === 0) continue;
 
-    // Cumulative-weight CDF over the valid days (skipping inactive days)
+    // Curve weights normalized over valid days
     const validWeights = validDays.map((d) => curve[d]);
     const totalWeight = validWeights.reduce((a, b) => a + b, 0);
-    const normalized = validWeights.map((w) => w / totalWeight);
-    const cumulative: number[] = [];
-    let cum = 0;
-    for (const w of normalized) {
-      cum += w;
-      cumulative.push(cum);
-    }
+    const curveNormalized = validWeights.map((w) => w / totalWeight);
 
-    for (let i = 0; i < postCount; i++) {
-      // Midpoint quantile sampling — never forces endpoints (issue #207).
-      const target = (i + 0.5) / postCount;
-      const preferredIdx = cdfInvert(cumulative, target);
-      const dayIdx = findAvailableDayIdx(
-        preferredIdx,
-        validDays,
-        dayCounts,
-        cadence.maxPerDay,
-        normalized,
-      );
+    const totalExisting = [...dayCounts.values()].reduce((a, b) => a + b, 0);
+
+    // Closure: place the i-th platform post at the given valid-day index.
+    // Mutates dayCounts/dayTimes/slots; reads platformPosts[i] and cadence.
+    let placedCount = 0;
+    const placeAt = (dayIdx: number) => {
       const dayOffset = validDays[dayIdx];
-      dayCounts.set(dayOffset, (dayCounts.get(dayOffset) || 0) + 1);
-
+      dayCounts.set(dayOffset, (dayCounts.get(dayOffset) ?? 0) + 1);
       const date = new Date(startDate);
       date.setDate(date.getDate() + dayOffset);
-
-      const timesOnDay = dayTimes.get(dayOffset) || [];
+      const timesOnDay = dayTimes.get(dayOffset) ?? [];
       const time = pickTimeWithSpacing(cadence, timesOnDay);
       date.setHours(time.hour, time.minute, 0, 0);
       timesOnDay.push(time.decimal);
       dayTimes.set(dayOffset, timesOnDay);
-
       slots.push({
-        postId: platformPosts[i].id,
+        postId: platformPosts[placedCount].id,
         platform,
         scheduledDate: date.toISOString(),
       });
+      placedCount += 1;
+    };
+
+    if (totalExisting === 0) {
+      // ── Phase A: first-time scheduling — midpoint quantile + CDF inversion
+      const cumulative: number[] = [];
+      let cum = 0;
+      for (const w of curveNormalized) {
+        cum += w;
+        cumulative.push(cum);
+      }
+      for (let i = 0; i < postCount; i++) {
+        const target = (i + 0.5) / postCount;
+        const preferredIdx = cdfInvert(cumulative, target);
+        const dayIdx = findAvailableDayIdx(
+          preferredIdx,
+          validDays,
+          dayCounts,
+          cadence.maxPerDay,
+          curveNormalized,
+        );
+        placeAt(dayIdx);
+      }
+    } else {
+      // ── Phase B: density-aware additive (#84 Phase 2) — greedy deficit fill
+      //
+      // For each new post, pick the valid day with the largest remaining
+      // deficit (= ideal − existing − already-placed-this-run) where cadence
+      // still has room. This produces a combined existing+new distribution
+      // close to what scheduling totalPostCount from scratch would give.
+      const totalPostCount = postCount + totalExisting;
+      const idealPerDay = curveNormalized.map((w) => w * totalPostCount);
+      const remainingDeficit = idealPerDay.map((ideal, idx) =>
+        ideal - (dayCounts.get(validDays[idx]) ?? 0),
+      );
+
+      for (let i = 0; i < postCount; i++) {
+        // Pick the valid day with max remaining deficit AND cadence room.
+        let bestIdx = -1;
+        let bestDef = -Infinity;
+        for (let j = 0; j < validDays.length; j++) {
+          if ((dayCounts.get(validDays[j]) ?? 0) >= cadence.maxPerDay) continue;
+          if (remainingDeficit[j] > bestDef) {
+            bestDef = remainingDeficit[j];
+            bestIdx = j;
+          }
+        }
+        if (bestIdx < 0) {
+          // No room on any valid day — over-allocate via curve-weighted walk
+          // (degraded mode; cadence couldn't fit existing+new).
+          bestIdx = findAvailableDayIdx(
+            0,
+            validDays,
+            dayCounts,
+            cadence.maxPerDay,
+            curveNormalized,
+          );
+        }
+        remainingDeficit[bestIdx] -= 1;
+        placeAt(bestIdx);
+      }
     }
   }
 
