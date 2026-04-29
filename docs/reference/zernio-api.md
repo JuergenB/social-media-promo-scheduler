@@ -4,11 +4,11 @@ This doc captures Zernio endpoints we consume directly, the quirks we've hit, an
 
 - **Base URL:** `https://zernio.com/api`
 - **Auth:** `Authorization: Bearer $LATE_API_KEY` (SDK key format `sk_...`)
-- **SDK:** `@getlatedev/node` — covers most endpoints but does **not** cover the `/v1/analytics/best-time`, `/v1/analytics/content-decay`, or `/v1/analytics/posting-frequency` endpoints. Those require raw HTTP.
+- **SDK:** `@getlatedev/node@0.2.101` — covers most endpoints but does **not** cover the `/v1/analytics/best-time`, `/v1/analytics/content-decay`, or `/v1/analytics/posting-frequency` endpoints. Those require raw HTTP. Zernio also publishes the same SDK as `@zernio/node` at the same version; both are maintained.
 - **Per-brand key resolution:** see `src/lib/late-api/client.ts` — `resolveZernioKey(brand)` resolves the brand-specific env var (e.g. `LATE_API_KEY_INTERSECT`) or falls back to the global `LATE_API_KEY`.
 - **OpenAPI inventory:** `docs/zernio-api-openapi.yaml` is a comment-only pointer listing endpoint paths, not a full spec.
 
-Last verified: 2026-04-24 (ads section re-verified against live key + Zernio docs/changelog 2026-04-24).
+Last verified: 2026-04-29 (SDK upgraded 0.1.7 → 0.2.101; ads section re-verified against live key + Zernio docs/changelog 2026-04-24).
 
 ---
 
@@ -83,27 +83,25 @@ See `src/app/api/webhooks/zernio/route.ts`. Zernio emits `post.scheduled`, `post
 
 ## LinkedIn document title (PDF carousel)
 
-LinkedIn surfaces a visible filename on the post card / Featured tile (truncates near 55-60 visible chars). The wire format exposes a separate display title that overrides the filename, but our installed SDK (`@getlatedev/node@0.1.7`) does not type it. **Latest SDK is `0.2.100`** — the typings there add `LinkedInPlatformData.documentTitle?: string` and `MediaItem.title?: string`.
+LinkedIn surfaces a visible filename on the post card / Featured tile (truncates near 55-60 visible chars). The wire format exposes a separate display title that overrides the filename — natively typed as `LinkedInPlatformData.documentTitle?: string` and `MediaItem.title?: string` in SDK 0.2.x.
 
-**Resolution order (per Zernio docs surfaced via 0.2.100 typings):**
+**Resolution order (per SDK 0.2.101 typings):**
 
 1. `platforms[].platformSpecificData.documentTitle` (LinkedIn-only)
 2. `mediaItems[].title`
 3. `mediaItems[].filename`
 
-**Pass-through works on 0.1.7:** `createPost` body is serialised verbatim with `JSON.stringify` (`@hey-api/client-fetch`), so adding `documentTitle` to a `Record<string, unknown>` PSD object reaches Zernio. We do this at every LinkedIn carousel publish/sync site:
+**How we set it:** add `documentTitle` to the per-platform `platformSpecificData` object on the `createPost` / `updatePost` body. Our `psd` is built as `Record<string, unknown>` to accommodate the union of platform-specific shapes (Instagram collaborators, LinkedIn documentTitle, etc.) — tightening to discriminated unions is a separate hygiene pass.
 
 ```ts
 const psd: Record<string, unknown> = {};
 if (post.firstComment) psd.firstComment = post.firstComment;
 if (platform === "linkedin" && documentTitle) {
-  psd.documentTitle = documentTitle;  // smuggled — not in 0.1.7 types
+  psd.documentTitle = documentTitle;
 }
 ```
 
 **Source of the title:** AI-generated fresh per publish via `prepareLinkedInPdfMetadata()` in `src/lib/pdf-carousel.ts`. Prompt explicitly excludes brand name, issue number, and post-type labels — output is a 6-10 word magazine-cover line that complements (not duplicates) the post body. Falls back to the campaign description's first sentence if the Anthropic call fails.
-
-**SDK upgrade ticket:** tracked separately — once typed via `0.2.100` we can drop the cast.
 
 ---
 
