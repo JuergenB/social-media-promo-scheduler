@@ -159,14 +159,20 @@ export async function POST(
       );
     }
 
-    // Find already-scheduled dates to avoid collisions
-    const alreadyScheduledDates = new Map<string, Set<string>>();
+    // Count already-scheduled posts per platform per day. The algorithm uses
+    // these counts to enforce per-platform `maxPerDay` against the combined
+    // (existing + new) total — a partly-full day still has slots open.
+    const alreadyScheduledDates = new Map<string, Map<string, number>>();
     for (const p of campaignPosts) {
       if ((p.fields.Status === "Scheduled" || p.fields.Status === "Published") && p.fields["Scheduled Date"]) {
         const plat = PLATFORM_MAP[p.fields.Platform] || p.fields.Platform.toLowerCase();
         const dateStr = p.fields["Scheduled Date"].split("T")[0];
-        if (!alreadyScheduledDates.has(plat)) alreadyScheduledDates.set(plat, new Set());
-        alreadyScheduledDates.get(plat)!.add(dateStr);
+        let perPlatform = alreadyScheduledDates.get(plat);
+        if (!perPlatform) {
+          perPlatform = new Map<string, number>();
+          alreadyScheduledDates.set(plat, perPlatform);
+        }
+        perPlatform.set(dateStr, (perPlatform.get(dateStr) ?? 0) + 1);
       }
     }
 

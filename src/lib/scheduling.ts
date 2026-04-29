@@ -9,6 +9,9 @@
  * - Organic timing (randomized minutes within windows)
  *
  * Reference: Missinglettr-inspired exponential curve
+ *
+ * Phase A (issue #207): midpoint quantile sampling, maxPerDay enforcement,
+ * minSpacingHours enforcement, count-aware excludedDates.
  */
 
 import type { DistributionBias, PlatformCadenceConfig } from "@/lib/airtable/types";
@@ -37,8 +40,16 @@ export interface ScheduleInput {
   timezone?: string;
   /** Brand-level per-platform cadence overrides. Merged over global defaults. */
   cadence?: PlatformCadenceConfig | null;
-  /** Per-platform dates that are already taken (avoid scheduling on these days) */
-  excludedDates?: Map<string, Set<string>>; // platform → set of "YYYY-MM-DD" strings
+  /**
+   * Per-platform existing-post counts per day. The algorithm treats these as
+   * already-placed when applying maxPerDay caps — a day with cadence allowing 2
+   * posts and 1 already scheduled has 1 free slot, not 0.
+   *
+   * Outer key: platform (e.g. "instagram"). Inner key: "YYYY-MM-DD" matching the
+   * UTC date component of `Scheduled Date` ISO strings (the route stores these
+   * via `.split("T")[0]`). Inner value: number of posts already on that day.
+   */
+  excludedDates?: Map<string, Map<string, number>>;
 }
 
 // ── Resolved cadence (internal) ───────────────────────────────────────
@@ -123,20 +134,48 @@ function generateCurve(durationDays: number, bias: DistributionBias): number[] {
 // ── Organic timing ─────────────────────────────────────────────────────
 
 /**
- * Pick a random time from the platform's posting windows with
- * organic variation (±30 minutes).
+ * Pick a random time from the platform's posting windows that satisfies
+ * `minSpacingHours` against `existingHours` already placed on the same day
+ * for the same platform. Falls back to a window pick if no slot fits — the
+ * caller has already committed via `maxPerDay`, so a violation is preferable
+ * to dropping the post.
  */
-function pickTime(cadence: ResolvedCadence): { hour: number; minute: number } {
-  const baseHour = cadence.windows[Math.floor(Math.random() * cadence.windows.length)];
-  // Add organic variation: ±30 minutes
-  const minuteOffset = Math.floor(Math.random() * 60) - 30;
-  let hour = baseHour;
-  let minute = Math.max(0, Math.min(59, minuteOffset));
-  if (minuteOffset < 0) {
-    minute = 60 + minuteOffset;
-    hour = Math.max(0, hour - 1);
+function pickTimeWithSpacing(
+  cadence: ResolvedCadence,
+  existingHours: number[],
+): { hour: number; minute: number; decimal: number } {
+  const tooClose = (decimalHour: number) =>
+    existingHours.some(
+      (existing) => Math.abs(existing - decimalHour) < cadence.minSpacingHours,
+    );
+
+  const candidate = (baseHour: number) => {
+    const minuteOffset = Math.floor(Math.random() * 60) - 30;
+    let hour = baseHour;
+    let minute = minuteOffset;
+    if (minute < 0) {
+      minute = 60 + minute;
+      hour = Math.max(0, hour - 1);
+    } else if (minute > 59) {
+      minute = minute - 60;
+      hour = Math.min(23, hour + 1);
+    }
+    return { hour, minute, decimal: hour + minute / 60 };
+  };
+
+  // Shuffle the window hours and try each. Multiple attempts per hour cover
+  // jitter that may push into a forbidden gap.
+  const shuffled = [...cadence.windows].sort(() => Math.random() - 0.5);
+  for (const baseHour of shuffled) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const c = candidate(baseHour);
+      if (!tooClose(c.decimal)) return c;
+    }
   }
-  return { hour, minute };
+
+  // No window+jitter combo satisfies spacing — the day is over-packed for
+  // the cadence. Place anyway at a random window (best-effort fallback).
+  return candidate(cadence.windows[Math.floor(Math.random() * cadence.windows.length)]);
 }
 
 /**
@@ -145,6 +184,50 @@ function pickTime(cadence: ResolvedCadence): { hour: number; minute: number } {
 function isDayActive(date: Date, cadence: ResolvedCadence): boolean {
   if (cadence.activeDays.length === 0) return true;
   return cadence.activeDays.includes(date.getDay());
+}
+
+/**
+ * Find the index in `validDays` whose cumulative weight first reaches the target.
+ */
+function cdfInvert(cumulative: number[], target: number): number {
+  for (let j = 0; j < cumulative.length; j++) {
+    if (cumulative[j] >= target) return j;
+  }
+  return cumulative.length - 1;
+}
+
+/**
+ * Walk outward from `preferredIdx` to the nearest valid-day index whose count is
+ * still below `maxPerDay`. When both sides have a candidate at the same offset,
+ * prefer the heavier curve weight (closer to the curve's intent).
+ */
+function findAvailableDayIdx(
+  preferredIdx: number,
+  validDays: number[],
+  dayCounts: Map<number, number>,
+  maxPerDay: number,
+  weights: number[],
+): number {
+  const isOpen = (idx: number) =>
+    idx >= 0 &&
+    idx < validDays.length &&
+    (dayCounts.get(validDays[idx]) || 0) < maxPerDay;
+
+  if (isOpen(preferredIdx)) return preferredIdx;
+
+  for (let offset = 1; offset < validDays.length; offset++) {
+    const left = preferredIdx - offset;
+    const right = preferredIdx + offset;
+    const leftOpen = isOpen(left);
+    const rightOpen = isOpen(right);
+    if (leftOpen && rightOpen) {
+      return weights[left] >= weights[right] ? left : right;
+    }
+    if (leftOpen) return left;
+    if (rightOpen) return right;
+  }
+  // No room anywhere — best-effort fallback (over-allocates the preferred day).
+  return preferredIdx;
 }
 
 // ── Main scheduling function ──────────────────────────────────────────
@@ -188,58 +271,62 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
     const cadence = resolveCadence(platform, cadenceConfig);
     const postCount = platformPosts.length;
 
-    // Find valid days (active days within duration, excluding already-scheduled)
+    // Build the platform's working state:
+    // - validDays: day offsets allowed by activeDays
+    // - dayCounts: per-day count (pre-loaded from excludedDates, mutated as we place)
+    // - dayTimes: per-day list of decimal hours already placed (for spacing)
     const platformExcluded = excludedDates?.get(platform);
     const validDays: number[] = [];
+    const dayCounts = new Map<number, number>();
+    const dayTimes = new Map<number, number[]>();
+
     for (let d = 0; d < durationDays; d++) {
       const date = new Date(startDate);
       date.setDate(date.getDate() + d);
       if (!isDayActive(date, cadence)) continue;
-      // Skip days that already have a post for this platform
+      validDays.push(d);
       if (platformExcluded) {
         const dateStr = date.toISOString().split("T")[0];
-        if (platformExcluded.has(dateStr)) continue;
+        const existing = platformExcluded.get(dateStr) ?? 0;
+        if (existing > 0) dayCounts.set(d, existing);
       }
-      validDays.push(d);
     }
 
     if (validDays.length === 0) continue;
 
-    // Calculate cumulative weights for valid days only
+    // Cumulative-weight CDF over the valid days (skipping inactive days)
     const validWeights = validDays.map((d) => curve[d]);
     const totalWeight = validWeights.reduce((a, b) => a + b, 0);
-    const normalizedWeights = validWeights.map((w) => w / totalWeight);
-
-    // Assign posts to days using weighted distribution
-    // Use cumulative distribution to spread posts evenly according to curve
+    const normalized = validWeights.map((w) => w / totalWeight);
     const cumulative: number[] = [];
     let cum = 0;
-    for (const w of normalizedWeights) {
+    for (const w of normalized) {
       cum += w;
       cumulative.push(cum);
     }
 
     for (let i = 0; i < postCount; i++) {
-      // Map post index to a position in the curve
-      const target = postCount > 1 ? i / (postCount - 1) : 0.5;
-
-      // Find the day whose cumulative weight is closest to the target
-      let dayIdx = 0;
-      for (let j = 0; j < cumulative.length; j++) {
-        if (cumulative[j] >= target) {
-          dayIdx = j;
-          break;
-        }
-        dayIdx = j;
-      }
-
+      // Midpoint quantile sampling — never forces endpoints (issue #207).
+      const target = (i + 0.5) / postCount;
+      const preferredIdx = cdfInvert(cumulative, target);
+      const dayIdx = findAvailableDayIdx(
+        preferredIdx,
+        validDays,
+        dayCounts,
+        cadence.maxPerDay,
+        normalized,
+      );
       const dayOffset = validDays[dayIdx];
+      dayCounts.set(dayOffset, (dayCounts.get(dayOffset) || 0) + 1);
+
       const date = new Date(startDate);
       date.setDate(date.getDate() + dayOffset);
 
-      // Pick a time with organic variation
-      const time = pickTime(cadence);
+      const timesOnDay = dayTimes.get(dayOffset) || [];
+      const time = pickTimeWithSpacing(cadence, timesOnDay);
       date.setHours(time.hour, time.minute, 0, 0);
+      timesOnDay.push(time.decimal);
+      dayTimes.set(dayOffset, timesOnDay);
 
       slots.push({
         postId: platformPosts[i].id,
