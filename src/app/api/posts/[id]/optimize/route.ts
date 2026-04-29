@@ -135,7 +135,7 @@ export async function POST(
     });
 
     const { markEdited } = await import("@/lib/post-apply");
-    markEdited(postId).catch(() => {});
+    await markEdited(postId);
 
     return NextResponse.json({
       success: true,

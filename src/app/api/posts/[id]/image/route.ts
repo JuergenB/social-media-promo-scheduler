@@ -43,7 +43,7 @@ export async function POST(
 
     // Per-edit Zernio sync (idempotent, safe to race) + mark lnk.bio dirty
     // so the user sees the Apply Changes button. Fire-and-forget — see #205.
-    markEdited(id).catch(() => {});
+    await markEdited(id);
 
     return NextResponse.json({
       success: true,
@@ -82,7 +82,7 @@ export async function DELETE(
       "Image Upload": [],
     });
 
-    markEdited(id).catch(() => {});
+    await markEdited(id);
 
     return NextResponse.json({ success: true });
   } catch (error) {

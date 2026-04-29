@@ -230,7 +230,7 @@ export async function POST(
     });
 
     const { markEdited } = await import("@/lib/post-apply");
-    markEdited(id).catch(() => {});
+    await markEdited(id);
 
     return NextResponse.json({
       applied: true,
@@ -295,7 +295,7 @@ export async function DELETE(
     });
 
     const { markEdited } = await import("@/lib/post-apply");
-    markEdited(id).catch(() => {});
+    await markEdited(id);
 
     // Clean up cover slide blob
     if (coverData.appliedUrl && isBlobUrl(coverData.appliedUrl)) {

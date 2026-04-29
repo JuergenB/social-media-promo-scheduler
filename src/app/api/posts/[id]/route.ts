@@ -232,7 +232,7 @@ export async function PATCH(
 
     if (editAffectsDownstream) {
       const { markEdited } = await import("@/lib/post-apply");
-      markEdited(id).catch(() => {});
+      await markEdited(id);
     }
 
     return NextResponse.json({ success: true });

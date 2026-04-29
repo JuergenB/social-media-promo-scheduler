@@ -291,21 +291,36 @@ async function syncZernio(
 }
 
 /**
- * Per-edit fire-and-forget sync. Pushes the current Airtable state to Zernio
- * (idempotent — safe to race) and marks lnk.bio as dirty so the Apply button
- * surfaces in the UI. Used by every edit endpoint that mutates post content/
- * media/schedule/collaborators on a scheduled post.
+ * Per-edit sync. Two phases:
  *
- * Never throws — logs and returns. Call as `markEdited(id).catch(() => {})`.
+ *   1. **Awaited (fast):** if the post is scheduled, set `Lnk.Bio Sync Pending`
+ *      so the UI can show the Apply Changes button on the next refetch.
+ *      Without awaiting, the client's React Query invalidation runs before
+ *      the flag write lands and the button stays hidden.
+ *
+ *   2. **Fire-and-forget (slow):** push current Airtable state to Zernio
+ *      (idempotent — safe to race). This is ~1-2s and shouldn't block the
+ *      response that triggered the edit.
+ *
+ * Callers should `await markEdited(id)` so the flag is set before they
+ * respond to the client.
  */
 export async function markEdited(postId: string): Promise<void> {
+  let isScheduled = false;
   try {
-    const result = await applyPostChanges(postId, { skipLnkBio: true });
-    if (result.zernio === "skipped") return; // not scheduled — nothing to track
-    await updateRecord("Posts", postId, { "Lnk.Bio Sync Pending": true }).catch(() => {});
+    const post = await getRecord<{ "Zernio Post ID": string }>("Posts", postId);
+    isScheduled = !!post.fields["Zernio Post ID"];
+    if (!isScheduled) return;
+    await updateRecord("Posts", postId, { "Lnk.Bio Sync Pending": true });
   } catch (err) {
-    console.warn(`[markEdited] ${postId}:`, err);
+    console.warn(`[markEdited] flag write failed for ${postId}:`, err);
+    return;
   }
+
+  // Background Zernio sync — don't block the caller.
+  applyPostChanges(postId, { skipLnkBio: true }).catch((err) => {
+    console.warn(`[markEdited] zernio sync failed for ${postId}:`, err);
+  });
 }
 
 async function syncLnkBio(

@@ -125,7 +125,7 @@ export async function DELETE(
   }
   await updateRecord("Posts", id, { "Carousel PDF URL": "" });
   const { markEdited } = await import("@/lib/post-apply");
-  markEdited(id).catch(() => {});
+  await markEdited(id);
   return NextResponse.json({ success: true });
 }
 
@@ -138,5 +138,5 @@ async function persistPdfUrl(postId: string, newUrl: string) {
   }
   await updateRecord("Posts", postId, { "Carousel PDF URL": newUrl });
   const { markEdited } = await import("@/lib/post-apply");
-  markEdited(postId).catch(() => {});
+  await markEdited(postId);
 }

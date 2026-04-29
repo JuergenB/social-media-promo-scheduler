@@ -141,7 +141,7 @@ export async function POST(
     });
 
     const { markEdited } = await import("@/lib/post-apply");
-    markEdited(id).catch(() => {});
+    await markEdited(id);
 
     return NextResponse.json({
       applied: true,
@@ -231,7 +231,7 @@ export async function DELETE(
     });
 
     const { markEdited } = await import("@/lib/post-apply");
-    markEdited(id).catch(() => {});
+    await markEdited(id);
 
     // Fire-and-forget: clean up orphaned slide blobs (designed card blobs already removed from list above)
     for (const url of blobUrlsToDelete) {
