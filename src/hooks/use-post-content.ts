@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 interface UsePostContentOptions {
   postId: string;
@@ -30,6 +31,7 @@ export function usePostContent({ postId, initialContent, invalidateKeys = [["cam
       });
       if (!res.ok) throw new Error("Failed to save content");
     },
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     onSuccess: () => {
       setIsEditing(false);
       invalidate();

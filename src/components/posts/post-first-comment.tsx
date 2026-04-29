@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toPlatformId } from "@/lib/platform-constants";
 import type { Post } from "@/lib/airtable/types";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 const FIRST_COMMENT_PLATFORMS = ["instagram", "facebook", "linkedin"];
 
@@ -45,6 +46,7 @@ export function PostFirstComment({ post, isPublished, onPostChange }: Props) {
   }
 
   const save = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(post.id),
     mutationFn: async (firstComment: string) => {
       const res = await fetch(`/api/posts/${post.id}`, {
         method: "PATCH",

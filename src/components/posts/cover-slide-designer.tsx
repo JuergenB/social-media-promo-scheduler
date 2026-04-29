@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -539,6 +540,7 @@ export function CoverSlideDesigner({
 
   // Apply mutation
   const applyMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async () => {
       if (!selectedTemplate) throw new Error("No template selected");
       const res = await fetch(`/api/posts/${postId}/cover-slide`, {

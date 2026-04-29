@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { format } from "date-fns/format";
 import { toast } from "sonner";
 import type { Post } from "@/lib/airtable/types";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 interface UsePostActionsOptions {
   post: Post;
@@ -106,6 +107,7 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
   });
 
   const rescheduleMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(post.id),
     mutationFn: async (scheduledFor: string) => {
       // 1. Update Airtable Scheduled Date.
       const res = await fetch(`/api/posts/${post.id}`, {
@@ -147,6 +149,7 @@ export function usePostActions({ post, onClose, onNavigateNext, invalidateKeys =
       return data;
     },
     onSuccess: (data: { zernio?: string; lnkBio?: string }) => {
+      getPostDirtyActions().clearDirty(post.id);
       invalidate();
       const parts: string[] = [];
       if (data.zernio === "ok") parts.push("Zernio");

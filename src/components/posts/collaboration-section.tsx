@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDown, ChevronUp, Users, X } from "lucide-react";
 import type { Post } from "@/lib/airtable/types";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 const LS_COLLABS_KEY = "polywiz-recent-collaborators";
 const LS_TAGS_KEY = "polywiz-recent-user-tags";
@@ -129,6 +130,7 @@ export function CollaborationSection({
     JSON.stringify(parsedTags) !== JSON.stringify(normalizedInitialTags);
 
   const saveMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async (payload: { collaborators: string[]; userTags: string[] }) => {
       const res = await fetch(`/api/posts/${postId}`, {
         method: "PATCH",

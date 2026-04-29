@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { MediaItem } from "@/lib/media-items";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 export interface OptimizePreview {
   optimizedUrl: string;
@@ -47,6 +48,7 @@ export function useImageOptimize({
   };
 
   const optimizeMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async (imageIndex: number) => {
       const res = await fetch(`/api/posts/${postId}/optimize`, {
         method: "POST",

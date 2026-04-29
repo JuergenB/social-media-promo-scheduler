@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { MediaItem } from "@/lib/media-items";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 export type SlideOption = {
   frameColor?: { r: number; g: number; b: number };
@@ -62,6 +63,7 @@ export function useCarousel({ postId, onMediaUpdate, invalidateKeys = [["campaig
   });
 
   const applyMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async () => {
       const res = await fetch(`/api/posts/${postId}/carousel-preview`, {
         method: "POST",
@@ -85,6 +87,7 @@ export function useCarousel({ postId, onMediaUpdate, invalidateKeys = [["campaig
   });
 
   const resetMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async () => {
       const res = await fetch(`/api/posts/${postId}/carousel-preview`, {
         method: "DELETE",

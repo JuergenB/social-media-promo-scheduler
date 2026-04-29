@@ -33,6 +33,7 @@ import { usePostContent } from "@/hooks/use-post-content";
 import { useCarousel } from "@/hooks/use-carousel";
 import { useImageOptimize } from "@/hooks/use-image-optimize";
 import { usePostActions } from "@/hooks/use-post-actions";
+import { usePostDirty } from "@/hooks/use-post-dirty";
 import { PlatformHeader } from "./platform-header";
 import { ContentEditor } from "./content-editor";
 import { MediaGallery } from "./media-gallery";
@@ -170,6 +171,11 @@ export function CampaignPostDetail({
     onClose,
     onNavigateNext: nextPost ? () => onNavigate(nextPost) : undefined,
   });
+
+  // Optimistic dirty tracker — flips true the moment any edit mutation fires
+  // (in onMutate, before the network call). Combined with server-side
+  // post.lnkBioSyncPending so cross-tab/refresh state still works.
+  const isOptimisticallyDirty = usePostDirty(post.id);
 
   // ── Collaboration (Instagram only) ────────────────────────────────────
   const isInstagram = platformLower === "instagram";
@@ -803,7 +809,7 @@ export function CampaignPostDetail({
                     actions.setScheduleDateTime("");
                   }}
                 />
-              ) : post.lnkBioSyncPending ? (
+              ) : isOptimisticallyDirty || post.lnkBioSyncPending ? (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="default"

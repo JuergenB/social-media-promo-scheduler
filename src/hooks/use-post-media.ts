@@ -6,6 +6,7 @@ import { parseMediaItems, serializeMediaItems, type MediaItem } from "@/lib/medi
 import { compressImage, validateImage } from "@/lib/image-compression";
 import { toast } from "sonner";
 import type { Post } from "@/lib/airtable/types";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 /** Build MediaItem array from an Airtable Post record */
 export function buildMediaItems(post: Post): MediaItem[] {
@@ -49,6 +50,7 @@ export function usePostMedia({ postId, initialItems, invalidateKeys = [["campaig
       });
       if (!res.ok) throw new Error("Failed to save images");
     },
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     onSuccess: invalidate,
     onError: () => toast.error("Failed to save images"),
   });
@@ -68,6 +70,7 @@ export function usePostMedia({ postId, initialItems, invalidateKeys = [["campaig
       if (!res.ok) throw new Error("Failed to upload image");
       return res.json();
     },
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     onSuccess: (data) => {
       if (data.imageUrl) {
         const next = [...mediaItems, { url: data.imageUrl, caption: "" }];

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { upload } from "@vercel/blob/client";
 import { toast } from "sonner";
+import { getPostDirtyActions } from "@/hooks/use-post-dirty";
 
 interface UseCarouselPdfOptions {
   postId: string;
@@ -37,6 +38,7 @@ export function useCarouselPdf({
   };
 
   const uploadPdfMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async (file: File) => {
       if (file.type !== "application/pdf") {
         throw new Error("File must be a PDF");
@@ -76,6 +78,7 @@ export function useCarouselPdf({
   });
 
   const removePdfMutation = useMutation({
+    onMutate: () => getPostDirtyActions().markDirty(postId),
     mutationFn: async () => {
       const res = await fetch(`/api/posts/${postId}/carousel-pdf`, {
         method: "DELETE",
