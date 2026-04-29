@@ -1,6 +1,7 @@
 import { getRecord, updateRecord } from "@/lib/airtable/client";
 import { createBrandClient } from "@/lib/late-api/client";
 import { parseMediaItems } from "@/lib/media-items";
+import { prepareLinkedInPdfMetadata } from "@/lib/pdf-carousel";
 
 export interface SyncResult {
   zernio: "skipped" | "ok" | "error";
@@ -26,6 +27,8 @@ interface PostFields {
 
 interface CampaignFieldsForSync {
   Name?: string;
+  Description?: string;
+  "Editorial Direction"?: string;
 }
 
 interface CampaignFields {
@@ -39,6 +42,7 @@ interface BrandFields {
   "Lnk.Bio Client ID Label": string;
   "Lnk.Bio Client Secret Label": string;
   Timezone: string;
+  "Anthropic API Key Label"?: string;
 }
 
 // Any route that writes post content/media/schedule fields is expected to call
@@ -63,7 +67,7 @@ export async function syncPostDownstream(postId: string): Promise<SyncResult> {
     const brand = await getRecord<BrandFields>("Brands", brandId);
 
     await Promise.allSettled([
-      syncZernio(postId, post.fields, brand.fields, campaign.fields.Name).then(
+      syncZernio(postId, post.fields, brand.fields, campaign.fields).then(
         (ok) => { result.zernio = ok ? "ok" : "skipped"; },
         (err) => {
           console.warn(`[post-sync] Zernio failed for ${postId}:`, err);
@@ -89,7 +93,7 @@ async function syncZernio(
   postId: string,
   post: PostFields,
   brand: BrandFields,
-  campaignName?: string
+  campaign: CampaignFieldsForSync
 ): Promise<boolean> {
   const zernioPostId = post["Zernio Post ID"];
   if (!zernioPostId) return false;
@@ -104,12 +108,19 @@ async function syncZernio(
   const userPdfUrl = post["Carousel PDF URL"];
   const updateBody: Record<string, unknown> = {};
   if (post.Content) updateBody.content = post.Content;
+  let linkedInDocumentTitle: string | undefined;
   if (platformLower === "linkedin" && userPdfUrl) {
     // User-supplied PDF override — single document item, image grid ignored.
     // Mirrors the publish-route logic at /api/posts/[id]/publish.
-    const filename = `${(campaignName || "Carousel").slice(0, 60)}.pdf`;
+    const meta = await prepareLinkedInPdfMetadata({
+      campaignDescription: campaign.Description,
+      editorialDirection: campaign["Editorial Direction"],
+      postContent: post.Content,
+      brand: { anthropicApiKeyLabel: brand["Anthropic API Key Label"] || null },
+    });
+    linkedInDocumentTitle = meta.documentTitle;
     updateBody.mediaItems = [
-      { type: "document" as const, url: userPdfUrl, filename },
+      { type: "document" as const, url: userPdfUrl, filename: meta.filename },
     ];
   } else {
     const mediaItems = parseMediaItems(post);
@@ -143,6 +154,10 @@ async function syncZernio(
     }
   } else if (platform === "facebook" || platform === "linkedin") {
     if (post["First Comment"]) psd.firstComment = post["First Comment"];
+  }
+
+  if (platform === "linkedin" && linkedInDocumentTitle) {
+    psd.documentTitle = linkedInDocumentTitle;
   }
 
   if (Object.keys(psd).length > 0) {
