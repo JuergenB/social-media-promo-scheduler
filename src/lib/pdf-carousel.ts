@@ -1,5 +1,137 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { MediaItem } from "@/lib/media-items";
+import { generateText, resolveAnthropicConfig } from "@/lib/anthropic";
+import type { Brand } from "@/lib/airtable/types";
+
+/**
+ * Maximum visible filename / documentTitle length before LinkedIn truncates
+ * the surface (Featured tile + feed card both clip near this bound). Leaves
+ * a few chars of breathing room.
+ */
+const TITLE_MAX = 55;
+
+/**
+ * Generate a LinkedIn document title — the headline that surfaces on the
+ * feed/Featured-tile attachment. Treats the surface as a magazine cover line:
+ * no brand name, no issue number, no category label, no duplication of the
+ * post body. AI-generated fresh per publish so titles stay tied to the
+ * current content.
+ *
+ * The same string powers `platforms.linkedin.documentTitle` (Zernio's wire
+ * field — primary signal LinkedIn surfaces) and the PDF filename (fallback,
+ * also visible if a reader downloads the file).
+ */
+export async function generateLinkedInDocumentTitle(args: {
+  campaignDescription: string | null | undefined;
+  editorialDirection: string | null | undefined;
+  postContent: string | null | undefined;
+  brand: Pick<Brand, "anthropicApiKeyLabel"> | null | undefined;
+}): Promise<string> {
+  const description = (args.campaignDescription || "").trim();
+  const direction = (args.editorialDirection || "").trim();
+  const postBody = (args.postContent || "").trim();
+
+  const fallback = description.split(/[.!?\n]/)[0].trim() || "Carousel";
+  const fallbackClipped = clipToMaxChars(fallback, TITLE_MAX) || "Carousel";
+
+  if (!description && !direction && !postBody) {
+    return fallbackClipped;
+  }
+
+  try {
+    const config = resolveAnthropicConfig(args.brand ?? undefined);
+    const system = `You write LinkedIn carousel cover titles — the headline that appears as the visible filename on the post tile.
+
+Rules:
+- 6 to 10 words, MUST be ≤${TITLE_MAX} characters total (including spaces).
+- Read like a magazine cover line: punchy, specific, makes a stranger want to click.
+- Title Case or sentence case — never ALL CAPS.
+- ASCII letters, digits, spaces, hyphens, colons, em-dashes, commas, question marks only. NO slashes, quotes, emojis, brackets.
+- NEVER include the brand name, issue/episode number, "Quick Post", "Newsletter", or any category label.
+- DO NOT paraphrase or duplicate the LinkedIn post body — the post is already visible separately. The title should complement, not repeat.
+- No period at the end. No surrounding quotes.
+
+Output ONLY the title text. No explanation, no preface, no quotes.`;
+
+    const userParts: string[] = [];
+    if (description) userParts.push(`Campaign topic:\n${description}`);
+    if (direction) userParts.push(`Editorial direction:\n${direction}`);
+    if (postBody) userParts.push(`Visible post body (DO NOT duplicate or paraphrase):\n${postBody}`);
+    userParts.push("Write ONE compelling title.");
+
+    const raw = await generateText(system, userParts.join("\n\n"), config, {
+      maxTokens: 60,
+      temperature: 0.8,
+    });
+
+    const cleaned = sanitizeTitle(raw);
+    if (cleaned && cleaned.length <= TITLE_MAX) return cleaned;
+    if (cleaned) return clipToMaxChars(cleaned, TITLE_MAX);
+    return fallbackClipped;
+  } catch (err) {
+    console.warn("[pdf-carousel] generateLinkedInDocumentTitle fell back:", err);
+    return fallbackClipped;
+  }
+}
+
+/**
+ * Convert a human-readable title to a filename-safe form, preserving case
+ * and word spacing. ASCII letters/digits/spaces/hyphens only, with `.pdf`.
+ */
+export function toPdfFilename(title: string): string {
+  const base =
+    sanitizeFilename(title).slice(0, TITLE_MAX).replace(/\s+$/, "").trim() ||
+    "Carousel";
+  return `${base}.pdf`;
+}
+
+/**
+ * Bundle: produce both the LinkedIn `documentTitle` (no extension) and the
+ * matching PDF filename. Use at every LinkedIn carousel publish/sync site.
+ */
+export async function prepareLinkedInPdfMetadata(args: {
+  campaignDescription: string | null | undefined;
+  editorialDirection: string | null | undefined;
+  postContent: string | null | undefined;
+  brand: Pick<Brand, "anthropicApiKeyLabel"> | null | undefined;
+}): Promise<{ documentTitle: string; filename: string }> {
+  const documentTitle = await generateLinkedInDocumentTitle(args);
+  return { documentTitle, filename: toPdfFilename(documentTitle) };
+}
+
+function sanitizeTitle(raw: string): string {
+  // Strip surrounding quotes, code fences, leading "Title:" prefixes, trailing periods.
+  let s = raw.trim();
+  s = s.replace(/^```[a-z]*\n?|```$/g, "").trim();
+  s = s.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
+  s = s.replace(/^(?:title|headline|tagline)\s*:\s*/i, "").trim();
+  s = s.replace(/\.+$/g, "").trim();
+  // Collapse internal whitespace.
+  s = s.replace(/\s+/g, " ");
+  // Drop disallowed chars while keeping common punctuation.
+  s = s.replace(/[\\\/"`~^*{}\[\]<>|=+@#$%]/g, "");
+  // Normalise smart quotes / em-dashes that survived.
+  s = s.replace(/[“”]/g, "").replace(/[‘’]/g, "'");
+  return s.trim();
+}
+
+function sanitizeFilename(title: string): string {
+  // Filename-friendly: drop punctuation that's hostile across filesystems &
+  // URLs, but keep spaces and case to stay human-readable.
+  return title
+    .replace(/[\\\/:"*?<>|]/g, "")
+    .replace(/[—–]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function clipToMaxChars(s: string, maxLen: number): string {
+  if (s.length <= maxLen) return s;
+  const cut = s.slice(0, maxLen);
+  const lastSpace = cut.lastIndexOf(" ");
+  if (lastSpace > maxLen * 0.5) return cut.slice(0, lastSpace).replace(/[,;:\-—]+$/, "").trim();
+  return cut.trim();
+}
 
 /**
  * Assemble multiple images into a PDF document for LinkedIn carousel posts.

@@ -12,7 +12,9 @@ const PORT = 3025;
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const slide = url.searchParams.get("slide") ?? "A";
-  if (!["A", "2a", "2b", "C"].includes(slide)) {
+  // Inner slides are dynamic: any number of `iN` (i0, i1, …) is valid.
+  // Cover/CTA stay literal.
+  if (!(slide === "A" || slide === "C" || /^i\d+$/.test(slide))) {
     return NextResponse.json({ error: "Invalid slide" }, { status: 400 });
   }
 

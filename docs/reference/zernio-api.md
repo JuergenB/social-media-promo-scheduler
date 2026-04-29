@@ -81,6 +81,32 @@ See `src/app/api/webhooks/zernio/route.ts`. Zernio emits `post.scheduled`, `post
 
 ---
 
+## LinkedIn document title (PDF carousel)
+
+LinkedIn surfaces a visible filename on the post card / Featured tile (truncates near 55-60 visible chars). The wire format exposes a separate display title that overrides the filename, but our installed SDK (`@getlatedev/node@0.1.7`) does not type it. **Latest SDK is `0.2.100`** — the typings there add `LinkedInPlatformData.documentTitle?: string` and `MediaItem.title?: string`.
+
+**Resolution order (per Zernio docs surfaced via 0.2.100 typings):**
+
+1. `platforms[].platformSpecificData.documentTitle` (LinkedIn-only)
+2. `mediaItems[].title`
+3. `mediaItems[].filename`
+
+**Pass-through works on 0.1.7:** `createPost` body is serialised verbatim with `JSON.stringify` (`@hey-api/client-fetch`), so adding `documentTitle` to a `Record<string, unknown>` PSD object reaches Zernio. We do this at every LinkedIn carousel publish/sync site:
+
+```ts
+const psd: Record<string, unknown> = {};
+if (post.firstComment) psd.firstComment = post.firstComment;
+if (platform === "linkedin" && documentTitle) {
+  psd.documentTitle = documentTitle;  // smuggled — not in 0.1.7 types
+}
+```
+
+**Source of the title:** AI-generated fresh per publish via `prepareLinkedInPdfMetadata()` in `src/lib/pdf-carousel.ts`. Prompt explicitly excludes brand name, issue number, and post-type labels — output is a 6-10 word magazine-cover line that complements (not duplicates) the post body. Falls back to the campaign description's first sentence if the Anthropic call fails.
+
+**SDK upgrade ticket:** tracked separately — once typed via `0.2.100` we can drop the cast.
+
+---
+
 ## Ads API (live-probed, gated by add-on)
 
 **Status:** Zernio shipped a paid-ads API in April 2026. We have **not integrated it yet**. The current `LATE_API_KEY` (Dominate/AppSumo plan) does **not** have access — every `/v1/ads/*` endpoint returns `HTTP 403 {"error":"Ads add-on required"}`. Activating ads requires purchasing the Ads Add-On as a billing line item (separate from the base plan); the Dominate/lifetime plan does not include it.

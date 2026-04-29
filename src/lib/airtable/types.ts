@@ -29,6 +29,10 @@ export interface Brand {
   logoRectangularLight: string | null;
   /** Vercel Blob URL for wordmark/horizontal logo for use over dark backgrounds. */
   logoRectangularDark: string | null;
+  /** Vercel Blob URL for full-color square logo. Used in the brand switcher and anywhere a recognizable color mark is preferred over the B&W transparents. */
+  logoColorSquare: string | null;
+  /** Vercel Blob URL for full-color rectangular/wordmark logo. */
+  logoColorRect: string | null;
   /** Per-brand tone dimension settings (8 dimensions, 1-10 scale each). */
   toneDimensions?: ToneDimensions;
   /** Short additional tone notes (1-2 sentences). */
@@ -47,6 +51,8 @@ export interface Brand {
   lnkBioClientSecretLabel?: string | null;
   /** When true, source images outside a platform's valid aspect range are outpainted (via Replicate Bria) to the nearest valid ratio instead of center-cropped. Preserves all original detail; costs ~$0.02–0.04/image. Editorial brands on; art brands off. */
   outpaintInsteadOfCrop?: boolean;
+  /** Public URL surfaced as the destination of subscribe CTAs (e.g. cover-generator orphan card on LinkedIn slides). Empty string when not configured — subscribe cells fall back to a generic copy. */
+  subscribeUrl?: string;
   status: "Active" | "Inactive";
 }
 

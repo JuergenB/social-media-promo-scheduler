@@ -11,24 +11,30 @@ import { cn } from "@/lib/utils";
 import type { Brand } from "@/lib/airtable/types";
 
 export type LogoSlot =
+  | "color-square"
   | "light-square"
   | "dark-square"
+  | "color-rect"
   | "light-rect"
   | "dark-rect";
+
+type PreviewBg = "light" | "dark" | "checker";
 
 interface SlotDef {
   slot: LogoSlot;
   label: string;
   helper: string;
-  /** Background swatch behind the preview — opposite of the logo's intended bg. */
-  previewBg: "light" | "dark";
+  /** Background swatch behind the preview. */
+  previewBg: PreviewBg;
   /** Aspect class (Tailwind) for the drop target. */
   aspect: string;
   /** Map to the camelCase Brand field that stores this slot's URL. */
   brandField: keyof Pick<
     Brand,
+    | "logoColorSquare"
     | "logoTransparentDark" // light-square (logo art is dark, lives on light bg)
     | "logoTransparentLight" // dark-square (logo art is light, lives on dark bg)
+    | "logoColorRect"
     | "logoRectangularLight" // light-rect (wordmark for light bg)
     | "logoRectangularDark" // dark-rect (wordmark for dark bg)
   >;
@@ -36,33 +42,49 @@ interface SlotDef {
 
 const SLOTS: SlotDef[] = [
   {
+    slot: "color-square",
+    label: "Color",
+    helper: "Full-color square logo. Used in the brand switcher.",
+    previewBg: "checker",
+    aspect: "aspect-square",
+    brandField: "logoColorSquare",
+  },
+  {
     slot: "light-square",
-    label: "Square — Light Background",
-    helper: "Dark/black logo art for placement on light backgrounds.",
+    label: "On Light",
+    helper: "Dark/black logo art for light backgrounds.",
     previewBg: "light",
     aspect: "aspect-square",
     brandField: "logoTransparentDark",
   },
   {
     slot: "dark-square",
-    label: "Square — Dark Background",
-    helper: "Light/white logo art for placement on dark backgrounds.",
+    label: "On Dark",
+    helper: "Light/white logo art for dark backgrounds.",
     previewBg: "dark",
     aspect: "aspect-square",
     brandField: "logoTransparentLight",
   },
   {
+    slot: "color-rect",
+    label: "Color",
+    helper: "Full-color rectangular wordmark.",
+    previewBg: "checker",
+    aspect: "aspect-[2/1]",
+    brandField: "logoColorRect",
+  },
+  {
     slot: "light-rect",
-    label: "Rectangular — Light Background",
-    helper: "Wordmark or horizontal logo for use over light backgrounds.",
+    label: "On Light",
+    helper: "Wordmark for light backgrounds.",
     previewBg: "light",
     aspect: "aspect-[2/1]",
     brandField: "logoRectangularLight",
   },
   {
     slot: "dark-rect",
-    label: "Rectangular — Dark Background",
-    helper: "Wordmark or horizontal logo for use over dark backgrounds.",
+    label: "On Dark",
+    helper: "Wordmark for dark backgrounds.",
     previewBg: "dark",
     aspect: "aspect-[2/1]",
     brandField: "logoRectangularDark",
@@ -76,6 +98,17 @@ const ALLOWED_MIME = [
   "image/webp",
   "image/svg+xml",
 ];
+
+function previewBgClasses(previewBg: PreviewBg): string {
+  if (previewBg === "light") return "bg-white border-zinc-300";
+  if (previewBg === "dark") return "bg-zinc-900 border-zinc-700";
+  return "bg-checker border-zinc-300";
+}
+
+function placeholderTextClass(previewBg: PreviewBg): string {
+  if (previewBg === "dark") return "text-zinc-400";
+  return "text-zinc-500";
+}
 
 function LogoDropZone({
   brand,
@@ -149,24 +182,22 @@ function LogoDropZone({
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <Label className="text-xs font-medium text-foreground">{def.label}</Label>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between gap-1">
+        <Label className="text-[11px] font-medium text-foreground">{def.label}</Label>
         {currentUrl && (
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 text-[11px] px-2 text-muted-foreground hover:text-destructive"
+            className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
             onClick={handleDelete}
             disabled={!!busy}
+            title="Remove"
           >
             {busy === "delete" ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
-              <>
-                <Trash2 className="h-3 w-3 mr-1" />
-                Remove
-              </>
+              <Trash2 className="h-3 w-3" />
             )}
           </Button>
         )}
@@ -181,11 +212,9 @@ function LogoDropZone({
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
         className={cn(
-          "block w-full rounded-lg border-2 border-dashed transition-colors cursor-pointer overflow-hidden relative",
+          "block w-full rounded-md border-2 border-dashed transition-colors cursor-pointer overflow-hidden relative",
           def.aspect,
-          def.previewBg === "light"
-            ? "bg-white border-zinc-300"
-            : "bg-zinc-900 border-zinc-700",
+          previewBgClasses(def.previewBg),
           dragOver && "border-primary ring-2 ring-primary/40",
           busy && "opacity-60 cursor-wait"
         )}
@@ -205,7 +234,7 @@ function LogoDropZone({
         />
 
         {currentUrl ? (
-          <div className="absolute inset-0 flex items-center justify-center p-4">
+          <div className="absolute inset-0 flex items-center justify-center p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={currentUrl}
@@ -216,39 +245,38 @@ function LogoDropZone({
         ) : (
           <div
             className={cn(
-              "absolute inset-0 flex flex-col items-center justify-center text-center p-3",
-              def.previewBg === "light" ? "text-zinc-500" : "text-zinc-400"
+              "absolute inset-0 flex flex-col items-center justify-center text-center p-2",
+              placeholderTextClass(def.previewBg)
             )}
           >
-            <ImageIcon className="h-6 w-6 mb-1.5 opacity-60" />
-            <p className="text-xs font-medium">Drag &amp; drop</p>
-            <p className="text-[10px] opacity-70">or click to browse</p>
-            <p className="text-[10px] mt-1 opacity-50">PNG, JPG, WEBP, SVG &middot; max 5MB</p>
+            <ImageIcon className="h-4 w-4 mb-0.5 opacity-60" />
+            <p className="text-[10px] font-medium leading-tight">Drop image</p>
+            <p className="text-[9px] opacity-70 leading-tight">or click</p>
           </div>
         )}
 
         {busy === "upload" && (
           <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
-            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
           </div>
         )}
       </label>
 
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] text-muted-foreground leading-tight">{def.helper}</p>
+      <div className="flex items-center justify-between gap-1 min-h-[18px]">
+        <p className="text-[9px] text-muted-foreground leading-tight line-clamp-2">{def.helper}</p>
         {currentUrl && (
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 text-[11px] px-2 text-muted-foreground"
+            className="h-5 w-5 p-0 shrink-0 text-muted-foreground"
             onClick={(e) => {
               e.preventDefault();
               inputRef.current?.click();
             }}
             disabled={!!busy}
+            title="Replace"
           >
-            <Upload className="h-3 w-3 mr-1" />
-            Replace
+            <Upload className="h-3 w-3" />
           </Button>
         )}
       </div>
@@ -260,6 +288,9 @@ export function LogoManager({ brand }: { brand: Brand }) {
   const queryClient = useQueryClient();
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["brands"] });
 
+  const squareSlots = SLOTS.filter((s) => s.aspect === "aspect-square");
+  const rectSlots = SLOTS.filter((s) => s.aspect === "aspect-[2/1]");
+
   return (
     <Card>
       <CardContent className="p-5">
@@ -270,20 +301,43 @@ export function LogoManager({ brand }: { brand: Brand }) {
           </Label>
         </div>
         <p className="text-xs text-muted-foreground mb-4">
-          Upload square and rectangular logo variants for use across cover slides,
-          carousels, and other generated assets. Each slot is paired with a
-          contrasting preview background so you can verify legibility.
+          Upload color, light-bg, and dark-bg variants for both square and rectangular shapes.
+          The color square is used in the brand switcher; the transparent variants are used on
+          generated cover slides and carousels.
         </p>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {SLOTS.map((def) => (
-            <LogoDropZone
-              key={def.slot}
-              brand={brand}
-              def={def}
-              onChanged={refresh}
-            />
-          ))}
+        <div className="space-y-5">
+          <div>
+            <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+              Square (1:1)
+            </Label>
+            <div className="grid grid-cols-3 gap-3">
+              {squareSlots.map((def) => (
+                <LogoDropZone
+                  key={def.slot}
+                  brand={brand}
+                  def={def}
+                  onChanged={refresh}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 block">
+              Rectangular (2:1)
+            </Label>
+            <div className="grid grid-cols-3 gap-3">
+              {rectSlots.map((def) => (
+                <LogoDropZone
+                  key={def.slot}
+                  brand={brand}
+                  def={def}
+                  onChanged={refresh}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

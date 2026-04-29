@@ -92,3 +92,42 @@ export async function deleteImage(url: string): Promise<void> {
 export function isBlobUrl(url: string): boolean {
   return url.includes(".public.blob.vercel-storage.com/");
 }
+
+/**
+ * Mirror an arbitrary remote image URL into Vercel Blob and return the new
+ * permanent Blob URL. Skips the round-trip if the URL is already on Blob,
+ * empty, or not http(s). Never throws — returns empty string on failure so
+ * the caller can fall back to writing the original URL (or nothing) without
+ * breaking the surrounding flow.
+ *
+ * Use this anywhere we'd otherwise persist a third-party-hosted image URL
+ * (Airtable signed URLs, Substack/CMS hero images, og:image scrapes) into
+ * a long-lived field — those URLs expire or get revoked.
+ */
+export async function mirrorRemoteImageToBlob(
+  remoteUrl: string | null | undefined,
+  prefix: "campaigns" | "posts" | "brands",
+  entityId: string,
+): Promise<string> {
+  if (!remoteUrl) return "";
+  if (isBlobUrl(remoteUrl)) return remoteUrl;
+  if (!/^https?:\/\//i.test(remoteUrl)) return "";
+  try {
+    const resp = await fetch(remoteUrl);
+    if (!resp.ok) {
+      console.warn(
+        `[mirror] ${prefix}/${entityId}: source fetch ${resp.status} for ${remoteUrl.slice(0, 120)}`,
+      );
+      return "";
+    }
+    const ct = resp.headers.get("content-type") ?? "image/jpeg";
+    const buf = Buffer.from(await resp.arrayBuffer());
+    return await uploadImage(prefix, entityId, buf, ct);
+  } catch (e) {
+    console.warn(
+      `[mirror] ${prefix}/${entityId}: failed for ${remoteUrl.slice(0, 120)}:`,
+      (e as Error).message,
+    );
+    return "";
+  }
+}

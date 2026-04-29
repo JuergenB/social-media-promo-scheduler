@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listRecords, createRecord, getRecord } from "@/lib/airtable/client";
+import { listRecords, createRecord, updateRecord, getRecord } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess, hasBrandAccess } from "@/lib/brand-access";
+import { mirrorRemoteImageToBlob } from "@/lib/blob-storage";
 import type { Campaign, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -200,6 +201,30 @@ export async function POST(request: NextRequest) {
       ...(cadenceJson ? { "Platform Cadence": cadenceJson } : {}),
       ...(body.voiceIntensity != null ? { Tone: body.voiceIntensity } : {}),
     });
+
+    // Mirror the scraped og:image into Vercel Blob so the campaign's
+    // Image URL is permanent. Some CMS-served URLs (Substack, Airtable-
+    // backed sites) expire or rotate; saving the raw scrape URL leaves
+    // the thumbnail and downstream "use as social media campaign hero"
+    // fragile. Done after createRecord so the entityId for the Blob
+    // path matches the new campaign. Fire-and-forget — the response
+    // doesn't wait on it; the row gets patched once the mirror finishes.
+    if (metadata.imageUrl) {
+      mirrorRemoteImageToBlob(metadata.imageUrl, "campaigns", record.id)
+        .then((mirrored) => {
+          if (mirrored) {
+            return updateRecord("Campaigns", record.id, {
+              "Image URL": mirrored,
+            });
+          }
+        })
+        .catch((e) =>
+          console.warn(
+            `[campaigns POST] mirror failed for ${record.id}:`,
+            (e as Error).message,
+          ),
+        );
+    }
 
     return NextResponse.json({ campaign: record }, { status: 201 });
   } catch (error) {

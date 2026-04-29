@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { createBrandClient } from "@/lib/late-api/client";
-import { assembleCarouselPDF } from "@/lib/pdf-carousel";
+import { assembleCarouselPDF, prepareLinkedInPdfMetadata } from "@/lib/pdf-carousel";
 import { ensureAspectRatio } from "@/lib/image-crop";
 import { parseMediaItems } from "@/lib/media-items";
 import { SLIDE_PLATFORMS } from "@/lib/platform-constants";
@@ -11,6 +11,8 @@ interface CampaignFields {
   Name: string;
   Brand: string[];
   Status: string;
+  Description?: string;
+  "Editorial Direction"?: string;
 }
 
 interface BrandFields {
@@ -18,6 +20,7 @@ interface BrandFields {
   "Zernio Profile ID": string;
   Timezone?: string;
   "Outpaint Instead of Crop"?: boolean;
+  "Anthropic API Key Label"?: string;
 }
 
 interface PostFields {
@@ -157,11 +160,19 @@ export async function POST(
 
         // LinkedIn carousel: multiple images → assemble PDF document (with captions)
         let mediaItems: Array<{ type: "image" | "document"; url: string; filename?: string }>;
+        let linkedInDocumentTitle: string | undefined;
         if (platform === "linkedin" && imageUrls.length > 1) {
           const pdfBuffer = await assembleCarouselPDF(postMediaItems);
+          const meta = await prepareLinkedInPdfMetadata({
+            campaignDescription: campaign.fields.Description,
+            editorialDirection: campaign.fields["Editorial Direction"],
+            postContent: post.fields.Content,
+            brand: { anthropicApiKeyLabel: brandRecord.fields["Anthropic API Key Label"] || null },
+          });
+          linkedInDocumentTitle = meta.documentTitle;
           const { data: presignData } = await client.media.getMediaPresignedUrl({
             body: {
-              filename: `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`,
+              filename: meta.filename,
               contentType: "application/pdf",
               size: pdfBuffer.length,
             },
@@ -172,8 +183,7 @@ export async function POST(
               body: new Uint8Array(pdfBuffer),
               headers: { "Content-Type": "application/pdf" },
             });
-            const pdfDisplayName = `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`;
-            mediaItems = [{ type: "document", url: presignData.publicUrl!, filename: pdfDisplayName }];
+            mediaItems = [{ type: "document", url: presignData.publicUrl!, filename: meta.filename }];
           } else {
             // Fallback to individual images if presign fails
             mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
@@ -191,10 +201,13 @@ export async function POST(
           accountId: (account as { _id: string })._id,
         };
 
-        if (post.fields["First Comment"]) {
-          platformEntry.platformSpecificData = {
-            firstComment: post.fields["First Comment"],
-          };
+        const psd: Record<string, unknown> = {};
+        if (post.fields["First Comment"]) psd.firstComment = post.fields["First Comment"];
+        if (platform === "linkedin" && linkedInDocumentTitle) {
+          psd.documentTitle = linkedInDocumentTitle;
+        }
+        if (Object.keys(psd).length > 0) {
+          platformEntry.platformSpecificData = psd;
         }
 
         const createBody: Record<string, unknown> = {

@@ -35,6 +35,8 @@ interface BrandFields {
   "Logo Transparent Dark": string;
   "Logo Rectangular Light": string;
   "Logo Rectangular Dark": string;
+  "Logo Color Square": string;
+  "Logo Color Rectangular": string;
   "Tone Dimensions": string;
   "Tone Notes": string;
   "Default Voice Intensity": number;
@@ -43,6 +45,7 @@ interface BrandFields {
   "Lnk.Bio Username": string;
   "Lnk.Bio Client ID Label": string;
   "Lnk.Bio Client Secret Label": string;
+  "Subscribe URL": string;
   Status: "Active" | "Inactive";
 }
 
@@ -85,6 +88,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     logoTransparentDark: r.fields["Logo Transparent Dark"] || null,
     logoRectangularLight: r.fields["Logo Rectangular Light"] || null,
     logoRectangularDark: r.fields["Logo Rectangular Dark"] || null,
+    logoColorSquare: r.fields["Logo Color Square"] || null,
+    logoColorRect: r.fields["Logo Color Rectangular"] || null,
     toneDimensions: parseToneDimensions(r.fields["Tone Dimensions"]),
     toneNotes: r.fields["Tone Notes"] || undefined,
     defaultVoiceIntensity: r.fields["Default Voice Intensity"] ?? undefined,
@@ -93,6 +98,7 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     lnkBioUsername: r.fields["Lnk.Bio Username"] || null,
     lnkBioClientIdLabel: r.fields["Lnk.Bio Client ID Label"] || null,
     lnkBioClientSecretLabel: r.fields["Lnk.Bio Client Secret Label"] || null,
+    subscribeUrl: r.fields["Subscribe URL"] || "",
     status: r.fields.Status || "Active",
   };
 }
@@ -156,6 +162,9 @@ export async function PATCH(request: NextRequest) {
       logoTransparentDark: "Logo Transparent Dark",
       logoRectangularLight: "Logo Rectangular Light",
       logoRectangularDark: "Logo Rectangular Dark",
+      logoColorSquare: "Logo Color Square",
+      logoColorRect: "Logo Color Rectangular",
+      subscribeUrl: "Subscribe URL",
       status: "Status",
     };
 
