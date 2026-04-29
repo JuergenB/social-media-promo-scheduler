@@ -198,6 +198,21 @@ export async function POST(
       return inSameBrand && !inThisCampaign && occupiesSlot && !!p.fields["Scheduled Date"];
     });
 
+    // Count externals that actually fall WITHIN the redistribute window — these
+    // are the ones that will affect placement. Out-of-window externals are
+    // silently dropped by the scheduler's per-day lookup; counting them in the
+    // displayed stat would overstate collision pressure.
+    const windowStartMs = startDate.getTime();
+    const windowEndMs = new Date(startDate.getTime() + durationDays * 86_400_000).getTime();
+    const inWindowExternalCount = externalPosts.reduce((acc, p) => {
+      const t = new Date(p.fields["Scheduled Date"]!).getTime();
+      return t >= windowStartMs && t < windowEndMs ? acc + 1 : acc;
+    }, 0);
+    const inWindowReservationCount = thisCampaignReservations.reduce((acc, p) => {
+      const t = new Date(p.fields["Scheduled Date"]!).getTime();
+      return t >= windowStartMs && t < windowEndMs ? acc + 1 : acc;
+    }, 0);
+
     // Build excludedDates: per platform, count of slots taken per day key
     // (UTC component, to match what schedulePostsAlgorithm reads).
     const excludedDates = new Map<string, Map<string, number>>();
@@ -260,8 +275,15 @@ export async function POST(
         durationDays,
         distributionBias,
         participantCount: participants.length,
-        externalCollisionCount: externalPosts.length,
-        reservationCount: thisCampaignReservations.length,
+        // In-window collision counts are what the scheduler actually consults
+        // and what affects placement. The full brand-wide totals are returned
+        // separately for diagnostics.
+        externalCollisionCount: inWindowExternalCount,
+        reservationCount: inWindowReservationCount,
+        diagnostics: {
+          totalBrandWideExternalCount: externalPosts.length,
+          totalReservationCount: thisCampaignReservations.length,
+        },
         mapping,
       });
     }
