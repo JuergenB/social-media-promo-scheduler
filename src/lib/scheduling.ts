@@ -53,6 +53,19 @@ export interface ScheduleInput {
    * via `.split("T")[0]`). Inner value: number of posts already on that day.
    */
   excludedDates?: Map<string, Map<string, number>>;
+  /**
+   * How to interpret existing posts in `excludedDates`.
+   *
+   * - `true` (additive — same-campaign expansion, #84 Phase 2): existing posts
+   *   contribute to the curve's total target distribution. New posts use
+   *   greedy deficit-fill so the combined existing+new shape approximates
+   *   scheduling totalPostCount from scratch.
+   * - `false` (default — external collisions, #178 redistribute): existing
+   *   posts are treated as pure collision constraints (other campaigns'
+   *   posts, reserved slots). They count toward `maxPerDay` caps but do
+   *   NOT shape the curve. Phase A midpoint-quantile sampling is used.
+   */
+  additiveMode?: boolean;
 }
 
 // ── Resolved cadence (internal) ───────────────────────────────────────
@@ -246,7 +259,15 @@ function findAvailableDayIdx(
  * 4. Assign specific times using organic variation
  */
 export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
-  const { posts, startDate, durationDays, bias, cadence: cadenceConfig, excludedDates } = input;
+  const {
+    posts,
+    startDate,
+    durationDays,
+    bias,
+    cadence: cadenceConfig,
+    excludedDates,
+    additiveMode = false,
+  } = input;
 
   if (posts.length === 0 || durationDays <= 0) return [];
 
@@ -325,8 +346,14 @@ export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
       placedCount += 1;
     };
 
-    if (totalExisting === 0) {
-      // ── Phase A: first-time scheduling — midpoint quantile + CDF inversion
+    if (totalExisting === 0 || !additiveMode) {
+      // ── Phase A path: midpoint quantile + CDF inversion.
+      //
+      // Used for first-time scheduling and for `additiveMode: false` (e.g.
+      // #178 redistribute). When existing posts are present but additiveMode
+      // is off, they're treated as external collision constraints — the
+      // pre-loaded dayCounts still apply maxPerDay caps via the walk-outward
+      // logic, but the curve target is computed for newPostCount only.
       const cumulative: number[] = [];
       let cum = 0;
       for (const w of curveNormalized) {
