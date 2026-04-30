@@ -1,12 +1,17 @@
 /**
- * Phase A scheduling-trust tests — issue #207.
+ * Scheduling tests.
  *
- * Drives the algorithm in `src/lib/scheduling.ts` to verify:
+ * Phase A (issue #207):
  *   - Midpoint quantile sampling (no endpoint forcing → no barbell)
  *   - Front-loaded / Balanced / Back-loaded shapes match intent
  *   - maxPerDay enforced
  *   - minSpacingHours enforced
  *   - Count-aware excludedDates respected
+ *
+ * Phase B (issue #84 Phase 2):
+ *   - Density-aware additive scheduling: when existing posts are present, new
+ *     posts fill curve deficits (residual distribution) rather than piling
+ *     into whatever days happen to be free.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -399,5 +404,287 @@ describe("regression: barbell does not return under randomness", () => {
       firstSum += counts[0];
     }
     expect(lastSum).toBeLessThanOrEqual(firstSum);
+  });
+});
+
+// ── 7. Phase B: density-aware additive scheduling (#84 Phase 2) ──────
+
+// Helper: build excludedDates count map from "post on day d" entries. Uses the
+// same key format the algorithm uses internally (`new Date(start); setDate(d);
+// toISOString().split('T')[0]`) so test inputs match algorithm lookups exactly.
+function makeExisting(start: Date, perDayCounts: Record<number, number>): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const [dStr, count] of Object.entries(perDayCounts)) {
+    const d = Number(dStr);
+    const date = new Date(start);
+    date.setDate(date.getDate() + d);
+    m.set(date.toISOString().split("T")[0], count);
+  }
+  return m;
+}
+
+describe("Phase B: density-aware additive scheduling", () => {
+  it("existing exceeds curve on day 0 → deficit clamps; new posts skip day 0", () => {
+    // maxPerDay big enough to fit both existing and new on day 0 if algo wanted to
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 70,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+    // 5 existing on day 0 — far exceeds front-loaded ideal for total=9 (≈2 on day 0)
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set("instagram", makeExisting(START, { 0: 5 }));
+
+    const slots = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+    });
+    expect(slots).toHaveLength(4);
+
+    // Deficit on day 0 = max(0, ideal-existing) = 0 → no new posts there
+    const onDay0 = slots.filter((s) => dayOffset(s.scheduledDate, START) === 0).length;
+    expect(onDay0).toBe(0);
+  });
+
+  it("existing on late days → residual deficit pushes new posts early (front-loaded)", () => {
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 14,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+    // 4 existing on days 10–13 (the back end). Front-loaded ideal_8 has tiny
+    // weight on those days → existing already saturates them; deficit lives
+    // in days 0–9.
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set("instagram", makeExisting(START, { 10: 1, 11: 1, 12: 1, 13: 1 }));
+
+    const slots = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+    });
+    expect(slots).toHaveLength(4);
+    for (const s of slots) {
+      const off = dayOffset(s.scheduledDate, START);
+      expect(off).toBeLessThan(10);
+    }
+  });
+
+  it("additive shifts new posts later than first-time scheduling when existing clusters early", () => {
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 14,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+    // Existing 1 post on each of days 0–3 (early-cluster)
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set("instagram", makeExisting(START, { 0: 1, 1: 1, 2: 1, 3: 1 }));
+
+    const firstTime = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+    });
+    const additive = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+    });
+
+    const avg = (xs: { scheduledDate: string }[]) =>
+      xs.reduce((s, x) => s + dayOffset(x.scheduledDate, START), 0) / xs.length;
+    expect(avg(additive)).toBeGreaterThan(avg(firstTime));
+  });
+
+  it("acceptance (#84): existing 8 + new 5 ≈ first-time 13 (combined matches curve)", () => {
+    // Permissive cadence: maxPerDay=4, all days, plenty of windows.
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 28,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+
+    // Phase A first-pass: place 8 posts.
+    const first8 = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 8),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+    });
+
+    // Build excludedDates from the first-pass slots, using the algorithm's
+    // own day-key format (UTC component of `start + dayOffset`).
+    const existingPerDay: Record<number, number> = {};
+    for (const s of first8) {
+      const off = dayOffset(s.scheduledDate, START);
+      existingPerDay[off] = (existingPerDay[off] ?? 0) + 1;
+    }
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set("instagram", makeExisting(START, existingPerDay));
+
+    // Phase B additive: place 5 more.
+    const additive5 = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 5),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+    });
+    expect(additive5).toHaveLength(5);
+
+    // Reference: schedule 13 from scratch.
+    const ref13 = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 13),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+    });
+
+    const combined = first8.concat(additive5);
+    const combinedDist = countByDay(combined, START, 14);
+    const refDist = countByDay(ref13, START, 14);
+
+    // Combined day-by-day distribution should be close to scheduling all 13 from scratch
+    const totalAbsDiff = combinedDist.reduce((s, c, i) => s + Math.abs(c - refDist[i]), 0);
+    // 13 posts on 14 days; allow some chunking slack from per-platform maxPerDay walks
+    expect(totalAbsDiff).toBeLessThanOrEqual(6);
+
+    // Combined total must equal the reference total
+    expect(combinedDist.reduce((a, b) => a + b, 0))
+      .toBe(refDist.reduce((a, b) => a + b, 0));
+  });
+
+  it("maxPerDay still enforced in additive mode (no over-cap collisions)", () => {
+    // postsPerWeek=7 with all days active → maxPerDay=1. 5 existing posts on
+    // days 0–4 already saturate those. 5 new posts must not pile on any day
+    // (everything stays at ≤1 per day).
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 7,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon"],
+      },
+    };
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set(
+      "instagram",
+      makeExisting(START, { 0: 1, 1: 1, 2: 1, 3: 1, 4: 1 }),
+    );
+
+    const slots = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 5),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+    });
+    expect(slots).toHaveLength(5);
+
+    // No new post on the 5 already-occupied days
+    for (const s of slots) {
+      const off = dayOffset(s.scheduledDate, START);
+      expect(off).toBeGreaterThanOrEqual(5);
+    }
+    // At most 1 new post per day
+    const perDay = new Map<string, number>();
+    for (const s of slots) {
+      const k = localDayKey(s.scheduledDate);
+      perDay.set(k, (perDay.get(k) ?? 0) + 1);
+    }
+    for (const [, count] of perDay) expect(count).toBeLessThanOrEqual(1);
+  });
+
+  it("minSpacingHours still enforced in additive mode", () => {
+    // postsPerWeek=28 (all days active) → maxPerDay=4 → minSpacingHours=4h.
+    // The 9–19 platform window range comfortably fits 2 posts ≥ 4h apart;
+    // pickTimeWithSpacing should find a non-colliding slot. Existing post
+    // on day 0 has no recorded time (excludedDates only carries counts), so
+    // spacing applies only between newly-placed slots.
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 28,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set("instagram", makeExisting(START, { 0: 1 }));
+
+    const slots = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 6),
+      startDate: START,
+      durationDays: 3,
+      bias: "Balanced",
+      cadence,
+      excludedDates: excluded,
+    });
+    expect(slots).toHaveLength(6);
+
+    const grouped = new Map<string, Date[]>();
+    for (const s of slots) {
+      const day = localDayKey(s.scheduledDate);
+      const arr = grouped.get(day) ?? [];
+      arr.push(new Date(s.scheduledDate));
+      grouped.set(day, arr);
+    }
+    for (const [, dates] of grouped) {
+      if (dates.length < 2) continue;
+      const sorted = dates.sort((a, b) => a.getTime() - b.getTime());
+      for (let i = 1; i < sorted.length; i++) {
+        const diffH = (sorted[i].getTime() - sorted[i - 1].getTime()) / 3_600_000;
+        expect(diffH).toBeGreaterThanOrEqual(4);
+      }
+    }
+  });
+
+  it("no existing posts → identical behavior to Phase A first-time scheduling", () => {
+    // Sanity: when excludedDates is empty/absent, the algorithm must produce
+    // the same shape as Phase A — Phase B's deficit branch is gated on
+    // totalExisting > 0.
+    const platforms = ["instagram"];
+    const cadence = permissiveCadence(platforms);
+
+    const a = schedulePostsAlgorithm({
+      posts: makePosts(platforms, 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+    });
+    // Same call but with an empty Map — should also exercise Phase A path.
+    const bWithEmpty = schedulePostsAlgorithm({
+      posts: makePosts(platforms, 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: new Map([["instagram", new Map()]]),
+    });
+
+    expect(countByDay(a, START, 14)).toEqual(countByDay(bWithEmpty, START, 14));
   });
 });
