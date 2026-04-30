@@ -165,12 +165,49 @@ export function CampaignTimeline({
       <div className="rounded-lg border border-border bg-card p-4 space-y-3">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Campaign Timeline
             </h4>
-            <span className="text-[11px] text-muted-foreground">
-              {scheduledPosts.length} post{scheduledPosts.length !== 1 ? "s" : ""} across {durationDays} days
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
+              {(() => {
+                const parts: React.ReactNode[] = [];
+                const published = scheduledPosts.filter((p) => p.status === "Published").length;
+                const scheduled = scheduledPosts.filter((p) => p.status === "Scheduled").length;
+                const queued = scheduledPosts.filter((p) => p.status === "Queued").length;
+                if (published > 0) {
+                  parts.push(
+                    <span key="published" className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {published} published
+                    </span>,
+                  );
+                }
+                if (scheduled > 0) {
+                  parts.push(
+                    <span key="scheduled" className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                      {scheduled} scheduled
+                    </span>,
+                  );
+                }
+                if (queued > 0) {
+                  parts.push(
+                    <span key="queued" className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      {queued} queued
+                    </span>,
+                  );
+                }
+                parts.push(
+                  <span key="duration">{durationDays} days</span>,
+                );
+                return parts.reduce<React.ReactNode[]>((acc, part, i) => {
+                  if (i > 0) acc.push(<span key={`sep-${i}`} className="text-border">·</span>);
+                  acc.push(part);
+                  return acc;
+                }, []);
+              })()}
             </span>
           </div>
           <div className="flex items-center gap-1">

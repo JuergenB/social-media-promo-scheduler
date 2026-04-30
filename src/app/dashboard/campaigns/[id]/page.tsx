@@ -1564,54 +1564,38 @@ export default function CampaignDetailPage() {
                 />
               )}
 
-              {/* Status summary bar — scheduled/published/queued posts (not shown inline) */}
-              {outOfViewCount > 0 && (
-                <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5 text-xs">
-                  {publishedCount > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      {publishedCount} published
-                    </span>
-                  )}
-                  {scheduledCount > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-indigo-500" />
-                      {scheduledCount} scheduled
-                    </span>
-                  )}
-                  {queuedCount > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-amber-500" />
-                      {queuedCount} queued
-                    </span>
-                  )}
-                  <a
-                    href={`/dashboard/calendar?campaign=${campaignId}`}
-                    className="ml-auto text-primary hover:underline text-xs"
-                  >
-                    View on calendar →
-                  </a>
-                </div>
-              )}
+              {/* Status counts (published / scheduled / queued) and the
+                  Calendar link both moved into the timeline strip's header
+                  to remove redundancy. The standalone bar that used to live
+                  here was the third "View in Calendar" entry point on the
+                  page. */}
 
-              {/* "Running Low" / "Generate More" alert */}
+              {/* Queue-empty alert — only shows once the campaign has run out
+                  of pre-scheduled content (i.e., no future-dated Scheduled or
+                  Queued posts) AND the campaign window is still open. The
+                  previous trigger (approved < 30% of remaining slots) fired
+                  even when many Scheduled posts were still queued ahead,
+                  which is a false alarm — those Scheduled posts WILL fill
+                  the curve as their dates come up. */}
               {campaign && (campaign.status === "Review" || campaign.status === "Active") && (() => {
-                const cadence = campaign.platformCadence;
-                if (!cadence) return null;
                 const startDate = campaign.startDate ? new Date(campaign.startDate + "T00:00:00") : new Date();
                 const endDate = new Date(startDate);
                 endDate.setDate(endDate.getDate() + (campaign.durationDays || 90));
                 const now = new Date();
-                const remainingMs = endDate.getTime() - now.getTime();
-                if (remainingMs <= 0) return null;
-                const remainingWeeks = Math.max(1, remainingMs / (7 * 86400000));
-                const totalSlotsRemaining = Object.values(cadence).reduce(
-                  (sum, entry) => sum + (entry.postsPerWeek * remainingWeeks), 0
+                if (now >= endDate) return null; // campaign window done — banner irrelevant
+
+                // Hide banner while there are still future-dated Scheduled/Queued
+                // posts. The campaign is humming along; nothing to alert about.
+                const futureQueueExists = posts.some((p) =>
+                  ["Scheduled", "Queued"].includes(p.status) &&
+                  p.scheduledDate &&
+                  new Date(p.scheduledDate) > now,
                 );
-                const approvedAvailable = approvedCount;
-                const isUrgent = approvedAvailable === 0 && totalSlotsRemaining > 0;
-                const isLow = approvedAvailable < totalSlotsRemaining * 0.3;
-                if (!isUrgent && !isLow) return null;
+                if (futureQueueExists) return null;
+
+                // Queue is empty (last scheduled post has run) but window is
+                // still open. Differentiate two states by what's available.
+                const isUrgent = approvedCount === 0;
                 return (
                   <div className={cn(
                     "flex items-center justify-between rounded-lg border px-4 py-3",
@@ -1621,9 +1605,9 @@ export default function CampaignDetailPage() {
                   )}>
                     <div className="text-xs">
                       {isUrgent ? (
-                        <><strong>Queue empty</strong> — generate posts to keep your campaign active</>
+                        <><strong>Queue empty</strong> — your last scheduled post has run. Generate more to keep the campaign going.</>
                       ) : (
-                        <><strong>Running low</strong> — {approvedAvailable} approved, ~{Math.round(totalSlotsRemaining)} slots remaining</>
+                        <><strong>Queue empty</strong> — your last scheduled post has run. {approvedCount} approved {approvedCount === 1 ? "post is" : "posts are"} ready to schedule.</>
                       )}
                     </div>
                     <Button
