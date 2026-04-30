@@ -889,7 +889,7 @@ export default function CampaignDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold truncate flex-1">{displayName}</h1>
+        <h1 className="text-xl font-bold flex-1 break-words">{displayName}</h1>
         <CampaignHeaderActions
           campaign={campaign}
           posts={posts}
@@ -1019,7 +1019,7 @@ export default function CampaignDetailPage() {
             {/* Title row */}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold truncate">{displayName}</h2>
+                <h2 className="text-lg font-semibold break-words">{displayName}</h2>
                 <a
                   href={campaign.url}
                   target="_blank"
@@ -3190,50 +3190,89 @@ function CampaignHeaderActions({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Campaign actions">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {isArchived ? (
-            <DropdownMenuItem onClick={handleUnarchive}>
-              <ArchiveRestore className="h-4 w-4 mr-2" /> Unarchive
-            </DropdownMenuItem>
-          ) : (
-            <>
-              <DropdownMenuItem
-                onClick={() => setRedistributeOpen(true)}
-                disabled={!canRedistribute}
-              >
-                <CalendarRange className="h-4 w-4 mr-2" /> Redistribute…
-                {canRedistribute && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {counts.approved + counts.scheduled}
-                  </span>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCleanup} disabled={counts.pending === 0}>
-                <Eraser className="h-4 w-4 mr-2" /> Clean up drafts
-                {counts.pending > 0 && (
-                  <span className="ml-auto text-xs text-muted-foreground">{counts.pending}</span>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setArchiveOpen(true)}>
-                <Archive className="h-4 w-4 mr-2" /> Archive
-              </DropdownMenuItem>
-            </>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={onDeleteRequest}
+      {/* Page-level campaign actions — exposed inline rather than hidden in
+          a 3-dot menu (per user request). Delete stays behind a small
+          overflow menu as a destructive-action guardrail. */}
+      <div className="flex items-center gap-1 shrink-0">
+        {isArchived ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUnarchive}
+            disabled={busy === "unarchive"}
+            className="h-8 text-xs"
           >
-            <Trash2 className="h-4 w-4 mr-2" /> Delete…
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {busy === "unarchive" ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <ArchiveRestore className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Unarchive
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRedistributeOpen(true)}
+              disabled={!canRedistribute}
+              className="h-8 text-xs"
+            >
+              <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+              Redistribute
+              {canRedistribute && (
+                <Badge variant="secondary" className="ml-1.5 px-1 py-0 text-[10px] font-medium">
+                  {counts.approved + counts.scheduled}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCleanup}
+              disabled={counts.pending === 0 || busy === "cleanup"}
+              className="h-8 text-xs"
+            >
+              {busy === "cleanup" ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Eraser className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Clean up
+              {counts.pending > 0 && (
+                <Badge variant="secondary" className="ml-1.5 px-1 py-0 text-[10px] font-medium">
+                  {counts.pending}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setArchiveOpen(true)}
+              className="h-8 text-xs"
+            >
+              <Archive className="h-3.5 w-3.5 mr-1.5" />
+              Archive
+            </Button>
+          </>
+        )}
+        {/* Destructive-action guardrail: Delete stays in a one-item overflow */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More campaign actions">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={onDeleteRequest}
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Delete…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <ArchiveCampaignDialog
         campaign={campaign}
