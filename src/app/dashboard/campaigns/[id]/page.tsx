@@ -22,6 +22,11 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -403,6 +408,13 @@ export default function CampaignDetailPage() {
   // Hero image upload / paste URL
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroUrlInput, setHeroUrlInput] = useState("");
+  // Slice 2: identity strip — collapsed by default. ▾ expands the
+  // page excerpt + editorial direction (rare reading, not always-on).
+  const [identityExpanded, setIdentityExpanded] = useState(false);
+  // Slice 2: image-actions Popover — Upload / Paste URL / Remove live in a
+  // popover triggered by clicking the thumbnail (no longer hover-overlay
+  // buttons since the thumbnail is too small for three inline buttons).
+  const [imagePopoverOpen, setImagePopoverOpen] = useState(false);
   const [showHeroUrlInput, setShowHeroUrlInput] = useState(false);
 
   const setHeroImageUrl = async (url: string) => {
@@ -930,96 +942,138 @@ export default function CampaignDetailPage() {
         "overflow-hidden !py-0 !gap-0",
         showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && "rounded-b-none border-b-0",
       )}>
-        <div className="grid grid-cols-1 md:grid-cols-3">
-          {/* Left col: cover image at 4:3, with the same hover overlay
-              (Change / Paste URL / Remove) as before. Tall images are
-              cover-centered; wider images crop on the sides. */}
-          <div className="relative group md:col-span-1">
-            {campaign.imageUrl ? (
-              <div className="aspect-[4/3] overflow-hidden bg-muted">
-                <img
-                  src={campaign.imageUrl}
-                  alt=""
-                  className="w-full h-full object-cover object-center"
-                />
-              </div>
-            ) : (
-              <div className="aspect-[4/3] bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-                <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
-              </div>
-            )}
-            {/* Upload / paste URL overlay */}
-            {showHeroUrlInput ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/50 px-4">
-                <div className="flex w-full max-w-md gap-2" onClick={(e) => e.stopPropagation()}>
-                  <Input
-                    type="url"
-                    placeholder="Paste image URL..."
-                    value={heroUrlInput}
-                    onChange={(e) => setHeroUrlInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") setHeroImageUrl(heroUrlInput);
-                      if (e.key === "Escape") { setShowHeroUrlInput(false); setHeroUrlInput(""); }
-                    }}
-                    className="bg-white text-zinc-900 text-sm h-8"
-                    autoFocus
+        {/* Compact identity strip (slice 2): 80×80 thumbnail + identity text
+            on a single row. Image-management actions (Upload / Paste URL /
+            Remove) live in a Popover triggered by clicking the thumbnail
+            since three inline buttons don't fit at this size. Excerpt +
+            editorial direction collapse behind a ▾ expander since they're
+            reference reading, not always-on. */}
+        <div className="px-5 py-4 flex items-start gap-4">
+          <Popover open={imagePopoverOpen} onOpenChange={setImagePopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="relative shrink-0 w-20 h-20 rounded-md overflow-hidden bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Manage cover image"
+              >
+                {campaign.imageUrl ? (
+                  <img
+                    src={campaign.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover object-center"
                   />
-                  <Button size="sm" variant="secondary" className="h-8 shrink-0" onClick={() => setHeroImageUrl(heroUrlInput)} disabled={!heroUrlInput.trim()}>
-                    Set
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-8 shrink-0 text-white hover:text-white hover:bg-white/20" onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}>
-                    <X className="h-3.5 w-3.5" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                    <TypeIcon className="h-7 w-7 text-muted-foreground/40" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 group-focus-visible:bg-black/35 flex items-center justify-center transition-colors">
+                  {heroUploading ? (
+                    <Loader2 className="h-4 w-4 text-white animate-spin" />
+                  ) : (
+                    <Pencil className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" />
+                  )}
+                </div>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="start" className="w-64 p-2">
+              {showHeroUrlInput ? (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Paste image URL</Label>
+                  <div className="flex gap-1.5">
+                    <Input
+                      type="url"
+                      placeholder="https://…"
+                      value={heroUrlInput}
+                      onChange={(e) => setHeroUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setHeroImageUrl(heroUrlInput);
+                          setImagePopoverOpen(false);
+                        }
+                        if (e.key === "Escape") {
+                          setShowHeroUrlInput(false);
+                          setHeroUrlInput("");
+                        }
+                      }}
+                      className="h-8 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 shrink-0"
+                      onClick={() => {
+                        setHeroImageUrl(heroUrlInput);
+                        setImagePopoverOpen(false);
+                      }}
+                      disabled={!heroUrlInput.trim()}
+                    >
+                      Set
+                    </Button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full h-7 text-xs justify-start"
+                    onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}
+                  >
+                    Cancel
                   </Button>
                 </div>
-              </div>
-            ) : (
-              <div className="absolute inset-0 flex flex-wrap items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-colors">
-                <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={heroUploading}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadHeroImage(file);
-                      e.target.value = "";
-                    }}
-                  />
-                  <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white transition-colors">
-                    {heroUploading ? (
-                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</>
-                    ) : (
-                      <><Upload className="h-3.5 w-3.5" /> {campaign.imageUrl ? "Change" : "Upload"}</>
-                    )}
-                  </span>
-                </label>
-                {!heroUploading && (
+              ) : (
+                <div className="space-y-1">
+                  <label className="block">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={heroUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          uploadHeroImage(file);
+                          setImagePopoverOpen(false);
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                    <span className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent cursor-pointer">
+                      <Upload className="h-3.5 w-3.5" />
+                      {campaign.imageUrl ? "Change image…" : "Upload image…"}
+                    </span>
+                  </label>
                   <button
+                    type="button"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent cursor-pointer text-left"
                     onClick={() => setShowHeroUrlInput(true)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white"
                   >
-                    <Link2 className="h-3.5 w-3.5" /> Paste URL
+                    <Link2 className="h-3.5 w-3.5" />
+                    Paste URL…
                   </button>
-                )}
-                {campaign.imageUrl && !heroUploading && (
-                  <button
-                    onClick={removeHeroImage}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Remove
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+                  {campaign.imageUrl && (
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-destructive/10 cursor-pointer text-destructive text-left"
+                      onClick={() => {
+                        removeHeroImage();
+                        setImagePopoverOpen(false);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove image
+                    </button>
+                  )}
+                </div>
+              )}
+            </PopoverContent>
+          </Popover>
 
-          {/* Right col of row 1: identity — title, URL, badge, meta, excerpt, editorial */}
-          <div className="px-5 py-4 space-y-3 md:col-span-2">
-            {/* Title row */}
+          {/* Identity content — title (wraps), URL, status badge, meta line,
+              optional ▾ expander for excerpt + editorial direction */}
+          <div className="flex-1 min-w-0 space-y-1.5">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold break-words">{displayName}</h2>
+                <h2 className="text-lg font-semibold break-words leading-snug">{displayName}</h2>
                 <a
                   href={campaign.url}
                   target="_blank"
@@ -1038,7 +1092,6 @@ export default function CampaignDetailPage() {
               </Badge>
             </div>
 
-            {/* Meta row */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <TypeIcon className="h-3.5 w-3.5" />
@@ -1056,25 +1109,41 @@ export default function CampaignDetailPage() {
                 <>
                   <span className="text-border">|</span>
                   <span>
-                    Created{" "}
-                    {format(parseISO(campaign.createdAt), "MMM d, yyyy")}
+                    Created {format(parseISO(campaign.createdAt), "MMM d, yyyy")}
                   </span>
                 </>
               )}
             </div>
 
-            {/* Excerpt — page description / og:description captured at creation */}
-            {campaign.description && (
-              <p className="text-sm text-foreground/80 line-clamp-3">
-                {campaign.description}
-              </p>
-            )}
-
-            {/* Editorial direction */}
-            {campaign.editorialDirection && (
-              <p className="text-sm text-muted-foreground italic">
-                &ldquo;{campaign.editorialDirection}&rdquo;
-              </p>
+            {(campaign.description || campaign.editorialDirection) && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setIdentityExpanded((v) => !v)}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  aria-expanded={identityExpanded}
+                >
+                  {identityExpanded ? (
+                    <><ChevronUp className="h-3 w-3" /> Hide details</>
+                  ) : (
+                    <><ChevronDown className="h-3 w-3" /> Show details</>
+                  )}
+                </button>
+                {identityExpanded && (
+                  <div className="mt-2 space-y-2">
+                    {campaign.description && (
+                      <p className="text-sm text-foreground/80">
+                        {campaign.description}
+                      </p>
+                    )}
+                    {campaign.editorialDirection && (
+                      <p className="text-sm text-muted-foreground italic">
+                        &ldquo;{campaign.editorialDirection}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
