@@ -911,8 +911,15 @@ export default function CampaignDetailPage() {
         <ArchivedBanner campaign={campaign} />
       )}
 
-      {/* Header card — 2-col on md+ (image / content), stacks on narrow */}
-      <Card className="overflow-hidden !py-0 !gap-0">
+      {/* Header card + (when expanded) generation-options panel form a
+          single visual unit. Wrapping them in this div takes them out of
+          the parent's space-y-6 cadence so the panel can flush-attach to
+          the card with no gap. */}
+      <div>
+      <Card className={cn(
+        "overflow-hidden !py-0 !gap-0",
+        showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && "rounded-b-none border-b-0",
+      )}>
         <div className="grid grid-cols-1 md:grid-cols-3">
           {/* Left col: cover image at 4:3, with the same hover overlay
               (Change / Paste URL / Remove) as before. Tall images are
@@ -997,233 +1004,253 @@ export default function CampaignDetailPage() {
             )}
           </div>
 
-          {/* Right col: title + URL + status badge + meta + editorial + action buttons */}
+          {/* Right col of row 1: identity — title, URL, badge, meta, excerpt, editorial */}
           <div className="px-5 py-4 space-y-3 md:col-span-2">
-          {/* Title row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-lg font-semibold truncate">{displayName}</h2>
-              <a
-                href={campaign.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
+            {/* Title row */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold truncate">{displayName}</h2>
+                <a
+                  href={campaign.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
+                >
+                  {campaign.url.replace(/^https?:\/\//, "").slice(0, 80)}
+                  <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                </a>
+              </div>
+              <Badge
+                variant="outline"
+                className={`shrink-0 border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
               >
-                {campaign.url.replace(/^https?:\/\//, "").slice(0, 80)}
-                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-              </a>
+                {campaign.status}
+              </Badge>
             </div>
-            <Badge
-              variant="outline"
-              className={`shrink-0 border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
-            >
-              {campaign.status}
-            </Badge>
-          </div>
 
-          {/* Meta row */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <TypeIcon className="h-3.5 w-3.5" />
-              {campaign.type}
-            </span>
-            <span className="text-border">|</span>
-            <span>{campaign.durationDays} days</span>
-            {campaign.distributionBias && (
-              <>
-                <span className="text-border">|</span>
-                <span>{campaign.distributionBias}</span>
-              </>
-            )}
-            {campaign.createdAt && (
-              <>
-                <span className="text-border">|</span>
-                <span>
-                  Created{" "}
-                  {format(parseISO(campaign.createdAt), "MMM d, yyyy")}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Editorial direction */}
-          {campaign.editorialDirection && (
-            <p className="text-sm text-muted-foreground italic">
-              &ldquo;{campaign.editorialDirection}&rdquo;
-            </p>
-          )}
-
-          {/* Unsaved settings warning */}
-          {settingsUnsaved && campaign.status === "Draft" && (
-            <div className="pt-1 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
-              You have unsaved changes in the Settings tab. Save them before generating, or they won&apos;t take effect.
-            </div>
-          )}
-
-          {/* Action button + generation options toggle */}
-          <div className="pt-1 flex items-center gap-3">
-            <CampaignActionButton
-              status={isGenerating ? "Generating" : campaign.status}
-              campaignId={campaign.id}
-              reviewCount={reviewCount}
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-            />
-            {(campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowGenOptions((v) => !v)}
-                className="text-xs text-muted-foreground"
-              >
-                {showGenOptions ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-                Options
-              </Button>
-            )}
-          </div>
-
-          {/* Generation options — platform selection + test mode */}
-          {showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
-            <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
-                  Platforms to generate
-                </Label>
-                <div className="flex flex-wrap gap-3">
-                  {connectedPlatforms.size === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">
-                      No connected accounts for {currentBrand?.name || "this brand"}.
-                      Connect accounts in the Accounts page first.
-                    </p>
-                  ) : (
-                    [...connectedPlatforms].sort().map((p) => {
-                      const PLATFORM_LABELS: Record<string, string> = {
-                        twitter: "X/Twitter",
-                        googlebusiness: "Google Business",
-                      };
-                      const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
-                      return (
-                        <label key={p} className="flex items-center gap-1.5 cursor-pointer">
-                          <Switch
-                            checked={genPlatforms.has(p)}
-                            onCheckedChange={(checked) => {
-                              setGenPlatforms((prev) => {
-                                const next = new Set(prev);
-                                if (checked) next.add(p); else next.delete(p);
-                                return next;
-                              });
-                            }}
-                            className="scale-75"
-                          />
-                          <PlatformIcon platform={p as Platform} size="xs" showColor />
-                          <span className="text-xs">{label}</span>
-                          {postCountsByPlatform[p] > 0 && (
-                            <span className="text-[10px] text-muted-foreground">({postCountsByPlatform[p]})</span>
-                          )}
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
-                  Max variants per platform
-                </Label>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 5, 8, 10, null].map((val) => (
-                    <Button
-                      key={val ?? "auto"}
-                      variant={genMaxPerPlatform === val ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setGenMaxPerPlatform(val)}
-                    >
-                      {val === null ? "Auto" : val}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5">
-                  {genMaxPerPlatform
-                    ? `Test mode: ${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
-                    : `Auto: variant count based on content sections and campaign duration`}
-                </p>
-              </div>
-
-              {/* Voice intensity slider */}
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
-                  Tone of Voice
-                </Label>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      value={[genVoiceIntensity]}
-                      onValueChange={([val]) => setGenVoiceIntensity(val)}
-                      min={0}
-                      max={100}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
-                      {genVoiceIntensity}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
-                    {getAllToneTiers().map((tier) => (
-                      <span
-                        key={tier.label}
-                        className={cn(
-                          "cursor-pointer hover:text-foreground transition-colors",
-                          genVoiceIntensity >= tier.min && genVoiceIntensity <= tier.max && "text-foreground font-medium"
-                        )}
-                        onClick={() => setGenVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
-                      >
-                        {tier.label}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.{" "}
-                    <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
-                  </p>
-                </div>
-              </div>
-
-              {genOptionsChanged && (
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
-                  <span className="text-[11px] text-muted-foreground">
-                    Unsaved changes
+            {/* Meta row */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <TypeIcon className="h-3.5 w-3.5" />
+                {campaign.type}
+              </span>
+              <span className="text-border">|</span>
+              <span>{campaign.durationDays} days</span>
+              {campaign.distributionBias && (
+                <>
+                  <span className="text-border">|</span>
+                  <span>{campaign.distributionBias}</span>
+                </>
+              )}
+              {campaign.createdAt && (
+                <>
+                  <span className="text-border">|</span>
+                  <span>
+                    Created{" "}
+                    {format(parseISO(campaign.createdAt), "MMM d, yyyy")}
                   </span>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={saveGenOptions}
-                    disabled={savingGenOptions}
-                  >
-                    {savingGenOptions ? "Saving..." : "Save Options"}
-                  </Button>
-                </div>
-              )}
-
-              {/* Generate More button — for Active/Review campaigns */}
-              {campaign && (campaign.status === "Active" || campaign.status === "Review") && (
-                <div className="pt-2 border-t border-border/50">
-                  <Button
-                    onClick={handleGenerate}
-                    disabled={isGenerating || genPlatforms.size === 0}
-                  >
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                    Generate More Posts
-                  </Button>
-                </div>
+                </>
               )}
             </div>
-          )}
+
+            {/* Excerpt — page description / og:description captured at creation */}
+            {campaign.description && (
+              <p className="text-sm text-foreground/80 line-clamp-3">
+                {campaign.description}
+              </p>
+            )}
+
+            {/* Editorial direction */}
+            {campaign.editorialDirection && (
+              <p className="text-sm text-muted-foreground italic">
+                &ldquo;{campaign.editorialDirection}&rdquo;
+              </p>
+            )}
           </div>
         </div>
+
+        {/* Row 2: action bar — actions live below the identity row, separated
+            visually from the lead image. Card height stays constant when
+            "Options" is toggled because the panel is rendered as a sibling
+            block outside this card. */}
+        <div className="px-5 py-3 border-t border-border/60 flex flex-wrap items-center gap-3">
+          {settingsUnsaved && campaign.status === "Draft" && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+              Unsaved Settings changes — save in Settings tab before generating.
+            </div>
+          )}
+          <CampaignActionButton
+            status={isGenerating ? "Generating" : campaign.status}
+            campaignId={campaign.id}
+            reviewCount={reviewCount}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+          />
+          {(campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowGenOptions((v) => !v)}
+              className={cn(
+                "text-xs",
+                showGenOptions
+                  ? "bg-muted text-foreground hover:bg-muted"
+                  : "text-muted-foreground",
+              )}
+              aria-expanded={showGenOptions}
+            >
+              {showGenOptions ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+              {showGenOptions ? "Hide options" : "Options"}
+            </Button>
+          )}
+        </div>
       </Card>
+
+      {/* Generation options — platform selection + test mode.
+          Lives OUTSIDE the header card so the header stays focused on
+          identity (image + title + meta + actions). Flush-attached to
+          the card's bottom edge (no rounded top, no top border, negative
+          top margin cancels the parent's space-y-6) so the two read as a
+          single continuous unit when expanded. */}
+      {showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
+        <div className="border border-t-0 rounded-b-lg rounded-t-none p-4 space-y-4 bg-muted/30">
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Platforms to generate
+            </Label>
+            <div className="flex flex-wrap gap-3">
+              {connectedPlatforms.size === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  No connected accounts for {currentBrand?.name || "this brand"}.
+                  Connect accounts in the Accounts page first.
+                </p>
+              ) : (
+                [...connectedPlatforms].sort().map((p) => {
+                  const PLATFORM_LABELS: Record<string, string> = {
+                    twitter: "X/Twitter",
+                    googlebusiness: "Google Business",
+                  };
+                  const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
+                  return (
+                    <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={genPlatforms.has(p)}
+                        onCheckedChange={(checked) => {
+                          setGenPlatforms((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.add(p); else next.delete(p);
+                            return next;
+                          });
+                        }}
+                        className="scale-75"
+                      />
+                      <PlatformIcon platform={p as Platform} size="xs" showColor />
+                      <span className="text-xs">{label}</span>
+                      {postCountsByPlatform[p] > 0 && (
+                        <span className="text-[10px] text-muted-foreground">({postCountsByPlatform[p]})</span>
+                      )}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Max variants per platform
+            </Label>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 5, 8, 10, null].map((val) => (
+                <Button
+                  key={val ?? "auto"}
+                  variant={genMaxPerPlatform === val ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-2.5"
+                  onClick={() => setGenMaxPerPlatform(val)}
+                >
+                  {val === null ? "Auto" : val}
+                </Button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              {genMaxPerPlatform
+                ? `Test mode: ${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
+                : `Auto: variant count based on content sections and campaign duration`}
+            </p>
+          </div>
+
+          {/* Voice intensity slider */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Tone of Voice
+            </Label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Slider
+                  value={[genVoiceIntensity]}
+                  onValueChange={([val]) => setGenVoiceIntensity(val)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="flex-1"
+                />
+                <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
+                  {genVoiceIntensity}
+                </span>
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
+                {getAllToneTiers().map((tier) => (
+                  <span
+                    key={tier.label}
+                    className={cn(
+                      "cursor-pointer hover:text-foreground transition-colors",
+                      genVoiceIntensity >= tier.min && genVoiceIntensity <= tier.max && "text-foreground font-medium"
+                    )}
+                    onClick={() => setGenVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
+                  >
+                    {tier.label}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.{" "}
+                <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
+              </p>
+            </div>
+          </div>
+
+          {genOptionsChanged && (
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+              <span className="text-[11px] text-muted-foreground">
+                Unsaved changes
+              </span>
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={saveGenOptions}
+                disabled={savingGenOptions}
+              >
+                {savingGenOptions ? "Saving..." : "Save Options"}
+              </Button>
+            </div>
+          )}
+
+          {/* Generate More button — for Active/Review campaigns */}
+          {campaign && (campaign.status === "Active" || campaign.status === "Review") && (
+            <div className="pt-2 border-t border-border/50">
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || genPlatforms.size === 0}
+              >
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Generate More Posts
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
 
       {/* Compact progress bar during generation */}
       {progressLog.length > 0 && (() => {
