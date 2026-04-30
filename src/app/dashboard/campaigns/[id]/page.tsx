@@ -14,7 +14,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Dialog,
   DialogContent,
@@ -126,6 +132,7 @@ import {
   CalendarX2,
   GripVertical,
   Pencil,
+  Settings,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -206,17 +213,16 @@ export default function CampaignDetailPage() {
   const [genVoiceIntensity, setGenVoiceIntensity] = useState<number>(50);
   const [genVoiceInitialized, setGenVoiceInitialized] = useState(false);
   const [settingsUnsaved, setSettingsUnsaved] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => {
-    const t = searchParams.get("tab");
-    return t === "settings" ? "settings" : "posts";
-  });
-  // If the URL has a hash (e.g. #delete-campaign-section) and we're on the
-  // Settings tab, scroll the target into view. The scroll container is the
-  // <main> element in dashboard/layout.tsx (overflow-y-auto), not the body —
-  // we scroll it directly to avoid scrollIntoView's inconsistent behavior
-  // with smooth scrolling across nested scroll containers.
+  // Settings used to be a tab; it's now a right-side Sheet drawer (Slice 1
+  // of the campaign-detail UX redesign). Backward-compat: ?tab=settings in
+  // the URL still opens the Sheet, and the existing #delete-campaign-section
+  // hash deep link still scrolls to the destructive section inside the Sheet.
+  const [settingsOpen, setSettingsOpen] = useState(() => searchParams.get("tab") === "settings");
+  // When opening to a hash anchor (e.g. #delete-campaign-section), scroll the
+  // Sheet's body to the bottom once the target mounts. The Sheet's content
+  // is its own scroll container (overflow-y-auto on SheetContent).
   useEffect(() => {
-    if (activeTab !== "settings") return;
+    if (!settingsOpen) return;
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     if (!hash) return;
     const id = hash.replace(/^#/, "");
@@ -225,9 +231,10 @@ export default function CampaignDetailPage() {
     const intervalId = window.setInterval(() => {
       attempts++;
       const el = document.getElementById(id);
-      const main = document.querySelector("main") as HTMLElement | null;
-      if (el && main) {
-        main.scrollTo({ top: main.scrollHeight, behavior: "smooth" });
+      // Sheet content is portaled — find the scroll-able ancestor.
+      const scroller = el?.closest('[data-slot="sheet-content"]') as HTMLElement | null;
+      if (el && scroller) {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
         window.clearInterval(intervalId);
         history.replaceState(null, "", window.location.pathname + window.location.search);
       } else if (attempts >= 30) {
@@ -235,7 +242,7 @@ export default function CampaignDetailPage() {
       }
     }, 100);
     return () => window.clearInterval(intervalId);
-  }, [activeTab]);
+  }, [settingsOpen]);
   const queryClient = useQueryClient();
   const { markNew, dismissNew, isNew } = useNewPosts();
 
@@ -309,7 +316,6 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (generateMore && campaign && (campaign.status === "Active" || campaign.status === "Review")) {
       setShowGenOptions(true);
-      setActiveTab("posts");
     }
   }, [generateMore, campaign]);
 
@@ -781,8 +787,8 @@ export default function CampaignDetailPage() {
     }
 
     setIsGenerating(false);
-    // Switch to Posts tab and refresh to show generated posts
-    setActiveTab("posts");
+    // Refresh to show generated posts (post list is now always visible —
+    // no tab switch needed since Settings is a Sheet drawer).
     queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
   };
 
@@ -888,16 +894,20 @@ export default function CampaignDetailPage() {
           campaign={campaign}
           posts={posts}
           onDeleteRequest={() => {
-            setActiveTab("settings");
-            // Scroll the <main> element (the actual scroll container) to
-            // the bottom once the delete section mounts inside it.
+            // Open the Settings Sheet; the existing #delete-campaign-section
+            // hash effect handles scrolling within the Sheet's scroll container
+            // once the destructive section mounts.
+            window.location.hash = "delete-campaign-section";
+            setSettingsOpen(true);
+            // Belt-and-suspenders scroll fallback (in case the hash effect's
+            // selector doesn't find the Sheet content fast enough).
             let attempts = 0;
             const intervalId = window.setInterval(() => {
               attempts++;
               const el = document.getElementById("delete-campaign-section");
-              const main = document.querySelector("main") as HTMLElement | null;
-              if (el && main) {
-                main.scrollTo({ top: main.scrollHeight, behavior: "smooth" });
+              const scroller = el?.closest('[data-slot="sheet-content"]') as HTMLElement | null;
+              if (el && scroller) {
+                scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
                 window.clearInterval(intervalId);
               } else if (attempts >= 30) {
                 window.clearInterval(intervalId);
@@ -1103,6 +1113,16 @@ export default function CampaignDetailPage() {
               {showGenOptions ? "Hide options" : "Options"}
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+            className="text-xs text-muted-foreground"
+            aria-label="Open campaign settings"
+          >
+            <Settings className="h-3.5 w-3.5 mr-1" />
+            Settings
+          </Button>
         </div>
       </Card>
 
@@ -1325,22 +1345,10 @@ export default function CampaignDetailPage() {
         );
       })()}
 
-      {/* Tabs: Posts / Settings */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="posts">
-            Posts
-            {posts.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                {posts.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-
-        {/* ── Posts Tab ─────────────────────────────────────────────── */}
-        <TabsContent value="posts">
+      {/* Posts list — always visible (no tab toggle). Settings, which used
+          to be a peer Tab, is now a right-side Sheet drawer triggered from
+          the action bar in the header card above. */}
+      <div className="space-y-4">
           {posts.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -1555,7 +1563,6 @@ export default function CampaignDetailPage() {
                       className="h-7 text-xs shrink-0"
                       onClick={() => {
                         setShowGenOptions(true);
-                        setActiveTab("posts");
                       }}
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
@@ -1755,43 +1762,58 @@ export default function CampaignDetailPage() {
               )}
             </div>
           )}
-        </TabsContent>
+      </div>
 
-        {/* ── Settings Tab ──────────────────────────────────────────── */}
-        <TabsContent value="settings">
-          {/* Settings editable if no posts have been scheduled yet */}
-          {!posts.some((p) => ["Queued", "Scheduled", "Published"].includes(p.status)) ? (
-            <CampaignSettingsEditable
-              campaign={campaign}
-              campaignId={campaignId}
-              onUnsavedChanges={setSettingsUnsaved}
-            />
-          ) : (
-            <CampaignSettingsReadOnly campaign={campaign} />
-          )}
+      {/* Settings Sheet — opens from the right when triggered. Holds the
+          editable settings form (or read-only view when posts are already
+          scheduled), the Reset-to-Draft section, and the danger-zone
+          Delete section. The post list stays visible behind the Sheet
+          overlay so working context isn't lost. */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-2xl overflow-y-auto"
+        >
+          <SheetHeader>
+            <SheetTitle>Campaign settings</SheetTitle>
+            <SheetDescription>
+              Edit configuration, reset, or delete this campaign.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-6 space-y-4">
+            {!posts.some((p) => ["Queued", "Scheduled", "Published"].includes(p.status)) ? (
+              <CampaignSettingsEditable
+                campaign={campaign}
+                campaignId={campaignId}
+                onUnsavedChanges={setSettingsUnsaved}
+              />
+            ) : (
+              <CampaignSettingsReadOnly campaign={campaign} />
+            )}
 
-          {/* Reset to Draft — for Review/Failed/Generating/Scraping/Active campaigns */}
-          {["Review", "Failed", "Generating", "Scraping", "Active"].includes(campaign.status) && (
-            <ResetCampaignSection
-              campaignId={campaignId}
-              campaignName={campaign.name}
-              postCount={posts.length}
-              hasScheduledPosts={posts.some((p) => ["Scheduled", "Queued"].includes(p.status))}
-            />
-          )}
+            {/* Reset to Draft — for Review/Failed/Generating/Scraping/Active campaigns */}
+            {["Review", "Failed", "Generating", "Scraping", "Active"].includes(campaign.status) && (
+              <ResetCampaignSection
+                campaignId={campaignId}
+                campaignName={campaign.name}
+                postCount={posts.length}
+                hasScheduledPosts={posts.some((p) => ["Scheduled", "Queued"].includes(p.status))}
+              />
+            )}
 
-          {/* Delete campaign — only for non-Active campaigns */}
-          {campaign.status !== "Active" && (
-            <DeleteCampaignSection
-              campaignId={campaignId}
-              campaignName={campaign.name}
-              status={campaign.status}
-              postCount={posts.length}
-              isQuickPost={isQuickPost}
-            />
-          )}
-        </TabsContent>
-      </Tabs>
+            {/* Delete campaign — only for non-Active campaigns */}
+            {campaign.status !== "Active" && (
+              <DeleteCampaignSection
+                campaignId={campaignId}
+                campaignName={campaign.name}
+                status={campaign.status}
+                postCount={posts.length}
+                isQuickPost={isQuickPost}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Progress log moved above tabs — see generation options card */}
 
