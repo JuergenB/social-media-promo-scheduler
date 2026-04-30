@@ -953,7 +953,7 @@ export default function CampaignDetailPage() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="relative shrink-0 w-28 aspect-[4/5] rounded-md overflow-hidden bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="relative shrink-0 w-40 aspect-[5/4] rounded-md overflow-hidden bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Manage cover image"
               >
                 {campaign.imageUrl ? (
