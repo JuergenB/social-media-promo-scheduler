@@ -49,12 +49,15 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
 };
 
 // Light mode colors (used on light backgrounds)
+// Instagram + Pinterest were both pure red and visually conflated on the
+// timeline (#209). Instagram now leans orange (its gradient's warm anchor)
+// and Pinterest is slightly darker red, giving clear hue separation.
 export const PLATFORM_COLORS: Record<Platform, string> = {
-  instagram: "#E4405F",
+  instagram: "#F56040",
   tiktok: "#000000",
   youtube: "#FF0000",
   linkedin: "#0A66C2",
-  pinterest: "#E60023",
+  pinterest: "#C8001B",
   twitter: "#000000",
   facebook: "#1877F2",
   threads: "#000000",
@@ -67,11 +70,11 @@ export const PLATFORM_COLORS: Record<Platform, string> = {
 
 // Dark mode colors (lighter versions for dark backgrounds)
 export const PLATFORM_COLORS_DARK: Record<Platform, string> = {
-  instagram: "#F77A94",
+  instagram: "#FFA277",
   tiktok: "#FFFFFF",
   youtube: "#FF4444",
   linkedin: "#5AA9E6",
-  pinterest: "#FF4D6A",
+  pinterest: "#FF5757",
   twitter: "#FFFFFF",
   facebook: "#4599FF",
   threads: "#FFFFFF",
