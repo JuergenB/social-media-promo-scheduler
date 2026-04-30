@@ -14,7 +14,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -126,6 +137,7 @@ import {
   CalendarX2,
   GripVertical,
   Pencil,
+  Settings,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -206,17 +218,16 @@ export default function CampaignDetailPage() {
   const [genVoiceIntensity, setGenVoiceIntensity] = useState<number>(50);
   const [genVoiceInitialized, setGenVoiceInitialized] = useState(false);
   const [settingsUnsaved, setSettingsUnsaved] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => {
-    const t = searchParams.get("tab");
-    return t === "settings" ? "settings" : "posts";
-  });
-  // If the URL has a hash (e.g. #delete-campaign-section) and we're on the
-  // Settings tab, scroll the target into view. The scroll container is the
-  // <main> element in dashboard/layout.tsx (overflow-y-auto), not the body —
-  // we scroll it directly to avoid scrollIntoView's inconsistent behavior
-  // with smooth scrolling across nested scroll containers.
+  // Settings used to be a tab; it's now a right-side Sheet drawer (Slice 1
+  // of the campaign-detail UX redesign). Backward-compat: ?tab=settings in
+  // the URL still opens the Sheet, and the existing #delete-campaign-section
+  // hash deep link still scrolls to the destructive section inside the Sheet.
+  const [settingsOpen, setSettingsOpen] = useState(() => searchParams.get("tab") === "settings");
+  // When opening to a hash anchor (e.g. #delete-campaign-section), scroll the
+  // Sheet's body to the bottom once the target mounts. The Sheet's content
+  // is its own scroll container (overflow-y-auto on SheetContent).
   useEffect(() => {
-    if (activeTab !== "settings") return;
+    if (!settingsOpen) return;
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     if (!hash) return;
     const id = hash.replace(/^#/, "");
@@ -225,9 +236,10 @@ export default function CampaignDetailPage() {
     const intervalId = window.setInterval(() => {
       attempts++;
       const el = document.getElementById(id);
-      const main = document.querySelector("main") as HTMLElement | null;
-      if (el && main) {
-        main.scrollTo({ top: main.scrollHeight, behavior: "smooth" });
+      // Sheet content is portaled — find the scroll-able ancestor.
+      const scroller = el?.closest('[data-slot="sheet-content"]') as HTMLElement | null;
+      if (el && scroller) {
+        scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
         window.clearInterval(intervalId);
         history.replaceState(null, "", window.location.pathname + window.location.search);
       } else if (attempts >= 30) {
@@ -235,7 +247,7 @@ export default function CampaignDetailPage() {
       }
     }, 100);
     return () => window.clearInterval(intervalId);
-  }, [activeTab]);
+  }, [settingsOpen]);
   const queryClient = useQueryClient();
   const { markNew, dismissNew, isNew } = useNewPosts();
 
@@ -309,7 +321,6 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     if (generateMore && campaign && (campaign.status === "Active" || campaign.status === "Review")) {
       setShowGenOptions(true);
-      setActiveTab("posts");
     }
   }, [generateMore, campaign]);
 
@@ -397,6 +408,13 @@ export default function CampaignDetailPage() {
   // Hero image upload / paste URL
   const [heroUploading, setHeroUploading] = useState(false);
   const [heroUrlInput, setHeroUrlInput] = useState("");
+  // Slice 2: identity strip — collapsed by default. ▾ expands the
+  // page excerpt + editorial direction (rare reading, not always-on).
+  const [identityExpanded, setIdentityExpanded] = useState(false);
+  // Slice 2: image-actions Popover — Upload / Paste URL / Remove live in a
+  // popover triggered by clicking the thumbnail (no longer hover-overlay
+  // buttons since the thumbnail is too small for three inline buttons).
+  const [imagePopoverOpen, setImagePopoverOpen] = useState(false);
   const [showHeroUrlInput, setShowHeroUrlInput] = useState(false);
 
   const setHeroImageUrl = async (url: string) => {
@@ -781,8 +799,8 @@ export default function CampaignDetailPage() {
     }
 
     setIsGenerating(false);
-    // Switch to Posts tab and refresh to show generated posts
-    setActiveTab("posts");
+    // Refresh to show generated posts (post list is now always visible —
+    // no tab switch needed since Settings is a Sheet drawer).
     queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
   };
 
@@ -883,21 +901,25 @@ export default function CampaignDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold truncate flex-1">{displayName}</h1>
+        <h1 className="text-xl font-bold flex-1 break-words">{displayName}</h1>
         <CampaignHeaderActions
           campaign={campaign}
           posts={posts}
           onDeleteRequest={() => {
-            setActiveTab("settings");
-            // Scroll the <main> element (the actual scroll container) to
-            // the bottom once the delete section mounts inside it.
+            // Open the Settings Sheet; the existing #delete-campaign-section
+            // hash effect handles scrolling within the Sheet's scroll container
+            // once the destructive section mounts.
+            window.location.hash = "delete-campaign-section";
+            setSettingsOpen(true);
+            // Belt-and-suspenders scroll fallback (in case the hash effect's
+            // selector doesn't find the Sheet content fast enough).
             let attempts = 0;
             const intervalId = window.setInterval(() => {
               attempts++;
               const el = document.getElementById("delete-campaign-section");
-              const main = document.querySelector("main") as HTMLElement | null;
-              if (el && main) {
-                main.scrollTo({ top: main.scrollHeight, behavior: "smooth" });
+              const scroller = el?.closest('[data-slot="sheet-content"]') as HTMLElement | null;
+              if (el && scroller) {
+                scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
                 window.clearInterval(intervalId);
               } else if (attempts >= 30) {
                 window.clearInterval(intervalId);
@@ -911,314 +933,413 @@ export default function CampaignDetailPage() {
         <ArchivedBanner campaign={campaign} />
       )}
 
-      {/* Header card */}
-      <Card className="overflow-hidden !py-0 !gap-0">
-        {/* Banner image with upload overlay */}
-        <div className="relative group">
-          {campaign.imageUrl ? (
-            <div className="h-44 overflow-hidden bg-muted">
-              <img
-                src={campaign.imageUrl}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : (
-            <div className="h-24 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-              <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
-            </div>
-          )}
-          {/* Upload / paste URL overlay */}
-          {showHeroUrlInput ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 px-8">
-              <div className="flex w-full max-w-md gap-2" onClick={(e) => e.stopPropagation()}>
-                <Input
-                  type="url"
-                  placeholder="Paste image URL..."
-                  value={heroUrlInput}
-                  onChange={(e) => setHeroUrlInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") setHeroImageUrl(heroUrlInput);
-                    if (e.key === "Escape") { setShowHeroUrlInput(false); setHeroUrlInput(""); }
-                  }}
-                  className="bg-white text-zinc-900 text-sm h-8"
-                  autoFocus
-                />
-                <Button size="sm" variant="secondary" className="h-8 shrink-0" onClick={() => setHeroImageUrl(heroUrlInput)} disabled={!heroUrlInput.trim()}>
-                  Set
-                </Button>
-                <Button size="sm" variant="ghost" className="h-8 shrink-0 text-white hover:text-white hover:bg-white/20" onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-colors">
-              <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={heroUploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadHeroImage(file);
-                    e.target.value = "";
-                  }}
-                />
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white transition-colors">
+      {/* Header card + (when expanded) generation-options panel form a
+          single visual unit. Wrapping them in this div takes them out of
+          the parent's space-y-6 cadence so the panel can flush-attach to
+          the card with no gap. */}
+      <div>
+      <Card className={cn(
+        "overflow-hidden !py-0 !gap-0",
+        showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && "rounded-b-none border-b-0",
+      )}>
+        {/* Compact identity strip (slice 2): 80×80 thumbnail + identity text
+            on a single row. Image-management actions (Upload / Paste URL /
+            Remove) live in a Popover triggered by clicking the thumbnail
+            since three inline buttons don't fit at this size. Excerpt +
+            editorial direction collapse behind a ▾ expander since they're
+            reference reading, not always-on. */}
+        <div className="px-5 py-4 flex items-start gap-4">
+          <Popover open={imagePopoverOpen} onOpenChange={setImagePopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="relative shrink-0 w-40 aspect-[5/4] rounded-md overflow-hidden bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Manage cover image"
+              >
+                {campaign.imageUrl ? (
+                  <img
+                    src={campaign.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover object-center"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                    <TypeIcon className="h-7 w-7 text-muted-foreground/40" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/35 group-focus-visible:bg-black/35 flex items-center justify-center transition-colors">
                   {heroUploading ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</>
+                    <Loader2 className="h-4 w-4 text-white animate-spin" />
                   ) : (
-                    <><Upload className="h-3.5 w-3.5" /> {campaign.imageUrl ? "Change" : "Upload"}</>
+                    <Pencil className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100" />
                   )}
-                </span>
-              </label>
-              {!heroUploading && (
-                <button
-                  onClick={() => setShowHeroUrlInput(true)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white"
-                >
-                  <Link2 className="h-3.5 w-3.5" /> Paste URL
-                </button>
+                </div>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="start" className="w-64 p-2">
+              {showHeroUrlInput ? (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Paste image URL</Label>
+                  <div className="flex gap-1.5">
+                    <Input
+                      type="url"
+                      placeholder="https://…"
+                      value={heroUrlInput}
+                      onChange={(e) => setHeroUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setHeroImageUrl(heroUrlInput);
+                          setImagePopoverOpen(false);
+                        }
+                        if (e.key === "Escape") {
+                          setShowHeroUrlInput(false);
+                          setHeroUrlInput("");
+                        }
+                      }}
+                      className="h-8 text-sm"
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8 shrink-0"
+                      onClick={() => {
+                        setHeroImageUrl(heroUrlInput);
+                        setImagePopoverOpen(false);
+                      }}
+                      disabled={!heroUrlInput.trim()}
+                    >
+                      Set
+                    </Button>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full h-7 text-xs justify-start"
+                    onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="block">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={heroUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          uploadHeroImage(file);
+                          setImagePopoverOpen(false);
+                        }
+                        e.target.value = "";
+                      }}
+                    />
+                    <span className="flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent cursor-pointer">
+                      <Upload className="h-3.5 w-3.5" />
+                      {campaign.imageUrl ? "Change image…" : "Upload image…"}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-accent cursor-pointer text-left"
+                    onClick={() => setShowHeroUrlInput(true)}
+                  >
+                    <Link2 className="h-3.5 w-3.5" />
+                    Paste URL…
+                  </button>
+                  {campaign.imageUrl && (
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-destructive/10 cursor-pointer text-destructive text-left"
+                      onClick={() => {
+                        removeHeroImage();
+                        setImagePopoverOpen(false);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Remove image
+                    </button>
+                  )}
+                </div>
               )}
-              {campaign.imageUrl && !heroUploading && (
-                <button
-                  onClick={removeHeroImage}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+            </PopoverContent>
+          </Popover>
+
+          {/* Identity content — title (wraps), URL, status badge, meta line,
+              optional ▾ expander for excerpt + editorial direction */}
+          <div className="flex-1 min-w-0 space-y-1.5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold break-words leading-snug">{displayName}</h2>
+                <a
+                  href={campaign.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
                 >
-                  <Trash2 className="h-3.5 w-3.5" /> Remove
-                </button>
+                  {campaign.url.replace(/^https?:\/\//, "").slice(0, 80)}
+                  <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+                </a>
+              </div>
+              <Badge
+                variant="outline"
+                className={`shrink-0 border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
+              >
+                {campaign.status}
+              </Badge>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <TypeIcon className="h-3.5 w-3.5" />
+                {campaign.type}
+              </span>
+              <span className="text-border">|</span>
+              <span>{campaign.durationDays} days</span>
+              {campaign.distributionBias && (
+                <>
+                  <span className="text-border">|</span>
+                  <span>{campaign.distributionBias}</span>
+                </>
+              )}
+              {campaign.createdAt && (
+                <>
+                  <span className="text-border">|</span>
+                  <span>
+                    Created {format(parseISO(campaign.createdAt), "MMM d, yyyy")}
+                  </span>
+                </>
               )}
             </div>
-          )}
+
+            {(campaign.description || campaign.editorialDirection) && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setIdentityExpanded((v) => !v)}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  aria-expanded={identityExpanded}
+                >
+                  {identityExpanded ? (
+                    <><ChevronUp className="h-3 w-3" /> Hide details</>
+                  ) : (
+                    <><ChevronDown className="h-3 w-3" /> Show details</>
+                  )}
+                </button>
+                {identityExpanded && (
+                  <div className="mt-2 space-y-2">
+                    {campaign.description && (
+                      <p className="text-sm text-foreground/80">
+                        {campaign.description}
+                      </p>
+                    )}
+                    {campaign.editorialDirection && (
+                      <p className="text-sm text-muted-foreground italic">
+                        &ldquo;{campaign.editorialDirection}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="px-5 py-4 space-y-3">
-          {/* Title row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-lg font-semibold truncate">{displayName}</h2>
-              <a
-                href={campaign.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1 truncate max-w-full"
-              >
-                {campaign.url.replace(/^https?:\/\//, "").slice(0, 80)}
-                <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-              </a>
-            </div>
-            <Badge
-              variant="outline"
-              className={`shrink-0 border-transparent ${STATUS_STYLES[campaign.status] || "bg-zinc-100 text-zinc-600"}`}
-            >
-              {campaign.status}
-            </Badge>
-          </div>
-
-          {/* Meta row */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <TypeIcon className="h-3.5 w-3.5" />
-              {campaign.type}
-            </span>
-            <span className="text-border">|</span>
-            <span>{campaign.durationDays} days</span>
-            {campaign.distributionBias && (
-              <>
-                <span className="text-border">|</span>
-                <span>{campaign.distributionBias}</span>
-              </>
-            )}
-            {campaign.createdAt && (
-              <>
-                <span className="text-border">|</span>
-                <span>
-                  Created{" "}
-                  {format(parseISO(campaign.createdAt), "MMM d, yyyy")}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Editorial direction */}
-          {campaign.editorialDirection && (
-            <p className="text-sm text-muted-foreground italic">
-              &ldquo;{campaign.editorialDirection}&rdquo;
-            </p>
-          )}
-
-          {/* Unsaved settings warning */}
+        {/* Row 2: action bar — actions live below the identity row, separated
+            visually from the lead image. Card height stays constant when
+            "Options" is toggled because the panel is rendered as a sibling
+            block outside this card. */}
+        <div className="px-5 py-3 border-t border-border/60 flex flex-wrap items-center gap-3">
           {settingsUnsaved && campaign.status === "Draft" && (
-            <div className="pt-1 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
-              You have unsaved changes in the Settings tab. Save them before generating, or they won&apos;t take effect.
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+              Unsaved Settings changes — save in Settings tab before generating.
             </div>
           )}
-
-          {/* Action button + generation options toggle */}
-          <div className="pt-1 flex items-center gap-3">
-            <CampaignActionButton
-              status={isGenerating ? "Generating" : campaign.status}
-              campaignId={campaign.id}
-              reviewCount={reviewCount}
-              onGenerate={handleGenerate}
-              isGenerating={isGenerating}
-            />
-            {(campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowGenOptions((v) => !v)}
-                className="text-xs text-muted-foreground"
-              >
-                {showGenOptions ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-                Options
-              </Button>
-            )}
-          </div>
-
-          {/* Generation options — platform selection + test mode */}
-          {showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
-            <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
-                  Platforms to generate
-                </Label>
-                <div className="flex flex-wrap gap-3">
-                  {connectedPlatforms.size === 0 ? (
-                    <p className="text-xs text-muted-foreground italic">
-                      No connected accounts for {currentBrand?.name || "this brand"}.
-                      Connect accounts in the Accounts page first.
-                    </p>
-                  ) : (
-                    [...connectedPlatforms].sort().map((p) => {
-                      const PLATFORM_LABELS: Record<string, string> = {
-                        twitter: "X/Twitter",
-                        googlebusiness: "Google Business",
-                      };
-                      const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
-                      return (
-                        <label key={p} className="flex items-center gap-1.5 cursor-pointer">
-                          <Switch
-                            checked={genPlatforms.has(p)}
-                            onCheckedChange={(checked) => {
-                              setGenPlatforms((prev) => {
-                                const next = new Set(prev);
-                                if (checked) next.add(p); else next.delete(p);
-                                return next;
-                              });
-                            }}
-                            className="scale-75"
-                          />
-                          <PlatformIcon platform={p as Platform} size="xs" showColor />
-                          <span className="text-xs">{label}</span>
-                          {postCountsByPlatform[p] > 0 && (
-                            <span className="text-[10px] text-muted-foreground">({postCountsByPlatform[p]})</span>
-                          )}
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
-                  Max variants per platform
-                </Label>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 5, 8, 10, null].map((val) => (
-                    <Button
-                      key={val ?? "auto"}
-                      variant={genMaxPerPlatform === val ? "default" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs px-2.5"
-                      onClick={() => setGenMaxPerPlatform(val)}
-                    >
-                      {val === null ? "Auto" : val}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground mt-1.5">
-                  {genMaxPerPlatform
-                    ? `Test mode: ${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
-                    : `Auto: variant count based on content sections and campaign duration`}
-                </p>
-              </div>
-
-              {/* Voice intensity slider */}
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
-                  Tone of Voice
-                </Label>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <Slider
-                      value={[genVoiceIntensity]}
-                      onValueChange={([val]) => setGenVoiceIntensity(val)}
-                      min={0}
-                      max={100}
-                      step={1}
-                      className="flex-1"
-                    />
-                    <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
-                      {genVoiceIntensity}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
-                    {getAllToneTiers().map((tier) => (
-                      <span
-                        key={tier.label}
-                        className={cn(
-                          "cursor-pointer hover:text-foreground transition-colors",
-                          genVoiceIntensity >= tier.min && genVoiceIntensity <= tier.max && "text-foreground font-medium"
-                        )}
-                        onClick={() => setGenVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
-                      >
-                        {tier.label}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.{" "}
-                    <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
-                  </p>
-                </div>
-              </div>
-
-              {genOptionsChanged && (
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
-                  <span className="text-[11px] text-muted-foreground">
-                    Unsaved changes
-                  </span>
-                  <Button
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={saveGenOptions}
-                    disabled={savingGenOptions}
-                  >
-                    {savingGenOptions ? "Saving..." : "Save Options"}
-                  </Button>
-                </div>
+          <CampaignActionButton
+            status={isGenerating ? "Generating" : campaign.status}
+            campaignId={campaign.id}
+            reviewCount={reviewCount}
+            onGenerate={handleGenerate}
+            isGenerating={isGenerating}
+          />
+          {(campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowGenOptions((v) => !v)}
+              className={cn(
+                "text-xs",
+                showGenOptions
+                  ? "bg-muted text-foreground hover:bg-muted"
+                  : "text-muted-foreground",
               )}
-
-              {/* Generate More button — for Active/Review campaigns */}
-              {campaign && (campaign.status === "Active" || campaign.status === "Review") && (
-                <div className="pt-2 border-t border-border/50">
-                  <Button
-                    onClick={handleGenerate}
-                    disabled={isGenerating || genPlatforms.size === 0}
-                  >
-                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                    Generate More Posts
-                  </Button>
-                </div>
-              )}
-            </div>
+              aria-expanded={showGenOptions}
+            >
+              {showGenOptions ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+              {showGenOptions ? "Hide options" : "Options"}
+            </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSettingsOpen(true)}
+            className="text-xs text-muted-foreground"
+            aria-label="Open campaign settings"
+          >
+            <Settings className="h-3.5 w-3.5 mr-1" />
+            Settings
+          </Button>
         </div>
       </Card>
+
+      {/* Generation options — platform selection + test mode.
+          Lives OUTSIDE the header card so the header stays focused on
+          identity (image + title + meta + actions). Flush-attached to
+          the card's bottom edge (no rounded top, no top border, negative
+          top margin cancels the parent's space-y-6) so the two read as a
+          single continuous unit when expanded. */}
+      {showGenOptions && (campaign.status === "Draft" || campaign.status === "Active" || campaign.status === "Review") && !isGenerating && (
+        <div className="border border-t-0 rounded-b-lg rounded-t-none p-4 space-y-4 bg-muted/30">
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Platforms to generate
+            </Label>
+            <div className="flex flex-wrap gap-3">
+              {connectedPlatforms.size === 0 ? (
+                <p className="text-xs text-muted-foreground italic">
+                  No connected accounts for {currentBrand?.name || "this brand"}.
+                  Connect accounts in the Accounts page first.
+                </p>
+              ) : (
+                [...connectedPlatforms].sort().map((p) => {
+                  const PLATFORM_LABELS: Record<string, string> = {
+                    twitter: "X/Twitter",
+                    googlebusiness: "Google Business",
+                  };
+                  const label = PLATFORM_LABELS[p] || p.charAt(0).toUpperCase() + p.slice(1);
+                  return (
+                    <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                      <Switch
+                        checked={genPlatforms.has(p)}
+                        onCheckedChange={(checked) => {
+                          setGenPlatforms((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.add(p); else next.delete(p);
+                            return next;
+                          });
+                        }}
+                        className="scale-75"
+                      />
+                      <PlatformIcon platform={p as Platform} size="xs" showColor />
+                      <span className="text-xs">{label}</span>
+                      {postCountsByPlatform[p] > 0 && (
+                        <span className="text-[10px] text-muted-foreground">({postCountsByPlatform[p]})</span>
+                      )}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Max variants per platform
+            </Label>
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 5, 8, 10, null].map((val) => (
+                <Button
+                  key={val ?? "auto"}
+                  variant={genMaxPerPlatform === val ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 text-xs px-2.5"
+                  onClick={() => setGenMaxPerPlatform(val)}
+                >
+                  {val === null ? "Auto" : val}
+                </Button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              {genMaxPerPlatform
+                ? `Test mode: ${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
+                : `Auto: variant count based on content sections and campaign duration`}
+            </p>
+          </div>
+
+          {/* Voice intensity slider */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+              Tone of Voice
+            </Label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <Slider
+                  value={[genVoiceIntensity]}
+                  onValueChange={([val]) => setGenVoiceIntensity(val)}
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="flex-1"
+                />
+                <span className="text-xs font-medium text-muted-foreground w-8 text-right tabular-nums">
+                  {genVoiceIntensity}
+                </span>
+              </div>
+              <div className="flex justify-between text-[10px] text-muted-foreground/70 px-0.5">
+                {getAllToneTiers().map((tier) => (
+                  <span
+                    key={tier.label}
+                    className={cn(
+                      "cursor-pointer hover:text-foreground transition-colors",
+                      genVoiceIntensity >= tier.min && genVoiceIntensity <= tier.max && "text-foreground font-medium"
+                    )}
+                    onClick={() => setGenVoiceIntensity(Math.round((tier.min + tier.max) / 2))}
+                  >
+                    {tier.label}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {getToneLabel(genVoiceIntensity)} — adjusts how much brand personality comes through.{" "}
+                <a href="/dashboard/settings/brands" className="text-primary hover:underline">Edit tone dimensions</a>
+              </p>
+            </div>
+          </div>
+
+          {genOptionsChanged && (
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/50">
+              <span className="text-[11px] text-muted-foreground">
+                Unsaved changes
+              </span>
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={saveGenOptions}
+                disabled={savingGenOptions}
+              >
+                {savingGenOptions ? "Saving..." : "Save Options"}
+              </Button>
+            </div>
+          )}
+
+          {/* Generate More button — for Active/Review campaigns */}
+          {campaign && (campaign.status === "Active" || campaign.status === "Review") && (
+            <div className="pt-2 border-t border-border/50">
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating || genPlatforms.size === 0}
+              >
+                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                Generate More Posts
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
 
       {/* Compact progress bar during generation */}
       {progressLog.length > 0 && (() => {
@@ -1293,22 +1414,10 @@ export default function CampaignDetailPage() {
         );
       })()}
 
-      {/* Tabs: Posts / Settings */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="posts">
-            Posts
-            {posts.length > 0 && (
-              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                {posts.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-
-        {/* ── Posts Tab ─────────────────────────────────────────────── */}
-        <TabsContent value="posts">
+      {/* Posts list — always visible (no tab toggle). Settings, which used
+          to be a peer Tab, is now a right-side Sheet drawer triggered from
+          the action bar in the header card above. */}
+      <div className="space-y-4">
           {posts.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -1455,54 +1564,38 @@ export default function CampaignDetailPage() {
                 />
               )}
 
-              {/* Status summary bar — scheduled/published/queued posts (not shown inline) */}
-              {outOfViewCount > 0 && (
-                <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5 text-xs">
-                  {publishedCount > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      {publishedCount} published
-                    </span>
-                  )}
-                  {scheduledCount > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-indigo-500" />
-                      {scheduledCount} scheduled
-                    </span>
-                  )}
-                  {queuedCount > 0 && (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-amber-500" />
-                      {queuedCount} queued
-                    </span>
-                  )}
-                  <a
-                    href={`/dashboard/calendar?campaign=${campaignId}`}
-                    className="ml-auto text-primary hover:underline text-xs"
-                  >
-                    View on calendar →
-                  </a>
-                </div>
-              )}
+              {/* Status counts (published / scheduled / queued) and the
+                  Calendar link both moved into the timeline strip's header
+                  to remove redundancy. The standalone bar that used to live
+                  here was the third "View in Calendar" entry point on the
+                  page. */}
 
-              {/* "Running Low" / "Generate More" alert */}
+              {/* Queue-empty alert — only shows once the campaign has run out
+                  of pre-scheduled content (i.e., no future-dated Scheduled or
+                  Queued posts) AND the campaign window is still open. The
+                  previous trigger (approved < 30% of remaining slots) fired
+                  even when many Scheduled posts were still queued ahead,
+                  which is a false alarm — those Scheduled posts WILL fill
+                  the curve as their dates come up. */}
               {campaign && (campaign.status === "Review" || campaign.status === "Active") && (() => {
-                const cadence = campaign.platformCadence;
-                if (!cadence) return null;
                 const startDate = campaign.startDate ? new Date(campaign.startDate + "T00:00:00") : new Date();
                 const endDate = new Date(startDate);
                 endDate.setDate(endDate.getDate() + (campaign.durationDays || 90));
                 const now = new Date();
-                const remainingMs = endDate.getTime() - now.getTime();
-                if (remainingMs <= 0) return null;
-                const remainingWeeks = Math.max(1, remainingMs / (7 * 86400000));
-                const totalSlotsRemaining = Object.values(cadence).reduce(
-                  (sum, entry) => sum + (entry.postsPerWeek * remainingWeeks), 0
+                if (now >= endDate) return null; // campaign window done — banner irrelevant
+
+                // Hide banner while there are still future-dated Scheduled/Queued
+                // posts. The campaign is humming along; nothing to alert about.
+                const futureQueueExists = posts.some((p) =>
+                  ["Scheduled", "Queued"].includes(p.status) &&
+                  p.scheduledDate &&
+                  new Date(p.scheduledDate) > now,
                 );
-                const approvedAvailable = approvedCount;
-                const isUrgent = approvedAvailable === 0 && totalSlotsRemaining > 0;
-                const isLow = approvedAvailable < totalSlotsRemaining * 0.3;
-                if (!isUrgent && !isLow) return null;
+                if (futureQueueExists) return null;
+
+                // Queue is empty (last scheduled post has run) but window is
+                // still open. Differentiate two states by what's available.
+                const isUrgent = approvedCount === 0;
                 return (
                   <div className={cn(
                     "flex items-center justify-between rounded-lg border px-4 py-3",
@@ -1512,9 +1605,9 @@ export default function CampaignDetailPage() {
                   )}>
                     <div className="text-xs">
                       {isUrgent ? (
-                        <><strong>Queue empty</strong> — generate posts to keep your campaign active</>
+                        <><strong>Queue empty</strong> — your last scheduled post has run. Generate more to keep the campaign going.</>
                       ) : (
-                        <><strong>Running low</strong> — {approvedAvailable} approved, ~{Math.round(totalSlotsRemaining)} slots remaining</>
+                        <><strong>Queue empty</strong> — your last scheduled post has run. {approvedCount} approved {approvedCount === 1 ? "post is" : "posts are"} ready to schedule.</>
                       )}
                     </div>
                     <Button
@@ -1523,7 +1616,6 @@ export default function CampaignDetailPage() {
                       className="h-7 text-xs shrink-0"
                       onClick={() => {
                         setShowGenOptions(true);
-                        setActiveTab("posts");
                       }}
                     >
                       <Sparkles className="h-3 w-3 mr-1" />
@@ -1723,43 +1815,58 @@ export default function CampaignDetailPage() {
               )}
             </div>
           )}
-        </TabsContent>
+      </div>
 
-        {/* ── Settings Tab ──────────────────────────────────────────── */}
-        <TabsContent value="settings">
-          {/* Settings editable if no posts have been scheduled yet */}
-          {!posts.some((p) => ["Queued", "Scheduled", "Published"].includes(p.status)) ? (
-            <CampaignSettingsEditable
-              campaign={campaign}
-              campaignId={campaignId}
-              onUnsavedChanges={setSettingsUnsaved}
-            />
-          ) : (
-            <CampaignSettingsReadOnly campaign={campaign} />
-          )}
+      {/* Settings Sheet — opens from the right when triggered. Holds the
+          editable settings form (or read-only view when posts are already
+          scheduled), the Reset-to-Draft section, and the danger-zone
+          Delete section. The post list stays visible behind the Sheet
+          overlay so working context isn't lost. */}
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-2xl overflow-y-auto"
+        >
+          <SheetHeader>
+            <SheetTitle>Campaign settings</SheetTitle>
+            <SheetDescription>
+              Edit configuration, reset, or delete this campaign.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-6 space-y-4">
+            {!posts.some((p) => ["Queued", "Scheduled", "Published"].includes(p.status)) ? (
+              <CampaignSettingsEditable
+                campaign={campaign}
+                campaignId={campaignId}
+                onUnsavedChanges={setSettingsUnsaved}
+              />
+            ) : (
+              <CampaignSettingsReadOnly campaign={campaign} />
+            )}
 
-          {/* Reset to Draft — for Review/Failed/Generating/Scraping/Active campaigns */}
-          {["Review", "Failed", "Generating", "Scraping", "Active"].includes(campaign.status) && (
-            <ResetCampaignSection
-              campaignId={campaignId}
-              campaignName={campaign.name}
-              postCount={posts.length}
-              hasScheduledPosts={posts.some((p) => ["Scheduled", "Queued"].includes(p.status))}
-            />
-          )}
+            {/* Reset to Draft — for Review/Failed/Generating/Scraping/Active campaigns */}
+            {["Review", "Failed", "Generating", "Scraping", "Active"].includes(campaign.status) && (
+              <ResetCampaignSection
+                campaignId={campaignId}
+                campaignName={campaign.name}
+                postCount={posts.length}
+                hasScheduledPosts={posts.some((p) => ["Scheduled", "Queued"].includes(p.status))}
+              />
+            )}
 
-          {/* Delete campaign — only for non-Active campaigns */}
-          {campaign.status !== "Active" && (
-            <DeleteCampaignSection
-              campaignId={campaignId}
-              campaignName={campaign.name}
-              status={campaign.status}
-              postCount={posts.length}
-              isQuickPost={isQuickPost}
-            />
-          )}
-        </TabsContent>
-      </Tabs>
+            {/* Delete campaign — only for non-Active campaigns */}
+            {campaign.status !== "Active" && (
+              <DeleteCampaignSection
+                campaignId={campaignId}
+                campaignName={campaign.name}
+                status={campaign.status}
+                postCount={posts.length}
+                isQuickPost={isQuickPost}
+              />
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Progress log moved above tabs — see generation options card */}
 
@@ -3136,50 +3243,89 @@ function CampaignHeaderActions({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Campaign actions">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {isArchived ? (
-            <DropdownMenuItem onClick={handleUnarchive}>
-              <ArchiveRestore className="h-4 w-4 mr-2" /> Unarchive
-            </DropdownMenuItem>
-          ) : (
-            <>
-              <DropdownMenuItem
-                onClick={() => setRedistributeOpen(true)}
-                disabled={!canRedistribute}
-              >
-                <CalendarRange className="h-4 w-4 mr-2" /> Redistribute…
-                {canRedistribute && (
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {counts.approved + counts.scheduled}
-                  </span>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleCleanup} disabled={counts.pending === 0}>
-                <Eraser className="h-4 w-4 mr-2" /> Clean up drafts
-                {counts.pending > 0 && (
-                  <span className="ml-auto text-xs text-muted-foreground">{counts.pending}</span>
-                )}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setArchiveOpen(true)}>
-                <Archive className="h-4 w-4 mr-2" /> Archive
-              </DropdownMenuItem>
-            </>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={onDeleteRequest}
+      {/* Page-level campaign actions — exposed inline rather than hidden in
+          a 3-dot menu (per user request). Delete stays behind a small
+          overflow menu as a destructive-action guardrail. */}
+      <div className="flex items-center gap-1 shrink-0">
+        {isArchived ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleUnarchive}
+            disabled={busy === "unarchive"}
+            className="h-8 text-xs"
           >
-            <Trash2 className="h-4 w-4 mr-2" /> Delete…
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            {busy === "unarchive" ? (
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+            ) : (
+              <ArchiveRestore className="h-3.5 w-3.5 mr-1.5" />
+            )}
+            Unarchive
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRedistributeOpen(true)}
+              disabled={!canRedistribute}
+              className="h-8 text-xs"
+            >
+              <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+              Redistribute
+              {canRedistribute && (
+                <Badge variant="secondary" className="ml-1.5 px-1 py-0 text-[10px] font-medium">
+                  {counts.approved + counts.scheduled}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCleanup}
+              disabled={counts.pending === 0 || busy === "cleanup"}
+              className="h-8 text-xs"
+            >
+              {busy === "cleanup" ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Eraser className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Clean up
+              {counts.pending > 0 && (
+                <Badge variant="secondary" className="ml-1.5 px-1 py-0 text-[10px] font-medium">
+                  {counts.pending}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setArchiveOpen(true)}
+              className="h-8 text-xs"
+            >
+              <Archive className="h-3.5 w-3.5 mr-1.5" />
+              Archive
+            </Button>
+          </>
+        )}
+        {/* Destructive-action guardrail: Delete stays in a one-item overflow */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More campaign actions">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={onDeleteRequest}
+            >
+              <Trash2 className="h-4 w-4 mr-2" /> Delete…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <ArchiveCampaignDialog
         campaign={campaign}
