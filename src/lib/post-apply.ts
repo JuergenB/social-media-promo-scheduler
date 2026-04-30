@@ -12,6 +12,7 @@
  */
 import { getRecord, updateRecord } from "@/lib/airtable/client";
 import { createBrandClient } from "@/lib/late-api/client";
+import { zernioThrottle } from "@/lib/api-throttle";
 import {
   assembleCarouselPDF,
   prepareLinkedInPdfMetadata,
@@ -262,6 +263,7 @@ async function syncZernio(
 
   // Resolve accountId from the live Zernio post — replacing platforms[]
   // without it nullifies the account link.
+  await zernioThrottle.wait();
   const { data: existing } = await client.posts.getPost({ path: { postId: zernioPostId } });
   const existingPlatform = (
     existing as { post?: { platforms?: Array<{ platform?: string; accountId?: string | { _id: string } }> } }
@@ -279,6 +281,7 @@ async function syncZernio(
     updateBody.platforms = [{ platform, accountId, platformSpecificData: psd }];
   }
 
+  await zernioThrottle.wait();
   const { error } = await client.posts.updatePost({
     path: { postId: zernioPostId },
     body: updateBody,

@@ -30,6 +30,13 @@ import { schedulePostsAlgorithm, type ScheduleSlot } from "@/lib/scheduling";
 import { applyPostChanges } from "@/lib/post-apply";
 import type { DistributionBias, PlatformCadenceConfig } from "@/lib/airtable/types";
 
+// Vercel: 60s max on Pro for serverless functions. Apply mode runs through
+// a per-API-throttled chain (see src/lib/api-throttle.ts), so wall-clock
+// scales with number of posts. For ~20 posts that's ~50s; for 25+ this
+// will time out and Phase 3 (downstream sync) should be moved to SSE
+// streaming. Tracked as a follow-up.
+export const maxDuration = 60;
+
 const PLATFORM_MAP: Record<string, string> = {
   Instagram: "instagram",
   "X/Twitter": "twitter",
@@ -289,6 +296,7 @@ export async function POST(
     }
 
     // ── Apply mode ───────────────────────────────────────────────────────
+    const applyStartMs = Date.now();
     // Strategy (per spec's proposed default for partial-failure UX):
     // 1. Update all Airtable post dates first (atomic enough — Airtable does
     //    not give us a transaction, but per-record updates are independent).
@@ -374,6 +382,7 @@ export async function POST(
       downstreamOk: results.filter((r) => r.downstream === "ok").length,
       downstreamSkipped: results.filter((r) => r.downstream === "skipped").length,
       failures: results.filter((r) => r.airtable === "error" || r.downstream === "error").length,
+      wallClockMs: Date.now() - applyStartMs,
     };
 
     console.log(`[redistribute] Campaign ${campaignId} applied:`, summary);

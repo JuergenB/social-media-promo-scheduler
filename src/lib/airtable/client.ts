@@ -1,6 +1,7 @@
 // Airtable REST API client for server-side use
 
 import type { UserProfile, UserRole } from "./types";
+import { airtableThrottle } from "@/lib/api-throttle";
 
 const AIRTABLE_PAT = process.env.AIRTABLE_API_KEY!;
 const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID!;
@@ -17,28 +18,62 @@ interface AirtableListResponse<T = Record<string, unknown>> {
   offset?: string;
 }
 
+/**
+ * Airtable's per-base rate limit is 5 req/sec. Bursting past it returns
+ * a 429 with `Retry-After` (seconds). We retry up to 3 times with
+ * exponential backoff, honoring the header when present. This protects
+ * batch routes (redistribute, schedule, etc.) from cascading failures
+ * when many records are touched in one user action.
+ */
+const AIRTABLE_MAX_RETRIES = 3;
+const AIRTABLE_BASE_BACKOFF_MS = 500;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function airtableFetch<T>(
   path: string,
   options?: RequestInit
 ): Promise<T> {
   const url = `${AIRTABLE_API_URL}/${AIRTABLE_BASE_ID}${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${AIRTABLE_PAT}`,
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
+  let lastError: unknown = null;
 
-  if (!res.ok) {
+  for (let attempt = 0; attempt <= AIRTABLE_MAX_RETRIES; attempt++) {
+    // Hard rate-limit gate: never call Airtable faster than 4.5 req/sec.
+    await airtableThrottle.wait();
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${AIRTABLE_PAT}`,
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    if (res.ok) return res.json();
+
+    if (res.status === 429 && attempt < AIRTABLE_MAX_RETRIES) {
+      // Honor Retry-After if present (seconds), else exponential backoff.
+      const retryAfterHeader = res.headers.get("Retry-After");
+      const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+      const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? retryAfterSec * 1000
+        : AIRTABLE_BASE_BACKOFF_MS * 2 ** attempt;
+      console.warn(`[airtable] 429 on ${path}; retry in ${waitMs}ms (attempt ${attempt + 1}/${AIRTABLE_MAX_RETRIES})`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    // Non-429 error or out of retries — fail.
     const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(
-      `Airtable API error: ${res.status} ${JSON.stringify(error)}`
+    lastError = new Error(
+      `Airtable API error: ${res.status} ${JSON.stringify(error)}`,
     );
+    break;
   }
 
-  return res.json();
+  throw lastError ?? new Error("Airtable request failed after retries");
 }
 
 export async function listRecords<T = Record<string, unknown>>(
