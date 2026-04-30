@@ -44,11 +44,19 @@ class ApiThrottle {
 export const airtableThrottle = new ApiThrottle(220);
 
 /**
- * Zernio: Free tier 60/min (1/sec), Build tier 120/min (2/sec). We don't
- * know which tier the deployed key is on, so target the Free tier with
- * margin: 1100ms = ~0.9 req/sec → safe under Free.
+ * Zernio: per Perplexity research (2026-04-29), Zernio does not publish
+ * per-second/per-minute rate limits — only monthly post quotas and daily
+ * Tools API quotas. The deployed brand keys are on the Dominate AppSumo
+ * tier (= Accelerate plan: unlimited posts, 500 Tools API calls/day).
+ * Empirically, the existing /schedule route fires sequential createPost
+ * calls without throttling and has been stable.
+ *
+ * 500ms (2 req/sec) is a defensive ceiling — well within what production
+ * traffic has shown stable, and gives 19-post redistribute runs ~25–30s
+ * wall-clock. If a 429 ever does come back, the route surfaces it as
+ * a per-post failure and the user can retry.
  */
-export const zernioThrottle = new ApiThrottle(1100);
+export const zernioThrottle = new ApiThrottle(500);
 
 /**
  * lnk.bio: rate limit undocumented; the dashboard is responsive at ~2 req/sec

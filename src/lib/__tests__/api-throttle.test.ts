@@ -25,13 +25,13 @@ describe("api-throttle minimum interval", () => {
     expect(elapsed).toBeGreaterThanOrEqual(4 * 220 - 5);
   });
 
-  it("Zernio throttle (1100ms): 3 sequential calls take ≥ 2 × 1100ms", async () => {
-    await new Promise((r) => setTimeout(r, 2300));
+  it("Zernio throttle (500ms): 3 sequential calls take ≥ 2 × 500ms", async () => {
+    await new Promise((r) => setTimeout(r, 1100));
     const start = Date.now();
     for (let i = 0; i < 3; i++) await zernioThrottle.wait();
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(2 * 1100 - 5);
-  }, 10_000);
+    expect(elapsed).toBeGreaterThanOrEqual(2 * 500 - 5);
+  });
 
   it("lnk.bio throttle (500ms): 4 sequential calls take ≥ 3 × 500ms", async () => {
     await new Promise((r) => setTimeout(r, 1100));
