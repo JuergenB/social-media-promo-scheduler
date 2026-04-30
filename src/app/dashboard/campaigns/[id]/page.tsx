@@ -911,90 +911,94 @@ export default function CampaignDetailPage() {
         <ArchivedBanner campaign={campaign} />
       )}
 
-      {/* Header card */}
+      {/* Header card — 2-col on md+ (image / content), stacks on narrow */}
       <Card className="overflow-hidden !py-0 !gap-0">
-        {/* Banner image with upload overlay */}
-        <div className="relative group">
-          {campaign.imageUrl ? (
-            <div className="h-44 overflow-hidden bg-muted">
-              <img
-                src={campaign.imageUrl}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-            </div>
-          ) : (
-            <div className="h-24 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-              <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
-            </div>
-          )}
-          {/* Upload / paste URL overlay */}
-          {showHeroUrlInput ? (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/50 px-8">
-              <div className="flex w-full max-w-md gap-2" onClick={(e) => e.stopPropagation()}>
-                <Input
-                  type="url"
-                  placeholder="Paste image URL..."
-                  value={heroUrlInput}
-                  onChange={(e) => setHeroUrlInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") setHeroImageUrl(heroUrlInput);
-                    if (e.key === "Escape") { setShowHeroUrlInput(false); setHeroUrlInput(""); }
-                  }}
-                  className="bg-white text-zinc-900 text-sm h-8"
-                  autoFocus
+        <div className="grid grid-cols-1 md:grid-cols-3">
+          {/* Left col: cover image at 4:3, with the same hover overlay
+              (Change / Paste URL / Remove) as before. Tall images are
+              cover-centered; wider images crop on the sides. */}
+          <div className="relative group md:col-span-1">
+            {campaign.imageUrl ? (
+              <div className="aspect-[4/3] overflow-hidden bg-muted">
+                <img
+                  src={campaign.imageUrl}
+                  alt=""
+                  className="w-full h-full object-cover object-center"
                 />
-                <Button size="sm" variant="secondary" className="h-8 shrink-0" onClick={() => setHeroImageUrl(heroUrlInput)} disabled={!heroUrlInput.trim()}>
-                  Set
-                </Button>
-                <Button size="sm" variant="ghost" className="h-8 shrink-0 text-white hover:text-white hover:bg-white/20" onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
               </div>
-            </div>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-colors">
-              <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={heroUploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadHeroImage(file);
-                    e.target.value = "";
-                  }}
-                />
-                <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white transition-colors">
-                  {heroUploading ? (
-                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</>
-                  ) : (
-                    <><Upload className="h-3.5 w-3.5" /> {campaign.imageUrl ? "Change" : "Upload"}</>
-                  )}
-                </span>
-              </label>
-              {!heroUploading && (
-                <button
-                  onClick={() => setShowHeroUrlInput(true)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white"
-                >
-                  <Link2 className="h-3.5 w-3.5" /> Paste URL
-                </button>
-              )}
-              {campaign.imageUrl && !heroUploading && (
-                <button
-                  onClick={removeHeroImage}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
-                >
-                  <Trash2 className="h-3.5 w-3.5" /> Remove
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+            ) : (
+              <div className="aspect-[4/3] bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
+              </div>
+            )}
+            {/* Upload / paste URL overlay */}
+            {showHeroUrlInput ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50 px-4">
+                <div className="flex w-full max-w-md gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Input
+                    type="url"
+                    placeholder="Paste image URL..."
+                    value={heroUrlInput}
+                    onChange={(e) => setHeroUrlInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") setHeroImageUrl(heroUrlInput);
+                      if (e.key === "Escape") { setShowHeroUrlInput(false); setHeroUrlInput(""); }
+                    }}
+                    className="bg-white text-zinc-900 text-sm h-8"
+                    autoFocus
+                  />
+                  <Button size="sm" variant="secondary" className="h-8 shrink-0" onClick={() => setHeroImageUrl(heroUrlInput)} disabled={!heroUrlInput.trim()}>
+                    Set
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-8 shrink-0 text-white hover:text-white hover:bg-white/20" onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="absolute inset-0 flex flex-wrap items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-colors">
+                <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={heroUploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) uploadHeroImage(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white transition-colors">
+                    {heroUploading ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</>
+                    ) : (
+                      <><Upload className="h-3.5 w-3.5" /> {campaign.imageUrl ? "Change" : "Upload"}</>
+                    )}
+                  </span>
+                </label>
+                {!heroUploading && (
+                  <button
+                    onClick={() => setShowHeroUrlInput(true)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white"
+                  >
+                    <Link2 className="h-3.5 w-3.5" /> Paste URL
+                  </button>
+                )}
+                {campaign.imageUrl && !heroUploading && (
+                  <button
+                    onClick={removeHeroImage}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
 
-        <div className="px-5 py-4 space-y-3">
+          {/* Right col: title + URL + status badge + meta + editorial + action buttons */}
+          <div className="px-5 py-4 space-y-3 md:col-span-2">
           {/* Title row */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -1217,6 +1221,7 @@ export default function CampaignDetailPage() {
               )}
             </div>
           )}
+          </div>
         </div>
       </Card>
 
