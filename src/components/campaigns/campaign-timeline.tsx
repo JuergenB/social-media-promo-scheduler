@@ -65,13 +65,35 @@ export function CampaignTimeline({
     [posts]
   );
 
-  // Group posts by day with platform info
-  const { daySlots, activePlatforms, monthMarkers } = useMemo(() => {
-    const endDate = addDays(campaignStartDate, durationDays);
-    const platforms = new Set<string>();
-    const today = new Date();
+  // The visible timeline range encompasses the WHOLE campaign story:
+  // - left edge = earliest of (campaign Start Date, earliest scheduled/published post)
+  // - right edge = latest of (campaign Start + durationDays, latest scheduled post)
+  // The campaign's planned window (Start → Start+durationDays) lives inside
+  // this range. "Today" floats as a vertical marker wherever today actually
+  // is — it's no longer conflated with the start.
+  const { daySlots, activePlatforms, monthMarkers, effectiveStart, effectiveDays } = useMemo(() => {
+    const plannedEnd = addDays(campaignStartDate, durationDays);
+    const todayDate = new Date();
 
-    // Build day slots
+    // Find earliest/latest post anchors (use day-floor so we render whole days)
+    const postTimes = scheduledPosts
+      .map((p) => new Date(p.scheduledDate).getTime())
+      .filter((t) => Number.isFinite(t));
+    const earliestPost = postTimes.length > 0
+      ? new Date(Math.min(...postTimes))
+      : campaignStartDate;
+    const latestPost = postTimes.length > 0
+      ? new Date(Math.max(...postTimes))
+      : plannedEnd;
+
+    const dayFloor = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const startCandidate = earliestPost.getTime() < campaignStartDate.getTime()
+      ? dayFloor(earliestPost) : dayFloor(campaignStartDate);
+    const endCandidate = latestPost.getTime() > plannedEnd.getTime()
+      ? dayFloor(latestPost) : dayFloor(plannedEnd);
+    const span = Math.max(1, differenceInDays(endCandidate, startCandidate));
+
+    const platforms = new Set<string>();
     const slots: Array<{
       dayOffset: number;
       date: Date;
@@ -80,8 +102,8 @@ export function CampaignTimeline({
       isToday: boolean;
     }> = [];
 
-    for (let d = 0; d <= durationDays; d++) {
-      const date = addDays(campaignStartDate, d);
+    for (let d = 0; d <= span; d++) {
+      const date = addDays(startCandidate, d);
       const dateStr = format(date, "yyyy-MM-dd");
       const dayPosts = scheduledPosts.filter(
         (p) => p.scheduledDate.split("T")[0] === dateStr
@@ -98,34 +120,45 @@ export function CampaignTimeline({
           date,
           posts: dayPosts,
           platforms: platMap,
-          isToday: isSameDay(date, today),
+          isToday: isSameDay(date, todayDate),
         });
       }
     }
 
-    // Month markers along the timeline
     const months: Array<{ label: string; position: number }> = [];
     let lastMonth = -1;
-    for (let d = 0; d <= durationDays; d++) {
-      const date = addDays(campaignStartDate, d);
+    for (let d = 0; d <= span; d++) {
+      const date = addDays(startCandidate, d);
       const month = date.getMonth();
       if (month !== lastMonth) {
         months.push({
           label: d === 0 ? format(date, "MMM d") : format(date, "MMM"),
-          position: durationDays > 0 ? d / durationDays : 0,
+          position: span > 0 ? d / span : 0,
         });
         lastMonth = month;
       }
     }
 
-    return { daySlots: slots, activePlatforms: [...platforms], monthMarkers: months };
+    return {
+      daySlots: slots,
+      activePlatforms: [...platforms],
+      monthMarkers: months,
+      effectiveStart: startCandidate,
+      effectiveDays: span,
+    };
   }, [scheduledPosts, campaignStartDate, durationDays]);
 
   if (scheduledPosts.length === 0) return null;
 
+  // Each day occupies a slot of width 1/(effectiveDays+1). Dots and the
+  // today marker are positioned at the MIDPOINT of their day's slot so
+  // they don't clip the card edges at days 0 or N.
+  const slotCount = effectiveDays + 1;
   const today = new Date();
-  const todayOffset = differenceInDays(today, campaignStartDate);
-  const todayPosition = durationDays > 0 ? Math.max(0, Math.min(1, todayOffset / durationDays)) : 0;
+  const todayOffset = differenceInDays(today, effectiveStart);
+  const todayPosition = slotCount > 0
+    ? Math.max(0, Math.min(1, (todayOffset + 0.5) / slotCount))
+    : 0;
 
   return (
     <TooltipProvider delayDuration={150}>
@@ -184,7 +217,7 @@ export function CampaignTimeline({
             <span
               className="absolute right-0 text-[10px] text-muted-foreground"
             >
-              {format(addDays(campaignStartDate, durationDays), "MMM d")}
+              {format(addDays(effectiveStart, effectiveDays), "MMM d")}
             </span>
           </div>
 
@@ -202,16 +235,17 @@ export function CampaignTimeline({
           {/* Track with posts */}
           <div className="relative h-10 bg-muted/30 rounded-md border border-border/50">
             {/* Today marker */}
-            {todayOffset >= 0 && todayOffset <= durationDays && (
+            {todayOffset >= 0 && todayOffset <= effectiveDays && (
               <div
                 className="absolute top-0 bottom-0 w-px bg-primary/50 z-10"
                 style={{ left: `${todayPosition * 100}%` }}
               />
             )}
 
-            {/* Post markers — uniform 8px dots, side-by-side */}
+            {/* Post markers — uniform 8px dots, side-by-side, centered in
+                the day's slot so they don't clip the card edges. */}
             {daySlots.map((slot, i) => {
-              const position = durationDays > 0 ? slot.dayOffset / durationDays : 0;
+              const position = slotCount > 0 ? (slot.dayOffset + 0.5) / slotCount : 0;
               const platformEntries = [...slot.platforms.entries()];
 
               return (
@@ -253,7 +287,7 @@ export function CampaignTimeline({
           </div>
 
           {/* Today label below the track */}
-          {todayOffset >= 0 && todayOffset <= durationDays && (
+          {todayOffset >= 0 && todayOffset <= effectiveDays && (
             <div className="relative h-4">
               <span
                 className="absolute text-[9px] text-primary font-medium"
