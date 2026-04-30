@@ -190,14 +190,17 @@ export function RedistributeDialog({ campaign, posts, open, onOpenChange }: Prop
           `Redistributed ${summary.airtableOk}/${summary.total} (${summary.failures} downstream failure${summary.failures === 1 ? "" : "s"} — refresh and retry)`,
         );
       }
-      await queryClient.invalidateQueries({ queryKey: ["campaign", campaign.id] });
-      await queryClient.invalidateQueries({ queryKey: ["campaigns"] });
-      onOpenChange(false);
+      // Per memory rule (feedback_reload_over_invalidation): overlay-mutating
+      // Airtable actions need a hard page reload, not just queryClient
+      // invalidate — we've hit stale-state bugs in this codebase before.
+      // Brief delay so the toast registers before the reload swaps the page.
+      setTimeout(() => window.location.reload(), 800);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Redistribute failed");
-    } finally {
       setApplying(false);
     }
+    // Note: no finally block clearing applying — on success we're about to
+    // reload, so we keep the spinner visible during the 800ms toast window.
   }
 
   // Build synthetic Post[] from preview mapping for the proposed timeline.
@@ -339,6 +342,18 @@ export function RedistributeDialog({ campaign, posts, open, onOpenChange }: Prop
             </div>
           )}
         </div>
+
+        {applying && preview && (
+          <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+            <div className="flex items-center gap-2 font-medium">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Applying to {preview.mapping.length} post{preview.mapping.length === 1 ? "" : "s"}…
+            </div>
+            <div className="mt-1 ml-5.5 leading-relaxed">
+              Updating Airtable, then syncing each scheduled post to Zernio + lnk.bio. Throttled to stay under API rate limits — expect ~{Math.max(15, Math.ceil(preview.mapping.length * 1.5))}s. The page will refresh automatically when done.
+            </div>
+          </div>
+        )}
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button
