@@ -17,6 +17,8 @@
  *   GET  /oauth/v1/group/list                  — list groups on authenticated profile
  */
 
+import { lnkBioThrottle } from "@/lib/api-throttle";
+
 const API_BASE = "https://lnk.bio/oauth/v1";
 const TOKEN_URL = "https://lnk.bio/oauth/token";
 
@@ -72,6 +74,7 @@ async function getAccessToken(creds: LnkBioCredentials): Promise<string> {
   if (cached && Date.now() < cached.expiresAt - 60_000) return cached.accessToken;
 
   const basicAuth = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString("base64");
+  await lnkBioThrottle.wait();
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
@@ -110,6 +113,7 @@ async function lnkBioRequest(
       "application/x-www-form-urlencoded";
     options.body = new URLSearchParams(data).toString();
   }
+  await lnkBioThrottle.wait();
   const res = await fetch(`${API_BASE}${path}`, options);
   if (!res.ok) {
     const text = await res.text();

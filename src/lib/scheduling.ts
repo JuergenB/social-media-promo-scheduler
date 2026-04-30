@@ -53,6 +53,19 @@ export interface ScheduleInput {
    * via `.split("T")[0]`). Inner value: number of posts already on that day.
    */
   excludedDates?: Map<string, Map<string, number>>;
+  /**
+   * How to interpret existing posts in `excludedDates`.
+   *
+   * - `true` (additive — same-campaign expansion, #84 Phase 2): existing posts
+   *   contribute to the curve's total target distribution. New posts use
+   *   greedy deficit-fill so the combined existing+new shape approximates
+   *   scheduling totalPostCount from scratch.
+   * - `false` (default — external collisions, #178 redistribute): existing
+   *   posts are treated as pure collision constraints (other campaigns'
+   *   posts, reserved slots). They count toward `maxPerDay` caps but do
+   *   NOT shape the curve. Phase A midpoint-quantile sampling is used.
+   */
+  additiveMode?: boolean;
 }
 
 // ── Resolved cadence (internal) ───────────────────────────────────────
@@ -189,204 +202,229 @@ function isDayActive(date: Date, cadence: ResolvedCadence): boolean {
   return cadence.activeDays.includes(date.getDay());
 }
 
-/**
- * Find the index in `validDays` whose cumulative weight first reaches the target.
- */
-function cdfInvert(cumulative: number[], target: number): number {
-  for (let j = 0; j < cumulative.length; j++) {
-    if (cumulative[j] >= target) return j;
-  }
-  return cumulative.length - 1;
-}
-
-/**
- * Walk outward from `preferredIdx` to the nearest valid-day index whose count is
- * still below `maxPerDay`. When both sides have a candidate at the same offset,
- * prefer the heavier curve weight (closer to the curve's intent).
- */
-function findAvailableDayIdx(
-  preferredIdx: number,
-  validDays: number[],
-  dayCounts: Map<number, number>,
-  maxPerDay: number,
-  weights: number[],
-): number {
-  const isOpen = (idx: number) =>
-    idx >= 0 &&
-    idx < validDays.length &&
-    (dayCounts.get(validDays[idx]) || 0) < maxPerDay;
-
-  if (isOpen(preferredIdx)) return preferredIdx;
-
-  for (let offset = 1; offset < validDays.length; offset++) {
-    const left = preferredIdx - offset;
-    const right = preferredIdx + offset;
-    const leftOpen = isOpen(left);
-    const rightOpen = isOpen(right);
-    if (leftOpen && rightOpen) {
-      return weights[left] >= weights[right] ? left : right;
-    }
-    if (leftOpen) return left;
-    if (rightOpen) return right;
-  }
-  // No room anywhere — best-effort fallback (over-allocates the preferred day).
-  return preferredIdx;
-}
-
 // ── Main scheduling function ──────────────────────────────────────────
+
+interface PlatformState {
+  cadence: ResolvedCadence;
+  posts: Array<{ id: string; platform: string; sortOrder?: number | null }>;
+  /** True if this day-offset is active for this platform. Length === durationDays. */
+  activeMask: boolean[];
+  /** Per day-offset: count of posts on this day (existing + placed-this-run). */
+  dayCounts: Map<number, number>;
+  /** Per day-offset: decimal hours already placed (for minSpacing checks). */
+  dayTimes: Map<number, number[]>;
+  /** Day-offsets where this run has placed a post (in placement order). */
+  placedDayOffsets: number[];
+}
 
 /**
  * Distribute approved posts across the campaign timeline.
  *
- * Algorithm:
- * 1. Group posts by platform
- * 2. Generate a tapering curve for the campaign duration
- * 3. For each platform, distribute its posts across days proportionally
- *    to the curve weights, respecting per-platform cadence
- * 4. Assign specific times using organic variation
+ * Uses **global cross-platform greedy deficit-fill** rather than per-platform
+ * independent quantile sampling. Each iteration picks the (platform, day)
+ * pair with the largest deficit (`ideal[d] − placed[d]` aggregate) subject
+ * to per-platform constraints. Avoids the synchronized-clustering pattern
+ * that pure per-platform sampling produces — every platform sharing the
+ * same curve no longer drives every platform's last quantile onto the same
+ * tail-end days.
+ *
+ * Steps:
+ * 1. Group posts by platform; preserve user `sortOrder` within each group.
+ * 2. Generate aggregate ideal curve (one curve, scaled to total post count).
+ * 3. For each placement, scan all (platform, day) pairs and pick the one
+ *    that fills the most deficit. Tie-break by the platform that has placed
+ *    the fewest posts so far (round-robin fairness), then earliest day,
+ *    then deterministic platform name.
+ * 4. After all placements, zip each platform's day-list (sorted ascending)
+ *    with its sortOrder-sorted posts so post[sortOrder=0] gets the earliest
+ *    day for that platform, post[sortOrder=1] the next, etc.
+ * 5. Pick a time-of-day per slot using cadence windows + minSpacing.
  */
 export function schedulePostsAlgorithm(input: ScheduleInput): ScheduleSlot[] {
-  const { posts, startDate, durationDays, bias, cadence: cadenceConfig, excludedDates } = input;
+  const {
+    posts,
+    startDate,
+    durationDays,
+    bias,
+    cadence: cadenceConfig,
+    excludedDates,
+    additiveMode = false,
+  } = input;
 
   if (posts.length === 0 || durationDays <= 0) return [];
 
-  // Group posts by platform, then sort by sortOrder (ascending, nulls last)
-  const byPlatform = new Map<string, Array<{ id: string; platform: string; sortOrder?: number | null }>>();
+  // ── 1. Group + sort posts per platform by sortOrder ────────────────
+  const byPlatform = new Map<
+    string,
+    Array<{ id: string; platform: string; sortOrder?: number | null }>
+  >();
   for (const post of posts) {
-    const existing = byPlatform.get(post.platform) || [];
-    existing.push(post);
-    byPlatform.set(post.platform, existing);
+    const list = byPlatform.get(post.platform) ?? [];
+    list.push(post);
+    byPlatform.set(post.platform, list);
   }
-  for (const [, platformPosts] of byPlatform) {
-    platformPosts.sort((a, b) => {
-      const aOrder = a.sortOrder ?? Infinity;
-      const bOrder = b.sortOrder ?? Infinity;
-      return aOrder - bOrder;
+  for (const [, list] of byPlatform) {
+    list.sort((a, b) => {
+      const ao = a.sortOrder ?? Infinity;
+      const bo = b.sortOrder ?? Infinity;
+      return ao - bo;
     });
   }
 
-  // Generate the tapering curve
+  // Curve over the full durationDays — single aggregate target shared across
+  // all platforms (the key change vs. the previous per-platform approach).
   const curve = generateCurve(durationDays, bias);
 
-  const slots: ScheduleSlot[] = [];
-
+  // ── 2. Build per-platform state ─────────────────────────────────────
+  const states = new Map<string, PlatformState>();
   for (const [platform, platformPosts] of byPlatform) {
     const cadence = resolveCadence(platform, cadenceConfig);
-    const postCount = platformPosts.length;
-
-    // Build the platform's working state:
-    // - validDays: day offsets allowed by activeDays
-    // - dayCounts: per-day count (pre-loaded from excludedDates, mutated as we place)
-    // - dayTimes: per-day list of decimal hours already placed (for spacing)
     const platformExcluded = excludedDates?.get(platform);
-    const validDays: number[] = [];
+    const activeMask: boolean[] = [];
     const dayCounts = new Map<number, number>();
-    const dayTimes = new Map<number, number[]>();
 
     for (let d = 0; d < durationDays; d++) {
       const date = new Date(startDate);
       date.setDate(date.getDate() + d);
-      if (!isDayActive(date, cadence)) continue;
-      validDays.push(d);
-      if (platformExcluded) {
+      const isActive = isDayActive(date, cadence);
+      activeMask.push(isActive);
+      if (isActive && platformExcluded) {
         const dateStr = date.toISOString().split("T")[0];
         const existing = platformExcluded.get(dateStr) ?? 0;
         if (existing > 0) dayCounts.set(d, existing);
       }
     }
 
-    if (validDays.length === 0) continue;
+    states.set(platform, {
+      cadence,
+      posts: platformPosts,
+      activeMask,
+      dayCounts,
+      dayTimes: new Map(),
+      placedDayOffsets: [],
+    });
+  }
 
-    // Curve weights normalized over valid days
-    const validWeights = validDays.map((d) => curve[d]);
-    const totalWeight = validWeights.reduce((a, b) => a + b, 0);
-    const curveNormalized = validWeights.map((w) => w / totalWeight);
+  // ── 3. Compute global ideal curve ───────────────────────────────────
+  // Aggregate target = curve × (newPostCount + existing-counted-toward-curve).
+  // additiveMode: true → existing posts are part of the same campaign's
+  //   distribution target, so they contribute to total. (#84 Phase 2)
+  // additiveMode: false → existing in excludedDates are external collisions
+  //   (other-campaign posts, reservations) — they constrain caps but do NOT
+  //   reshape this campaign's curve target. (#178 redistribute)
+  let curveTotalCount = posts.length;
+  if (additiveMode) {
+    for (const [, s] of states) {
+      for (const [, count] of s.dayCounts) curveTotalCount += count;
+    }
+  }
+  const idealPerDay = curve.map((w) => w * curveTotalCount);
 
-    const totalExisting = [...dayCounts.values()].reduce((a, b) => a + b, 0);
-
-    // Closure: place the i-th platform post at the given valid-day index.
-    // Mutates dayCounts/dayTimes/slots; reads platformPosts[i] and cadence.
-    let placedCount = 0;
-    const placeAt = (dayIdx: number) => {
-      const dayOffset = validDays[dayIdx];
-      dayCounts.set(dayOffset, (dayCounts.get(dayOffset) ?? 0) + 1);
-      const date = new Date(startDate);
-      date.setDate(date.getDate() + dayOffset);
-      const timesOnDay = dayTimes.get(dayOffset) ?? [];
-      const time = pickTimeWithSpacing(cadence, timesOnDay);
-      date.setHours(time.hour, time.minute, 0, 0);
-      timesOnDay.push(time.decimal);
-      dayTimes.set(dayOffset, timesOnDay);
-      slots.push({
-        postId: platformPosts[placedCount].id,
-        platform,
-        scheduledDate: date.toISOString(),
-      });
-      placedCount += 1;
-    };
-
-    if (totalExisting === 0) {
-      // ── Phase A: first-time scheduling — midpoint quantile + CDF inversion
-      const cumulative: number[] = [];
-      let cum = 0;
-      for (const w of curveNormalized) {
-        cum += w;
-        cumulative.push(cum);
-      }
-      for (let i = 0; i < postCount; i++) {
-        const target = (i + 0.5) / postCount;
-        const preferredIdx = cdfInvert(cumulative, target);
-        const dayIdx = findAvailableDayIdx(
-          preferredIdx,
-          validDays,
-          dayCounts,
-          cadence.maxPerDay,
-          curveNormalized,
-        );
-        placeAt(dayIdx);
-      }
-    } else {
-      // ── Phase B: density-aware additive (#84 Phase 2) — greedy deficit fill
-      //
-      // For each new post, pick the valid day with the largest remaining
-      // deficit (= ideal − existing − already-placed-this-run) where cadence
-      // still has room. This produces a combined existing+new distribution
-      // close to what scheduling totalPostCount from scratch would give.
-      const totalPostCount = postCount + totalExisting;
-      const idealPerDay = curveNormalized.map((w) => w * totalPostCount);
-      const remainingDeficit = idealPerDay.map((ideal, idx) =>
-        ideal - (dayCounts.get(validDays[idx]) ?? 0),
-      );
-
-      for (let i = 0; i < postCount; i++) {
-        // Pick the valid day with max remaining deficit AND cadence room.
-        let bestIdx = -1;
-        let bestDef = -Infinity;
-        for (let j = 0; j < validDays.length; j++) {
-          if ((dayCounts.get(validDays[j]) ?? 0) >= cadence.maxPerDay) continue;
-          if (remainingDeficit[j] > bestDef) {
-            bestDef = remainingDeficit[j];
-            bestIdx = j;
-          }
-        }
-        if (bestIdx < 0) {
-          // No room on any valid day — over-allocate via curve-weighted walk
-          // (degraded mode; cadence couldn't fit existing+new).
-          bestIdx = findAvailableDayIdx(
-            0,
-            validDays,
-            dayCounts,
-            cadence.maxPerDay,
-            curveNormalized,
-          );
-        }
-        remainingDeficit[bestIdx] -= 1;
-        placeAt(bestIdx);
-      }
+  // Aggregate placed-per-day (across platforms). In additiveMode, pre-load
+  // with existing counts so deficit reflects only what's still missing.
+  const placedPerDay = new Array<number>(durationDays).fill(0);
+  if (additiveMode) {
+    for (const [, s] of states) {
+      for (const [d, count] of s.dayCounts) placedPerDay[d] += count;
     }
   }
 
-  // Sort by scheduled date
+  // Stable platform ordering for deterministic tie-breaks
+  const platformOrder = [...states.keys()].sort();
+  const platformIndex = new Map(platformOrder.map((p, i) => [p, i] as const));
+
+  // Track per-platform "placed-this-run" count for round-robin tie-break
+  const placedThisRun = new Map<string, number>();
+  for (const p of platformOrder) placedThisRun.set(p, 0);
+
+  // ── 4. Greedy deficit-fill loop ─────────────────────────────────────
+  const totalPostsToPlace = posts.length;
+  let totalPlaced = 0;
+
+  while (totalPlaced < totalPostsToPlace) {
+    let bestPlatform: string | null = null;
+    let bestDay = -1;
+    let bestDeficit = -Infinity;
+    let bestPlacedThisRun = Infinity;
+    let bestPlatformIdx = Infinity;
+
+    for (const platform of platformOrder) {
+      const s = states.get(platform)!;
+      if (s.placedDayOffsets.length >= s.posts.length) continue;
+      const platPlaced = placedThisRun.get(platform)!;
+      const platIdx = platformIndex.get(platform)!;
+
+      for (let d = 0; d < durationDays; d++) {
+        if (!s.activeMask[d]) continue;
+        if ((s.dayCounts.get(d) ?? 0) >= s.cadence.maxPerDay) continue;
+        const deficit = idealPerDay[d] - placedPerDay[d];
+        // Lexicographic tie-break: (deficit desc, placedThisRun asc, day asc, platformIdx asc)
+        if (
+          deficit > bestDeficit ||
+          (deficit === bestDeficit && platPlaced < bestPlacedThisRun) ||
+          (deficit === bestDeficit && platPlaced === bestPlacedThisRun && d < bestDay) ||
+          (deficit === bestDeficit && platPlaced === bestPlacedThisRun && d === bestDay && platIdx < bestPlatformIdx)
+        ) {
+          bestDeficit = deficit;
+          bestPlatform = platform;
+          bestDay = d;
+          bestPlacedThisRun = platPlaced;
+          bestPlatformIdx = platIdx;
+        }
+      }
+    }
+
+    if (bestPlatform === null || bestDay < 0) {
+      // No platform has cap room on any active day — degraded mode.
+      // Find any (platform, day) where the platform still has posts and
+      // the day is active, ignoring maxPerDay (best-effort over-allocation).
+      for (const platform of platformOrder) {
+        const s = states.get(platform)!;
+        if (s.placedDayOffsets.length >= s.posts.length) continue;
+        for (let d = 0; d < durationDays; d++) {
+          if (!s.activeMask[d]) continue;
+          const deficit = idealPerDay[d] - placedPerDay[d];
+          if (deficit > bestDeficit) {
+            bestDeficit = deficit;
+            bestPlatform = platform;
+            bestDay = d;
+          }
+        }
+      }
+      if (bestPlatform === null || bestDay < 0) break; // truly stuck
+    }
+
+    // Place
+    const s = states.get(bestPlatform)!;
+    s.dayCounts.set(bestDay, (s.dayCounts.get(bestDay) ?? 0) + 1);
+    s.placedDayOffsets.push(bestDay);
+    placedPerDay[bestDay] += 1;
+    placedThisRun.set(bestPlatform, placedThisRun.get(bestPlatform)! + 1);
+    totalPlaced += 1;
+  }
+
+  // ── 5. Map sorted day-offsets to sortOrder-ordered posts + pick times ──
+  const slots: ScheduleSlot[] = [];
+  for (const [platform, s] of states) {
+    const sortedDays = [...s.placedDayOffsets].sort((a, b) => a - b);
+    for (let i = 0; i < sortedDays.length && i < s.posts.length; i++) {
+      const dayOffset = sortedDays[i];
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + dayOffset);
+      const timesOnDay = s.dayTimes.get(dayOffset) ?? [];
+      const time = pickTimeWithSpacing(s.cadence, timesOnDay);
+      date.setHours(time.hour, time.minute, 0, 0);
+      timesOnDay.push(time.decimal);
+      s.dayTimes.set(dayOffset, timesOnDay);
+      slots.push({
+        postId: s.posts[i].id,
+        platform,
+        scheduledDate: date.toISOString(),
+      });
+    }
+  }
+
+  // Sort by scheduled date for stable output
   slots.sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
 
   return slots;

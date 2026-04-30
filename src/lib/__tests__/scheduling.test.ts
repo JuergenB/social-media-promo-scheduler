@@ -444,6 +444,7 @@ describe("Phase B: density-aware additive scheduling", () => {
       bias: "Front-loaded",
       cadence,
       excludedDates: excluded,
+      additiveMode: true,
     });
     expect(slots).toHaveLength(4);
 
@@ -473,6 +474,7 @@ describe("Phase B: density-aware additive scheduling", () => {
       bias: "Front-loaded",
       cadence,
       excludedDates: excluded,
+      additiveMode: true,
     });
     expect(slots).toHaveLength(4);
     for (const s of slots) {
@@ -507,6 +509,7 @@ describe("Phase B: density-aware additive scheduling", () => {
       bias: "Front-loaded",
       cadence,
       excludedDates: excluded,
+      additiveMode: true,
     });
 
     const avg = (xs: { scheduledDate: string }[]) =>
@@ -551,6 +554,7 @@ describe("Phase B: density-aware additive scheduling", () => {
       bias: "Front-loaded",
       cadence,
       excludedDates: excluded,
+      additiveMode: true,
     });
     expect(additive5).toHaveLength(5);
 
@@ -601,6 +605,7 @@ describe("Phase B: density-aware additive scheduling", () => {
       bias: "Front-loaded",
       cadence,
       excludedDates: excluded,
+      additiveMode: true,
     });
     expect(slots).toHaveLength(5);
 
@@ -641,6 +646,7 @@ describe("Phase B: density-aware additive scheduling", () => {
       bias: "Balanced",
       cadence,
       excludedDates: excluded,
+      additiveMode: true,
     });
     expect(slots).toHaveLength(6);
 
@@ -686,5 +692,186 @@ describe("Phase B: density-aware additive scheduling", () => {
     });
 
     expect(countByDay(a, START, 14)).toEqual(countByDay(bWithEmpty, START, 14));
+  });
+});
+
+// ── 8. Phase D: redistribute mode (#178) — externals as pure collisions ──
+
+describe("Phase D: external-collision mode (additiveMode: false, default)", () => {
+  it("externals don't shift the curve target — front-loaded stays front-loaded", () => {
+    // Brand-wide other-campaign posts on days 0-3 (early). Without additiveMode,
+    // these should ONLY block via maxPerDay (not in this scenario since cadence
+    // is loose), and the new posts should still front-load per the curve.
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 70, // maxPerDay=10, very loose
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+    const externals = new Map<string, Map<string, number>>();
+    externals.set("instagram", makeExisting(START, { 0: 1, 1: 1, 2: 1, 3: 1 }));
+
+    // additiveMode default false: externals are collision-only, don't shape curve
+    const redistributed = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: externals,
+    });
+    // Compare to first-time scheduling with no externals at all
+    const firstTime = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+    });
+
+    // The two day-distributions should be identical — externals don't reshape
+    // the curve when additiveMode is off.
+    expect(countByDay(redistributed, START, 14))
+      .toEqual(countByDay(firstTime, START, 14));
+  });
+
+  it("externals still enforce maxPerDay (collision constraint applies)", () => {
+    // maxPerDay=1. Externals on days 0-3 saturate them. New posts must spill
+    // past day 3 even though front-loaded curve wants to put them early.
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 7,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon"],
+      },
+    };
+    const externals = new Map<string, Map<string, number>>();
+    externals.set("instagram", makeExisting(START, { 0: 1, 1: 1, 2: 1, 3: 1 }));
+
+    const slots = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: externals,
+      additiveMode: false, // explicit
+    });
+    expect(slots).toHaveLength(4);
+
+    // No new post on the externally-occupied days (maxPerDay=1 walked outward)
+    for (const s of slots) {
+      const off = dayOffset(s.scheduledDate, START);
+      expect(off).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it("additiveMode: false vs true — same inputs, different shape", () => {
+    // Identical setup except for the flag. Confirms the two modes are
+    // genuinely distinct, not silently merged behavior.
+    //
+    // Setup: Front-loaded, existing 1 on day 0, maxPerDay=4.
+    //   - additiveMode: true → total=5, ideal[0] = 0.213·5 ≈ 1.07,
+    //     placedPerDay[0] starts at 1 → deficit[0] ≈ 0.07. Day 1 deficit ≈ 0.85.
+    //     Algorithm prefers day 1 first.
+    //   - additiveMode: false → total=4, ideal[0] = 0.213·4 ≈ 0.85,
+    //     placedPerDay[0] starts at 0 → deficit[0] ≈ 0.85. Algorithm picks
+    //     day 0 first (existing doesn't reshape the ideal).
+    const cadence: PlatformCadenceConfig = {
+      instagram: {
+        postsPerWeek: 28,
+        activeDays: [],
+        timeWindows: ["morning", "afternoon", "evening"],
+      },
+    };
+    const excluded = new Map<string, Map<string, number>>();
+    excluded.set("instagram", makeExisting(START, { 0: 1 }));
+
+    const additiveTrue = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+      additiveMode: true,
+    });
+    const additiveFalse = schedulePostsAlgorithm({
+      posts: makePosts(["instagram"], 4),
+      startDate: START,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+      excludedDates: excluded,
+      additiveMode: false,
+    });
+
+    expect(countByDay(additiveTrue, START, 14))
+      .not.toEqual(countByDay(additiveFalse, START, 14));
+  });
+});
+
+// ── 9. Intersect-shape regression — global deficit-fill produces smooth taper ──
+//
+// Reproduces the real-world scenario that exposed the per-platform-quantile
+// barbell: 14-day Front-loaded, 19 posts across 6 platforms (5 weekday-only +
+// 1 all-day-active Pinterest), maxPerDay=1. The new global deficit-fill
+// algorithm must produce a smooth taper, not a barbell. (Phase A's per-
+// platform midpoint quantile passed unit tests but failed this real shape.)
+
+describe("regression: global deficit-fill produces a smooth taper under Intersect-shape input", () => {
+  it("19 posts × 6 platforms × 14 days × Front-loaded → no back cluster, sparse middle filled", () => {
+    // Mirror The Intersect's cadence: 5 weekday-only platforms with
+    // postsPerWeek=4 (maxPerDay=1) + Pinterest all-day-active with
+    // postsPerWeek=4 (maxPerDay=1).
+    const cadence: PlatformCadenceConfig = {
+      instagram: { postsPerWeek: 4, activeDays: [1, 2, 3, 4, 5], timeWindows: ["morning", "afternoon"] },
+      bluesky: { postsPerWeek: 4, activeDays: [1, 2, 3, 4, 5], timeWindows: ["morning", "afternoon"] },
+      threads: { postsPerWeek: 4, activeDays: [1, 2, 3, 4, 5], timeWindows: ["morning", "afternoon"] },
+      facebook: { postsPerWeek: 4, activeDays: [1, 2, 3, 4, 5], timeWindows: ["afternoon"] },
+      linkedin: { postsPerWeek: 4, activeDays: [1, 2, 3, 4, 5], timeWindows: ["morning", "afternoon"] },
+      pinterest: { postsPerWeek: 4, activeDays: [], timeWindows: ["evening"] },
+    };
+    // 19 posts: bluesky 4, instagram 3, threads 3, facebook 3, linkedin 3, pinterest 3
+    const posts: ScheduleInput["posts"] = [
+      ...Array.from({ length: 4 }, (_, i) => ({ id: `bs-${i}`, platform: "bluesky" })),
+      ...Array.from({ length: 3 }, (_, i) => ({ id: `ig-${i}`, platform: "instagram" })),
+      ...Array.from({ length: 3 }, (_, i) => ({ id: `th-${i}`, platform: "threads" })),
+      ...Array.from({ length: 3 }, (_, i) => ({ id: `fb-${i}`, platform: "facebook" })),
+      ...Array.from({ length: 3 }, (_, i) => ({ id: `li-${i}`, platform: "linkedin" })),
+      ...Array.from({ length: 3 }, (_, i) => ({ id: `pi-${i}`, platform: "pinterest" })),
+    ];
+    // Apr 28 2026 = Tuesday → 14-day window has 10 weekdays + 4 weekend days
+    const start = new Date(2026, 3, 28);
+    const slots = schedulePostsAlgorithm({
+      posts,
+      startDate: start,
+      durationDays: 14,
+      bias: "Front-loaded",
+      cadence,
+    });
+
+    expect(slots).toHaveLength(19);
+
+    const counts = countByDay(slots, start, 14);
+    const total = counts.reduce((a, b) => a + b, 0);
+
+    // Front half should hold ≥ 70% of posts (Front-loaded with this curve has
+    // roughly 80% mass in first half over 14 days).
+    const front = counts.slice(0, 7).reduce((a, b) => a + b, 0);
+    expect(front / total).toBeGreaterThanOrEqual(0.7);
+
+    // No "back cluster": last 3 days combined must hold < 15% of total.
+    const back3 = counts[11] + counts[12] + counts[13];
+    expect(back3 / total).toBeLessThan(0.15);
+
+    // Specifically: day 13 (final day) cannot exceed day 0.
+    expect(counts[13]).toBeLessThanOrEqual(counts[0]);
+
+    // Smoothness: no single day in the last half should exceed 3 posts
+    // (catches the 6-on-final-day barbell pattern).
+    const lastHalfMax = Math.max(...counts.slice(7));
+    expect(lastHalfMax).toBeLessThanOrEqual(3);
   });
 });

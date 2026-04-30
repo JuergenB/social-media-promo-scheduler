@@ -182,7 +182,10 @@ export async function POST(
       sortOrder: p.fields["Sort Order"] ?? null,
     }));
 
-    // Generate the schedule
+    // Generate the schedule. `additiveMode: true` because the existing posts
+    // counted in `alreadyScheduledDates` are from THIS campaign — they
+    // contribute to the curve's target distribution, and Phase B's deficit-
+    // fill should activate to keep combined existing+new on-curve.
     const slots = schedulePostsAlgorithm({
       posts,
       startDate,
@@ -190,6 +193,7 @@ export async function POST(
       bias,
       cadence,
       excludedDates: alreadyScheduledDates,
+      additiveMode: true,
     });
 
     if (isPreview) {

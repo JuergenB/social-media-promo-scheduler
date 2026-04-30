@@ -86,6 +86,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ArchiveCampaignDialog } from "@/components/campaigns/archive-campaign-dialog";
+import { RedistributeDialog } from "@/components/campaigns/redistribute-dialog";
 import { countPostsByBucket } from "@/components/campaigns/campaign-row-actions";
 import {
   ArrowLeft,
@@ -110,6 +111,7 @@ import {
   ChevronUp,
   Archive,
   ArchiveRestore,
+  CalendarRange,
   Eraser,
   MoreHorizontal,
   Save,
@@ -3086,10 +3088,12 @@ function CampaignHeaderActions({
   const queryClient = useQueryClient();
   const router = useRouter();
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [redistributeOpen, setRedistributeOpen] = useState(false);
   const [busy, setBusy] = useState<"unarchive" | "cleanup" | null>(null);
 
   const isArchived = Boolean(campaign.archivedAt);
   const counts = countPostsByBucket(posts);
+  const canRedistribute = !isArchived && (counts.approved + counts.scheduled) > 0;
 
   async function handleUnarchive() {
     setBusy("unarchive");
@@ -3145,6 +3149,17 @@ function CampaignHeaderActions({
             </DropdownMenuItem>
           ) : (
             <>
+              <DropdownMenuItem
+                onClick={() => setRedistributeOpen(true)}
+                disabled={!canRedistribute}
+              >
+                <CalendarRange className="h-4 w-4 mr-2" /> Redistribute…
+                {canRedistribute && (
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {counts.approved + counts.scheduled}
+                  </span>
+                )}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleCleanup} disabled={counts.pending === 0}>
                 <Eraser className="h-4 w-4 mr-2" /> Clean up drafts
                 {counts.pending > 0 && (
@@ -3177,6 +3192,13 @@ function CampaignHeaderActions({
         open={archiveOpen}
         onOpenChange={setArchiveOpen}
         onArchived={() => router.push("/dashboard/campaigns")}
+      />
+
+      <RedistributeDialog
+        campaign={campaign}
+        posts={posts}
+        open={redistributeOpen}
+        onOpenChange={setRedistributeOpen}
       />
     </>
   );
