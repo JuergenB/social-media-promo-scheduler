@@ -184,6 +184,8 @@ const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   Custom: "Create a custom campaign with manual configuration for content types not covered by other presets. (Coming soon)",
 };
 
+const SHOW_GEN_OPTIONS_COOKIE = "polywiz-show-gen-options";
+
 const STATUS_STYLES: Record<string, string> = {
   Draft: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
   Scraping: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
@@ -213,6 +215,7 @@ export default function CampaignDetailPage() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
   const [showGenOptions, setShowGenOptions] = useState(true);
+  const [showGenOptionsHydrated, setShowGenOptionsHydrated] = useState(false);
   const [genPlatforms, setGenPlatforms] = useState<Set<string>>(new Set());
   const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
   const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null); // null = auto
@@ -325,6 +328,29 @@ export default function CampaignDetailPage() {
       setShowGenOptions(true);
     }
   }, [generateMore, campaign]);
+
+  // Persist Options expander state across campaigns via cookie.
+  // The hydration flag is React state (not a ref) so the write effect can't
+  // observe it as `true` in the same effects-pass that the read effect sets it.
+  // That ordering matters: a ref set inside an effect is synchronously visible
+  // to later effects in the same pass, which would let the write fire with the
+  // stale default state and clobber the cookie before the cookie-driven state
+  // update has rendered.
+  useEffect(() => {
+    const match = document.cookie.match(
+      new RegExp(`(?:^|; )${SHOW_GEN_OPTIONS_COOKIE}=([^;]*)`),
+    );
+    if (match) {
+      setShowGenOptions(match[1] === "1");
+    }
+    setShowGenOptionsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!showGenOptionsHydrated) return;
+    const maxAge = 365 * 24 * 60 * 60;
+    document.cookie = `${SHOW_GEN_OPTIONS_COOKIE}=${showGenOptions ? "1" : "0"}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  }, [showGenOptions, showGenOptionsHydrated]);
 
   // Keep selectedPost in sync with fresh query data (e.g., after regeneration)
   useEffect(() => {
