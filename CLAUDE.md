@@ -28,19 +28,14 @@ When delegating research to an Agent subagent, explicitly instruct it to use Per
 
 When the user gives multiple instructions in one message, implement ALL of them before responding. Do not silently drop instructions.
 
-## Rule 6: Visual testing — sparing, honest, Playwright-preferred
+## Rule 6: Visual testing — project-specific tooling
 
-See the global rule "Visual Verification — Use Sparingly, Honestly" in `~/.claude/CLAUDE.md` for the full policy. The summary in this project:
+Policy lives in `~/.claude/CLAUDE.md` ("Visual Verification — Use Sparingly, Honestly" + "Screenshot Dimension Limits"). Project-specific notes:
 
-- **Screenshots only for first-render / multi-step flow / regression detection** — not iterative design refinement, not pixel-precision work, not "does this look good" judgments.
-- **When taking one, report two parts:** what the screenshot verifies vs. what still needs the user's eyes.
-- **Bail out at 2 attempts** on a visual issue. Ask for explicit values; don't try a third time.
-- **Default to design system** (shadcn defaults, Tailwind scale). Custom values require user-provided justification.
-
-**Tooling:**
-- New scripts: **Playwright with `storageState`**. Use `scripts/lib/playwright-auth.mjs` (one-time interactive login → reusable `.auth/state.json`, gitignored). No more credential parsing in scripts.
-- Existing Puppeteer helpers (`scripts/lib/puppeteer-auth.mjs` and the ~17 scripts that use it) stay as-is — they're clean (POST flow, no hardcoded creds). Don't migrate working code.
-- Both `puppeteer@24.40.0` and `playwright` are installed.
+- **New scripts:** Playwright with `storageState`. Helper: `scripts/lib/playwright-auth.mjs` (one-time interactive login → `.auth/state.json`, gitignored).
+- **Existing Puppeteer scripts** (~17 using `scripts/lib/puppeteer-auth.mjs`) stay as-is — clean POST flow, no hardcoded creds. Don't migrate.
+- **Installed:** `puppeteer@24.40.0` and `playwright`.
+- **Dev URL for screenshots:** `http://localhost:3025` (port 3025).
 
 ## Allowed Bash Commands
 
