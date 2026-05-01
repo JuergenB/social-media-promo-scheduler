@@ -89,6 +89,7 @@ import { compressImage, validateImage } from "@/lib/image-compression";
 import { toPlatformId, POST_STATUS_CONFIG } from "@/lib/platform-constants";
 import { CampaignPostDetail } from "@/components/posts/campaign-post-detail";
 import { useNewPosts } from "@/hooks/use-new-posts";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -223,6 +224,7 @@ export default function CampaignDetailPage() {
   // the URL still opens the Sheet, and the existing #delete-campaign-section
   // hash deep link still scrolls to the destructive section inside the Sheet.
   const [settingsOpen, setSettingsOpen] = useState(() => searchParams.get("tab") === "settings");
+  const isCompact = useMediaQuery("(max-width: 639px)");
   // When opening to a hash anchor (e.g. #delete-campaign-section), scroll the
   // Sheet's body to the bottom once the target mounts. The Sheet's content
   // is its own scroll container (overflow-y-auto on SheetContent).
@@ -953,7 +955,7 @@ export default function CampaignDetailPage() {
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="relative shrink-0 w-40 aspect-[5/4] rounded-md overflow-hidden bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="relative shrink-0 w-28 sm:w-40 aspect-[5/4] rounded-md overflow-hidden bg-muted group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Manage cover image"
               >
                 {campaign.imageUrl ? (
@@ -1178,8 +1180,8 @@ export default function CampaignDetailPage() {
               )}
               aria-expanded={showGenOptions}
             >
-              {showGenOptions ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
-              {showGenOptions ? "Hide options" : "Options"}
+              {showGenOptions ? <ChevronUp className="h-3 w-3 sm:mr-1" /> : <ChevronDown className="h-3 w-3 sm:mr-1" />}
+              <span className="hidden sm:inline">{showGenOptions ? "Hide options" : "Options"}</span>
             </Button>
           )}
           <Button
@@ -1189,8 +1191,8 @@ export default function CampaignDetailPage() {
             className="text-xs text-muted-foreground"
             aria-label="Open campaign settings"
           >
-            <Settings className="h-3.5 w-3.5 mr-1" />
-            Settings
+            <Settings className="h-3.5 w-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">Settings</span>
           </Button>
         </div>
       </Card>
@@ -1249,7 +1251,7 @@ export default function CampaignDetailPage() {
             <Label className="text-xs font-medium text-muted-foreground mb-2 block">
               Max variants per platform
             </Label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {[1, 2, 3, 5, 8, 10, null].map((val) => (
                 <Button
                   key={val ?? "auto"}
@@ -1824,8 +1826,11 @@ export default function CampaignDetailPage() {
           overlay so working context isn't lost. */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent
-          side="right"
-          className="w-full sm:max-w-2xl overflow-y-auto"
+          side={isCompact ? "bottom" : "right"}
+          className={cn(
+            "overflow-y-auto",
+            isCompact ? "h-[90vh]" : "w-full sm:max-w-2xl",
+          )}
         >
           <SheetHeader>
             <SheetTitle>Campaign settings</SheetTitle>
@@ -3269,7 +3274,7 @@ function CampaignHeaderActions({
               size="sm"
               onClick={() => setRedistributeOpen(true)}
               disabled={!canRedistribute}
-              className="h-8 text-xs"
+              className="hidden sm:inline-flex h-8 text-xs"
             >
               <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
               Redistribute
@@ -3284,7 +3289,7 @@ function CampaignHeaderActions({
               size="sm"
               onClick={handleCleanup}
               disabled={counts.pending === 0 || busy === "cleanup"}
-              className="h-8 text-xs"
+              className="hidden sm:inline-flex h-8 text-xs"
             >
               {busy === "cleanup" ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -3302,14 +3307,16 @@ function CampaignHeaderActions({
               variant="outline"
               size="sm"
               onClick={() => setArchiveOpen(true)}
-              className="h-8 text-xs"
+              className="hidden sm:inline-flex h-8 text-xs"
             >
               <Archive className="h-3.5 w-3.5 mr-1.5" />
               Archive
             </Button>
           </>
         )}
-        {/* Destructive-action guardrail: Delete stays in a one-item overflow */}
+        {/* Overflow menu — Delete is always here as a destructive-action
+            guardrail. At <sm, Redistribute / Clean up / Archive collapse in
+            here too (the inline buttons are hidden via sm:inline-flex). */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More campaign actions">
@@ -3317,6 +3324,41 @@ function CampaignHeaderActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {!isArchived && (
+              <>
+                <DropdownMenuItem
+                  className="sm:hidden"
+                  disabled={!canRedistribute}
+                  onClick={() => setRedistributeOpen(true)}
+                >
+                  <CalendarRange className="h-4 w-4 mr-2" /> Redistribute
+                  {canRedistribute && (
+                    <Badge variant="secondary" className="ml-auto px-1 py-0 text-[10px] font-medium">
+                      {counts.approved + counts.scheduled}
+                    </Badge>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="sm:hidden"
+                  disabled={counts.pending === 0 || busy === "cleanup"}
+                  onClick={handleCleanup}
+                >
+                  <Eraser className="h-4 w-4 mr-2" /> Clean up
+                  {counts.pending > 0 && (
+                    <Badge variant="secondary" className="ml-auto px-1 py-0 text-[10px] font-medium">
+                      {counts.pending}
+                    </Badge>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="sm:hidden"
+                  onClick={() => setArchiveOpen(true)}
+                >
+                  <Archive className="h-4 w-4 mr-2" /> Archive
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="sm:hidden" />
+              </>
+            )}
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
               onClick={onDeleteRequest}
