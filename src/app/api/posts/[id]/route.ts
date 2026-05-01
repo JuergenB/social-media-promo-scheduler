@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord } from "@/lib/airtable/client";
 import { deleteShortLinkIfUnreferenced } from "@/lib/short-link-deletion";
-import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
+import { deleteImage, isBlobUrl, mirrorRemoteImageToBlob } from "@/lib/blob-storage";
 import { createBrandClient } from "@/lib/late-api/client";
 
 /**
@@ -32,14 +32,66 @@ export async function PATCH(
       fields["Image Upload"] = [];
       fields["Original Media"] = ""; // Clear slide backup when images removed
     } else {
+      // Mirror any non-Blob image URLs to Vercel Blob before persisting.
+      // Without this, third-party URLs (Airtable signed URLs from the
+      // Campaign Image Library, CMS-hosted scraped images, user-pasted
+      // URLs) end up in Airtable verbatim and break when the source
+      // expires or rotates. See #219.
+      const urlsToMirror = new Set<string>();
+      if (typeof body.imageUrl === "string" && body.imageUrl) {
+        urlsToMirror.add(body.imageUrl);
+      }
+      if (typeof body.mediaUrls === "string" && body.mediaUrls) {
+        for (const line of body.mediaUrls.split("\n")) {
+          const trimmed = line.trim();
+          if (trimmed) urlsToMirror.add(trimmed);
+        }
+      }
+      if (typeof body.mediaCaptions === "string" && body.mediaCaptions) {
+        try {
+          const items = JSON.parse(body.mediaCaptions) as Array<{ url?: string }>;
+          for (const item of items) {
+            if (item?.url) urlsToMirror.add(item.url);
+          }
+        } catch {
+          // Ignore malformed captions JSON; pass through unchanged below.
+        }
+      }
+
+      const mirrorMap = new Map<string, string>();
+      await Promise.all(
+        Array.from(urlsToMirror).map(async (url) => {
+          if (isBlobUrl(url)) return;
+          const mirrored = await mirrorRemoteImageToBlob(url, "posts", id);
+          if (mirrored) mirrorMap.set(url, mirrored);
+        }),
+      );
+      const remap = (url: string) => mirrorMap.get(url) ?? url;
+
       if (body.imageUrl !== undefined) {
-        fields["Image URL"] = body.imageUrl;
+        fields["Image URL"] = body.imageUrl ? remap(body.imageUrl) : "";
       }
       if (body.mediaUrls !== undefined) {
-        fields["Media URLs"] = body.mediaUrls;
+        fields["Media URLs"] = body.mediaUrls
+          ? body.mediaUrls
+              .split("\n")
+              .map((line: string) => {
+                const trimmed = line.trim();
+                return trimmed ? remap(trimmed) : line;
+              })
+              .join("\n")
+          : body.mediaUrls;
       }
       if (body.mediaCaptions !== undefined) {
-        fields["Media Captions"] = body.mediaCaptions;
+        try {
+          const items = JSON.parse(body.mediaCaptions) as Array<{ url?: string; caption?: string }>;
+          for (const item of items) {
+            if (item?.url) item.url = remap(item.url);
+          }
+          fields["Media Captions"] = JSON.stringify(items);
+        } catch {
+          fields["Media Captions"] = body.mediaCaptions;
+        }
       }
       if (body.originalMedia !== undefined) {
         fields["Original Media"] = body.originalMedia;

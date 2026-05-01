@@ -3,7 +3,7 @@ import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtab
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { deleteShortLinksIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteLnkBioEntry, resolveCredentials as resolveLnkBioCredentials } from "@/lib/lnk-bio";
-import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
+import { deleteImage, isBlobUrl, mirrorRemoteImageToBlob } from "@/lib/blob-storage";
 import type { Campaign, Post, PlatformCadenceConfig } from "@/lib/airtable/types";
 
 interface CampaignFields {
@@ -216,6 +216,15 @@ export async function PATCH(
       imageUrl: "Image URL",
       voiceIntensity: "Tone",
     };
+
+    // Mirror non-Blob hero image URLs to Vercel Blob before persisting.
+    // The "paste URL" hero flow PATCHes a third-party URL into Image URL;
+    // without this, those URLs (Airtable signed URLs, CMS-hosted images)
+    // expire or rotate and the hero thumbnail breaks. See #219.
+    if (typeof body.imageUrl === "string" && body.imageUrl && !isBlobUrl(body.imageUrl)) {
+      const mirrored = await mirrorRemoteImageToBlob(body.imageUrl, "campaigns", id);
+      if (mirrored) body.imageUrl = mirrored;
+    }
 
     const fields: Record<string, unknown> = {};
     for (const [key, airtableField] of Object.entries(allowedFields)) {
