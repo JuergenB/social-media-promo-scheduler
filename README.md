@@ -193,6 +193,7 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase II:** Instagram collaboration invites (up to 3 collab usernames, co-publishes to both feeds) and image user tags
 - [x] **Phase II:** Campaign image library — scraped images surfaced as clickable thumbnails when adding images to posts
 - [x] **Phase II:** Image caption extraction — figcaption / wp-caption parsing flows through to post media captions
+- [x] **Phase II:** Options expander state persists across campaigns (cookie-backed open/closed preference)
 - [x] **Phase III:** Cover slide designer — band-based layout engine (Satori + Sharp), Airtable-driven templates, AI text generation, eyedropper color picker
 - [x] **Phase III:** Card designer with URL-based tracking and slide exclusion
 - [x] **Phase III:** Multi-image carousel handling matched to platform capability — LinkedIn PDF assembly; non-carousel platforms (Facebook, Pinterest, etc.) fall back to first image with honest UI messaging
