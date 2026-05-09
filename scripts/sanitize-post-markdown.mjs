@@ -22,6 +22,7 @@
  *   --dry-run           Print what would change but do not PATCH Airtable.
  *   --limit <n>         Stop after processing n posts (useful for testing).
  *   --post-id <id>      Process only one post by record ID (for spot-checking).
+ *   --campaign-id <id>  Restrict to posts linked to a single campaign (for staged rollout).
  *   --help              Show this help.
  *
  * Requires: AIRTABLE_API_KEY in .env.local
@@ -76,7 +77,14 @@ function runSelfCheck() {
 
 // ── Args ────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { status: "Pending,Approved", dryRun: false, limit: null, postId: null, help: false };
+  const args = {
+    status: "Pending,Approved",
+    dryRun: false,
+    limit: null,
+    postId: null,
+    campaignId: null,
+    help: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--help" || a === "-h") args.help = true;
@@ -84,6 +92,7 @@ function parseArgs(argv) {
     else if (a === "--status") args.status = argv[++i];
     else if (a === "--limit") args.limit = parseInt(argv[++i], 10);
     else if (a === "--post-id") args.postId = argv[++i];
+    else if (a === "--campaign-id") args.campaignId = argv[++i];
     else {
       console.error(`Unknown arg: ${a}`);
       process.exit(1);
@@ -103,12 +112,15 @@ Options:
   --dry-run           Print what would change but do not PATCH Airtable.
   --limit <n>         Stop after processing n posts (useful for testing).
   --post-id <id>      Process only one post by record ID (for spot-checking).
+  --campaign-id <id>  Restrict to posts linked to a single campaign (for staged rollout).
   --help              Show this help.
 
 Examples:
   node scripts/sanitize-post-markdown.mjs --dry-run
   node scripts/sanitize-post-markdown.mjs --dry-run --limit 3
   node scripts/sanitize-post-markdown.mjs --post-id reccoOS13ot0rppmQ
+  node scripts/sanitize-post-markdown.mjs --dry-run --campaign-id rec9mWm5hFz3dPklc
+  node scripts/sanitize-post-markdown.mjs --campaign-id rec9mWm5hFz3dPklc
   node scripts/sanitize-post-markdown.mjs
 `;
 
@@ -208,12 +220,15 @@ function buildFilterFormula(statuses) {
   return `OR(${clauses})`;
 }
 
-async function* iteratePosts({ statuses, postId, token }) {
+async function* iteratePosts({ statuses, postId, campaignId, token }) {
   if (postId) {
     const data = await airtableGet(`/${POSTS_TABLE_ID}/${postId}`, token);
     yield data;
     return;
   }
+  // Note: Airtable's ARRAYJOIN({Campaign}) returns the campaigns' PRIMARY FIELD
+  // values (display names), not record IDs — so we can't filter by linked record
+  // ID server-side. We filter campaigns client-side after fetching by status.
   let offset;
   do {
     const params = new URLSearchParams();
@@ -221,9 +236,14 @@ async function* iteratePosts({ statuses, postId, token }) {
     params.set("filterByFormula", buildFilterFormula(statuses));
     params.append("fields[]", "Content");
     params.append("fields[]", "Status");
+    params.append("fields[]", "Campaign");
     if (offset) params.set("offset", offset);
     const data = await airtableGet(`/${POSTS_TABLE_ID}?${params.toString()}`, token);
     for (const record of data.records ?? []) {
+      if (campaignId) {
+        const linked = record.fields?.Campaign ?? [];
+        if (!linked.includes(campaignId)) continue;
+      }
       yield record;
     }
     offset = data.offset;
@@ -264,6 +284,7 @@ async function main() {
   }
   console.log(`Status filter: ${statuses.join(", ")}`);
   if (args.postId) console.log(`Single post: ${args.postId}`);
+  if (args.campaignId) console.log(`Campaign filter: ${args.campaignId}`);
   if (args.limit) console.log(`Limit: ${args.limit}`);
   console.log("");
 
@@ -273,7 +294,12 @@ async function main() {
   let errors = 0;
 
   try {
-    for await (const record of iteratePosts({ statuses, postId: args.postId, token })) {
+    for await (const record of iteratePosts({
+      statuses,
+      postId: args.postId,
+      campaignId: args.campaignId,
+      token,
+    })) {
       if (args.limit && processed >= args.limit) break;
       processed++;
 
