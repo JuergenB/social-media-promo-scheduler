@@ -3,6 +3,7 @@ import { getRecord, updateRecord, deleteRecord } from "@/lib/airtable/client";
 import { deleteShortLinkIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteImage, isBlobUrl, mirrorRemoteImageToBlob } from "@/lib/blob-storage";
 import { createBrandClient } from "@/lib/late-api/client";
+import { stripMarkdownFormatting } from "@/lib/text-sanitizer";
 
 /**
  * PATCH /api/posts/[id]
@@ -98,9 +99,13 @@ export async function PATCH(
       }
     }
 
-    // Content
+    // Content — sanitize markdown italics/bolds (curly-quote replacement).
+    // Idempotent: a user typing curly quotes directly is preserved as-is.
+    // See #222.
     if (body.content !== undefined) {
-      fields["Content"] = body.content;
+      fields["Content"] = typeof body.content === "string"
+        ? stripMarkdownFormatting(body.content)
+        : body.content;
     }
 
     // Status changes
@@ -165,9 +170,12 @@ export async function PATCH(
       }
     }
 
-    // First comment (hashtags + engagement hook)
+    // First comment (hashtags + engagement hook) — same markdown sanitation
+    // as Content. See #222.
     if (body.firstComment !== undefined) {
-      fields["First Comment"] = body.firstComment;
+      fields["First Comment"] = typeof body.firstComment === "string"
+        ? stripMarkdownFormatting(body.firstComment)
+        : body.firstComment;
     }
 
     // Collaborators (Instagram collab invites — JSON string array)

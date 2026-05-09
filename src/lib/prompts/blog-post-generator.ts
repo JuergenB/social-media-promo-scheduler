@@ -49,6 +49,8 @@ WRITE LIKE A REAL PERSON:
 - Be opinionated when appropriate
 - Use natural transitions
 
+- Do NOT use markdown formatting (underscores, asterisks) in the post text. None of the target platforms render markdown — formatting characters appear as literal text. For artwork titles, exhibition names, books, and creative works, use curly quotes (e.g. “The Harbinger”). Person names and proper nouns get no special formatting.
+
 </writing_style_requirements>
 
 <platform_tone_guidance>
