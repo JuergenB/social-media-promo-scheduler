@@ -14,6 +14,7 @@ import {
 import { composeSystemPrompt, composeUserPrompt } from "@/lib/prompts/compose-prompt";
 import { createPlatformShortLink } from "@/lib/short-io";
 import { resolvePublicationUrl } from "@/lib/publication-url";
+import { stripMarkdownFormatting } from "@/lib/text-sanitizer";
 import type { PlatformCadenceConfig } from "@/lib/airtable/types";
 import { getEffectiveCadence } from "@/lib/platform-cadence-defaults";
 
@@ -1003,19 +1004,26 @@ export async function POST(
 
         let savedCount = 0;
         for (const post of postsWithLinks) {
+          // Strip markdown italic/bold from generated text — none of the
+          // target platforms render markdown. See #222.
+          const sanitizedContent = stripMarkdownFormatting(post.postText);
+          const sanitizedFirstComment = post.firstComment
+            ? stripMarkdownFormatting(post.firstComment)
+            : "";
+
           const postRecord: Record<string, unknown> = {
             Title: `${blogData.title} — ${post.platform}${post.variant > 1 ? ` (v${post.variant})` : ""}`,
             Campaign: [campaignId],
             Platform: PLATFORM_TO_AIRTABLE[post.platform] || post.platform,
-            Content: post.postText,
+            Content: sanitizedContent,
             "Image URL": post.imageUrl || "",
             "Link URL": publicationUrl,
             "Short URL": post.shortUrl || "",
             "Content Variant": String(post.variant),
             Status: "Pending",
           };
-          if (post.firstComment) {
-            postRecord["First Comment"] = post.firstComment;
+          if (sanitizedFirstComment) {
+            postRecord["First Comment"] = sanitizedFirstComment;
           }
           await createRecord("Posts", postRecord);
           savedCount++;

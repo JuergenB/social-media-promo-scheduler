@@ -4,6 +4,7 @@ import { getRecord } from "@/lib/airtable/client";
 import { resolveAnthropicConfig } from "@/lib/anthropic";
 import { fetchCoverSlideTemplate } from "@/lib/airtable/cover-slide-templates";
 import { deriveCharBudgets } from "@/lib/cover-slide-renderer";
+import { stripMarkdownFormatting } from "@/lib/text-sanitizer";
 
 interface PostFields {
   Content: string;
@@ -230,11 +231,19 @@ CRITICAL: Respect character limits exactly. Count characters carefully.
       return NextResponse.json({ error: "Failed to parse AI response: " + textContent.text.slice(0, 200) }, { status: 500 });
     }
 
+    // Strip any markdown italics/bolds Claude introduced — these render as
+    // literal characters when Satori paints the cover slide. See #222.
     return NextResponse.json({
       fields: {
-        campaignTypeLabel: (generatedFields.campaignTypeLabel || campaignType || "").slice(0, charBudgets.campaignTypeLabel || 30),
-        headline: (generatedFields.headline || campaignName || "").slice(0, charBudgets.headline || 100),
-        description: (generatedFields.description || "").slice(0, charBudgets.description || 180),
+        campaignTypeLabel: stripMarkdownFormatting(
+          (generatedFields.campaignTypeLabel || campaignType || "").slice(0, charBudgets.campaignTypeLabel || 30)
+        ),
+        headline: stripMarkdownFormatting(
+          (generatedFields.headline || campaignName || "").slice(0, charBudgets.headline || 100)
+        ),
+        description: stripMarkdownFormatting(
+          (generatedFields.description || "").slice(0, charBudgets.description || 180)
+        ),
         // Artist Profile: default to artist's handle; otherwise frontend populates from brand data
         handle: artistHandle ? `@${artistHandle.replace(/^@/, "")}` : "",
       },
