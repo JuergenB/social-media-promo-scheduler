@@ -199,8 +199,22 @@ export async function PATCH(
 
     const body = await request.json();
 
+    // Validate campaign name: trim whitespace, reject empty after trim.
+    // Done here (before the allowlist loop) so the trimmed value is what
+    // gets persisted to Airtable.
+    if (body.name !== undefined) {
+      if (typeof body.name !== "string" || body.name.trim() === "") {
+        return NextResponse.json(
+          { error: "Campaign name cannot be empty" },
+          { status: 400 }
+        );
+      }
+      body.name = body.name.trim();
+    }
+
     // Only allow updates to editable fields
     const allowedFields: Record<string, string> = {
+      name: "Name",
       url: "URL",
       type: "Type",
       durationDays: "Duration Days",

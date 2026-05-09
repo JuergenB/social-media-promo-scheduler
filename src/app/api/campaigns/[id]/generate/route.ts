@@ -628,7 +628,10 @@ export async function POST(
 
         // Store scraped data on campaign record (skip status change in additive mode)
         // Also set og:image as campaign image if none exists
-        // For Quick Posts, also save the scraped title as description and update the name
+        // For Quick Posts, also save the scraped title as description and update the name —
+        // BUT only if the user hasn't manually renamed the campaign away from the
+        // "Quick Post:" prefix (issue #221). Re-check at the conditional moment so
+        // an inline-rename made between scrape start and this write is respected.
         const ogImageUrl = blogData.ogImage || blogData.heroImage?.url || "";
         const isQuickPostCampaign = fields.Name?.startsWith("Quick Post:");
 
@@ -648,13 +651,24 @@ export async function POST(
             ? await mirrorRemoteImageToBlob(ogImageUrl, "campaigns", campaignId)
             : "";
 
+        // Re-check the latest Name at the conditional moment (issue #221).
+        // The local `fields` snapshot was loaded at the top of generate; if the
+        // user inline-renamed the campaign during the scrape, that rename must
+        // not be clobbered. Refetch + skip the auto-rename if the user has
+        // dropped the "Quick Post:" prefix.
+        const latestCampaignForName = await getRecord<CampaignFields>("Campaigns", campaignId);
+        const latestNameIsQuickPost =
+          latestCampaignForName.fields.Name?.startsWith("Quick Post:") ?? false;
+        const shouldAutoRenameQuickPost =
+          isQuickPostCampaign && latestNameIsQuickPost && !!blogData.title;
+
         await updateRecord("Campaigns", campaignId, {
           ...(isAdditive ? {} : { Status: "Generating" }),
           "Scraped Content": blogData.content.slice(0, 10000),
           "Scraped Images": JSON.stringify(blogData.images),
           ...(mirroredOgImageUrl ? { "Image URL": mirroredOgImageUrl } : {}),
           ...(!fields.Description && blogData.title ? { Description: blogData.title } : {}),
-          ...(isQuickPostCampaign && blogData.title ? { Name: `Quick Post: ${blogData.title}` } : {}),
+          ...(shouldAutoRenameQuickPost ? { Name: `Quick Post: ${blogData.title}` } : {}),
           // Artist Profile: set descriptive campaign name and store artist handle
           ...(isArtistProfile && artistCampaignName ? { Name: artistCampaignName } : {}),
           ...(isArtistProfile && artistMeta?.instagramHandle ? { "Artist Handle": artistMeta.instagramHandle } : {}),

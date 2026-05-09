@@ -222,6 +222,10 @@ export default function CampaignDetailPage() {
   const [genVoiceIntensity, setGenVoiceIntensity] = useState<number>(50);
   const [genVoiceInitialized, setGenVoiceInitialized] = useState(false);
   const [settingsUnsaved, setSettingsUnsaved] = useState(false);
+  // Inline-rename state for the campaign h1 (issue #221).
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [isSavingName, setIsSavingName] = useState(false);
   // Settings used to be a tab; it's now a right-side Sheet drawer (Slice 1
   // of the campaign-detail UX redesign). Backward-compat: ?tab=settings in
   // the URL still opens the Sheet, and the existing #delete-campaign-section
@@ -918,6 +922,47 @@ export default function CampaignDetailPage() {
   const isQuickPost = campaign.name?.startsWith("Quick Post:");
   const backHref = isQuickPost ? "/dashboard/quick-post" : "/dashboard/campaigns";
 
+  // Inline-rename handlers (issue #221).
+  // Click h1 → input pre-filled with current name; Enter/blur saves;
+  // Esc cancels; empty/whitespace or unchanged → no-op restore.
+  const startNameEdit = () => {
+    setNameDraft(campaign.name || "");
+    setIsEditingName(true);
+  };
+  const cancelNameEdit = () => {
+    setIsEditingName(false);
+    setNameDraft("");
+  };
+  const saveNameEdit = async () => {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || trimmed === campaign.name) {
+      cancelNameEdit();
+      return;
+    }
+    setIsSavingName(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to rename campaign");
+      }
+      toast.success("Campaign renamed");
+      setIsEditingName(false);
+      // Refetch the detail-page campaign + the campaigns list so the
+      // dashboard widget and calendar combobox pick up the new name.
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to rename campaign");
+    } finally {
+      setIsSavingName(false);
+    }
+  };
+
   // ── Render ──────────────────────────────────────────────────────────
 
   return (
@@ -929,7 +974,35 @@ export default function CampaignDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <h1 className="text-xl font-bold flex-1 break-words">{displayName}</h1>
+        {isEditingName ? (
+          <Input
+            type="text"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                saveNameEdit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancelNameEdit();
+              }
+            }}
+            onBlur={saveNameEdit}
+            disabled={isSavingName}
+            autoFocus
+            aria-label="Campaign name"
+            className="text-xl font-bold flex-1 h-auto py-1 px-2"
+          />
+        ) : (
+          <h1
+            className="text-xl font-bold flex-1 break-words cursor-pointer rounded px-2 py-1 -mx-2 -my-1 hover:bg-muted/60 transition-colors"
+            onClick={startNameEdit}
+            title="Click to rename"
+          >
+            {displayName}
+          </h1>
+        )}
         <CampaignHeaderActions
           campaign={campaign}
           posts={posts}
