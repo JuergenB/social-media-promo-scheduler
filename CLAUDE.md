@@ -114,10 +114,11 @@ polywiz-app/
 │   │   ├── scheduling.ts       # Tapering schedule algorithm, date assignment with collision avoidance
 │   │   ├── campaign-post-cleanup.ts # Shared helper — delete campaign posts (optionally filtered by status) with cascading Short.io/lnk.bio/Zernio cleanup
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
+│   │   ├── text-sanitizer.ts   # Strip markdown italic/bold from generated content → curly quotes (#222)
 │   │   ├── prompts/            # Generation prompt templates + dynamic compose-prompt.ts
 │   │   └── brand-context.tsx   # BrandProvider + useBrand() hook
 │   └── stores/                 # Zustand stores (app, auth)
-├── scripts/                    # seed-airtable.js, seed-campaign-type-rules.js (one-time seeding)
+├── scripts/                    # seed-airtable.js, seed-campaign-type-rules.js (seeding); sanitize-post-markdown.mjs (#222 backfill, --campaign-id for staged rollout)
 ├── public/brands/              # Downloaded brand logos (local copies)
 ├── docs/                       # Documentation, API reference, background research
 ├── .env.local                  # Secrets (never commit)
